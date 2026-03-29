@@ -35,7 +35,7 @@ Each module must compile/run as a standalone binary or service and expose a heal
 
 ### 5. Session Completion Rule
 A session is only complete when:
-- [ ] The module runs standalone (`make run MODULE=<name>`).
+- [ ] The module runs standalone (`cargo run --bin <name>`).
 - [ ] It passes health checks.
 - [ ] It registers itself on the service mesh.
 - [ ] Session notes are committed to `sessions/<session-id>/`.
@@ -63,7 +63,7 @@ A session is only complete when:
 ### Review & Testing
 - Suggest tests alongside every new function.
 - Tag TODOs with `// TODO(<session-id>): description`.
-- Run `make lint` and `make test-module MODULE=<name>` before marking a task done.
+- Run `ruff check . && cargo clippy --all-targets -- -D warnings` (lint) and `cargo test --bin <name>` (test) before marking a task done.
 
 ---
 
