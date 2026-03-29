@@ -1,0 +1,87 @@
+name: Issue Review
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  triage:
+    name: Auto-triage new issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+            const title = context.payload.issue.title || '';
+
+            // Auto-label based on title keywords
+            const labels = [];
+            if (/\b(bug|fix|error|fail)\b/i.test(title)) labels.push('bug');
+            if (/\b(feat|feature|add|new)\b/i.test(title)) labels.push('enhancement');
+            if (/\b(doc|docs|documentation)\b/i.test(title)) labels.push('documentation');
+            if (/\b(refactor|cleanup|clean)\b/i.test(title)) labels.push('refactor');
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels,
+              });
+            }
+
+            // Post checklist comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                '## Issue Review Checklist',
+                '',
+                'Before this issue can be worked on:',
+                '- [ ] Issue is reproducible / well-defined',
+                '- [ ] Acceptance criteria are clear',
+                '- [ ] Session can be created for this issue',
+                '- [ ] Assigned to a milestone',
+                '',
+                '_Automated by issue-review workflow._',
+              ].join('\n'),
+            });
+
+  pr-review:
+    name: PR review comment
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'issue_comment' &&
+      contains(github.event.comment.body, '/review')
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                '## Review Checklist',
+                '',
+                'See [docs/review-guide.md](docs/review-guide.md) for full criteria.',
+                '',
+                '### Quick check',
+                '- [ ] Function-as-File rule applied',
+                '- [ ] Envelope protocol used',
+                '- [ ] No direct DB access',
+                '- [ ] Tests present',
+                '- [ ] Health endpoint working',
+                '- [ ] Session notes committed',
+              ].join('\n'),
+            });

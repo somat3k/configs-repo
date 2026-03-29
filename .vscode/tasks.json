@@ -1,0 +1,92 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // ────────────────────────────── BUILD ──────────────────────────────────
+    {
+      "label": "Rust: build",
+      "type": "cargo",
+      "command": "build",
+      "problemMatcher": ["$rustc"],
+      "group": "build"
+    },
+    {
+      "label": "Rust: test",
+      "type": "cargo",
+      "command": "test",
+      "problemMatcher": ["$rustc"],
+      "group": "test"
+    },
+    {
+      "label": "Python: install deps",
+      "type": "shell",
+      "command": "pip install -e '.[dev]'",
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "Python: test",
+      "type": "shell",
+      "command": "pytest tests/ -v",
+      "problemMatcher": ["$python"],
+      "group": "test"
+    },
+    {
+      "label": "Solidity: compile",
+      "type": "shell",
+      "command": "npx hardhat compile",
+      "problemMatcher": [],
+      "group": "build"
+    },
+
+    // ────────────────────────────── INFRA ──────────────────────────────────
+    {
+      "label": "Infra: up",
+      "type": "shell",
+      "command": "docker compose -f infra/docker-compose.yml up -d",
+      "problemMatcher": [],
+      "group": "none",
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Infra: down",
+      "type": "shell",
+      "command": "docker compose -f infra/docker-compose.yml down",
+      "problemMatcher": [],
+      "group": "none"
+    },
+    {
+      "label": "Infra: logs",
+      "type": "shell",
+      "command": "docker compose -f infra/docker-compose.yml logs -f",
+      "problemMatcher": [],
+      "group": "none",
+      "isBackground": true
+    },
+
+    // ────────────────────────────── SESSION ────────────────────────────────
+    {
+      "label": "Session: new",
+      "type": "shell",
+      "command": "bash scripts/new-session.sh ${input:sessionName}",
+      "problemMatcher": [],
+      "group": "none"
+    },
+
+    // ────────────────────────────── COMBINED ───────────────────────────────
+    {
+      "label": "Dev: start all",
+      "dependsOn": ["Infra: up", "Rust: build"],
+      "dependsOrder": "sequence",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "sessionName",
+      "type": "promptString",
+      "description": "Session name (e.g. feature-auth)",
+      "default": "session-01"
+    }
+  ]
+}

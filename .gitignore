@@ -1,0 +1,43 @@
+# ─── Secrets ──────────────────────────────────────────────────────────────────
+.env
+*.pem
+*.key
+*.p12
+
+# ─── Rust ─────────────────────────────────────────────────────────────────────
+/target/
+Cargo.lock   # remove if this is an application (keep for binaries)
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# ─── Node / Solidity ──────────────────────────────────────────────────────────
+node_modules/
+artifacts/
+cache/
+typechain-types/
+
+# ─── Editor ───────────────────────────────────────────────────────────────────
+.DS_Store
+*.swp
+*.swo
+.idea/
+# keep .vscode/ tracked (contains shared settings)
+
+# ─── Memory / MCP ─────────────────────────────────────────────────────────────
+.memory/
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+# docker volumes are managed by Docker, not git

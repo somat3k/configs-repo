@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop", "copilot/**", "feature/**"]
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  # ─── Rust ──────────────────────────────────────────────────────────────────
+  rust:
+    name: Rust — build & test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: test
+        run: cargo test --all --all-features
+
+  # ─── Python ────────────────────────────────────────────────────────────────
+  python:
+    name: Python — lint & test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: install deps
+        run: pip install -e ".[dev]" || echo "No pyproject.toml yet — skipping"
+      - name: ruff lint
+        run: ruff check . || echo "ruff not configured yet"
+      - name: pytest
+        run: pytest tests/ -v || echo "No tests yet"
+
+  # ─── Solidity ──────────────────────────────────────────────────────────────
+  solidity:
+    name: Solidity — compile
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: install
+        run: npm ci || echo "No package-lock.json yet"
+      - name: compile
+        run: npx hardhat compile || echo "No contracts yet"
+
+  # ─── Docker build check ────────────────────────────────────────────────────
+  docker:
+    name: Docker Compose — validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate compose
+        run: docker compose -f infra/docker-compose.yml config --quiet

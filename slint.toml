@@ -1,0 +1,14 @@
+// Slint project configuration
+// See: https://slint.dev/releases/latest/docs/slint/
+
+[dependencies]
+// Add Slint component library dependencies here when using Cargo
+// This file is used by editors and tooling to understand the project structure
+
+[include-paths]
+// Additional include paths for .slint files
+ui = "src/ui"
+
+[compiler]
+// style = "material"   // material | fluent | cupertino
+// backend = "winit"    // winit | qt | software-renderer

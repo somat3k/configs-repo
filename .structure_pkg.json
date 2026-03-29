@@ -1,0 +1,170 @@
+{
+  "$schema": "https://raw.githubusercontent.com/somat3k/configs-repo/main/.structure_pkg.schema.json",
+  "version": "1.0.0",
+  "project": {
+    "name": "configs-repo",
+    "description": "Universal containerised network-first mono-repo template",
+    "repository": "https://github.com/somat3k/configs-repo",
+    "languages": ["rust", "python", "slint", "solidity"]
+  },
+
+  "infrastructure": {
+    "services": [
+      {
+        "id": "redis",
+        "type": "cache",
+        "image": "redis:7-alpine",
+        "port": 6379,
+        "url_env": "REDIS_URL",
+        "network": "devnet"
+      },
+      {
+        "id": "postgres",
+        "type": "database",
+        "image": "postgres:16-alpine",
+        "port": 5432,
+        "url_env": "DATABASE_URL",
+        "network": "devnet"
+      },
+      {
+        "id": "ipfs",
+        "type": "storage",
+        "image": "ipfs/kubo:latest",
+        "ports": { "api": 5001, "gateway": 8080, "swarm": 4001 },
+        "url_env": "IPFS_API",
+        "network": "devnet"
+      }
+    ],
+    "network": "devnet"
+  },
+
+  "modules": [
+    {
+      "id": "auth",
+      "name": "auth-module",
+      "language": "rust",
+      "port": 8001,
+      "status": "template",
+      "path": "src/modules/auth",
+      "endpoints": ["/health", "/info", "/invoke"]
+    },
+    {
+      "id": "storage",
+      "name": "storage-module",
+      "language": "rust",
+      "port": 8002,
+      "status": "template",
+      "path": "src/modules/storage",
+      "endpoints": ["/health", "/info", "/invoke"]
+    },
+    {
+      "id": "compute",
+      "name": "compute-module",
+      "language": "python",
+      "port": 8003,
+      "status": "template",
+      "path": "src/modules/compute",
+      "endpoints": ["/health", "/info", "/invoke"]
+    }
+  ],
+
+  "enums": [
+    {
+      "name": "MessageType",
+      "description": "Typed message categories for the Envelope protocol",
+      "values": [
+        "Command",
+        "Query",
+        "Event",
+        "Error",
+        "HealthCheck",
+        "HealthCheckReply"
+      ]
+    },
+    {
+      "name": "Module",
+      "description": "Registered module identifiers",
+      "values": ["Auth", "Storage", "Compute", "ServiceBus"]
+    },
+    {
+      "name": "StorageBackend",
+      "description": "Available storage backends",
+      "values": ["Redis", "Postgres", "IPFS"]
+    },
+    {
+      "name": "StorageOperation",
+      "description": "Storage controller operations",
+      "values": [
+        "Put", "Get", "Set", "Fetch",
+        "Insert", "Update", "Delete", "Select",
+        "CacheSet", "CacheGet",
+        "Publish", "Subscribe"
+      ]
+    },
+    {
+      "name": "Language",
+      "description": "Supported programming languages",
+      "values": ["Rust", "Python", "Slint", "Solidity"]
+    },
+    {
+      "name": "SessionStatus",
+      "description": "Possible session states",
+      "values": ["InProgress", "Complete", "Abandoned"]
+    }
+  ],
+
+  "storage": {
+    "controller": "src/storage/controller",
+    "backends": {
+      "redis": "src/storage/backends/redis",
+      "postgres": "src/storage/backends/postgres",
+      "ipfs": "src/storage/backends/ipfs"
+    },
+    "migrations": "src/storage/migrations"
+  },
+
+  "sessions": {
+    "template": "sessions/template",
+    "directory": "sessions",
+    "ai_prompts": "sessions/ai-prompts.md",
+    "goals": "sessions/goals.md",
+    "restrictions": "sessions/restrictions.md",
+    "rules": "sessions/rules.md",
+    "instructions": "sessions/instructions.md",
+    "configs": "sessions/configs.md"
+  },
+
+  "mcp_servers": [
+    { "id": "context7",   "type": "http",  "purpose": "Library documentation" },
+    { "id": "memory",     "type": "stdio", "purpose": "Persistent session memory" },
+    { "id": "github",     "type": "stdio", "purpose": "GitHub API access" },
+    { "id": "linear",     "type": "stdio", "purpose": "Project management" },
+    { "id": "playwright", "type": "stdio", "purpose": "Browser automation" },
+    { "id": "filesystem", "type": "stdio", "purpose": "File system access" },
+    { "id": "postgres",   "type": "stdio", "purpose": "Database queries" },
+    { "id": "redis",      "type": "stdio", "purpose": "Cache inspection" }
+  ],
+
+  "rules": [
+    { "id": "hyperlink-enums",   "file": ".github/copilot-rules/rule-hyperlink-enums.md" },
+    { "id": "payload-envelope",  "file": ".github/copilot-rules/rule-payload-envelope.md" },
+    { "id": "function-as-file",  "file": ".github/copilot-rules/rule-function-as-file.md" },
+    { "id": "single-file-module","file": ".github/copilot-rules/rule-single-file-module.md" },
+    { "id": "session-complete",  "file": ".github/copilot-rules/rule-session-complete.md" }
+  ],
+
+  "docs": {
+    "architecture":      "docs/architecture.md",
+    "storage":           "docs/storage-controller.md",
+    "api":               "docs/api-reference.md",
+    "review":            "docs/review-guide.md",
+    "graphs": {
+      "module-interaction": "docs/graphs/module-interaction.md"
+    }
+  },
+
+  "scripts": {
+    "new_session": "scripts/new-session.sh",
+    "new_module":  "scripts/new-module.sh"
+  }
+}

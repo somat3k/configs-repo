@@ -1,0 +1,74 @@
+{
+  "servers": {
+    // ─── Context & Memory ──────────────────────────────────────────────────
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "description": "Up-to-date library documentation and code examples for any package"
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "description": "Persistent key-value memory across sessions",
+      "env": {
+        "MEMORY_FILE_PATH": "${workspaceFolder}/.memory/store.json"
+      }
+    },
+
+    // ─── GitHub ────────────────────────────────────────────────────────────
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "description": "GitHub API — repos, issues, PRs, workflows",
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    },
+
+    // ─── Project management ────────────────────────────────────────────────
+    "linear": {
+      "command": "npx",
+      "args": ["-y", "@linear/mcp-server"],
+      "description": "Linear issues, projects and roadmaps",
+      "env": {
+        "LINEAR_API_KEY": "${env:LINEAR_API_KEY}"
+      }
+    },
+
+    // ─── Browser automation ────────────────────────────────────────────────
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "description": "Browser automation and UI testing via Playwright"
+    },
+
+    // ─── Filesystem ────────────────────────────────────────────────────────
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${workspaceFolder}"
+      ],
+      "description": "Read/write/list files in the workspace"
+    },
+
+    // ─── Infrastructure ────────────────────────────────────────────────────
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "description": "Query local Postgres database",
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "${env:DATABASE_URL}"
+      }
+    },
+    "redis": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-redis"],
+      "description": "Inspect and query local Redis",
+      "env": {
+        "REDIS_URL": "${env:REDIS_URL}"
+      }
+    }
+  }
+}

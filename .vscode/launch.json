@@ -1,0 +1,72 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // ─── Rust ────────────────────────────────────────────────────────────────
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Rust: Debug main",
+      "cargo": { "args": ["build", "--bin=main", "--package=main"] },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Rust: Debug unit tests",
+      "cargo": { "args": ["test", "--no-run", "--lib"] },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+
+    // ─── Python ──────────────────────────────────────────────────────────────
+    {
+      "name": "Python: Run module",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.main",
+      "justMyCode": true,
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: pytest",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/", "-v"],
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}"
+    },
+
+    // ─── Node / Solidity (Hardhat) ────────────────────────────────────────────
+    {
+      "name": "Hardhat: Run script",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/.bin/hardhat",
+      "args": ["run", "${file}", "--network", "localhost"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+
+    // ─── Docker attach ───────────────────────────────────────────────────────
+    {
+      "name": "Docker: Attach to container",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "address": "localhost",
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "/app",
+      "restart": true
+    }
+  ],
+
+  "compounds": [
+    {
+      "name": "Full stack",
+      "configurations": ["Rust: Debug main", "Python: Run module"]
+    }
+  ]
+}
