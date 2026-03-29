@@ -21,8 +21,13 @@ make infra-up
 # 4. Start a new development session
 make new-session SESSION=session-01
 
-# 5. Scaffold a new module
+# 5. Scaffold a new module (creates Cargo.toml + main.rs with /health, /info, /invoke)
 make new-module MODULE=auth
+# Then wire it into the workspace — the script prints next steps:
+#   a) Add the module to Cargo.toml workspace members
+#   b) Add a service entry in infra/docker-compose.yml
+#   c) Set MODULE_PORT in .env, then:
+# make run MODULE=auth
 ```
 
 ---

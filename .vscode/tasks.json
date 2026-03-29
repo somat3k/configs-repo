@@ -33,7 +33,7 @@
     {
       "label": "Solidity: compile",
       "type": "shell",
-      "command": "npx hardhat compile",
+      "command": "ape compile",
       "problemMatcher": [],
       "group": "build"
     },

@@ -24,9 +24,10 @@
       "name": "Python: Run module",
       "type": "debugpy",
       "request": "launch",
-      "module": "src.main",
+      "module": "project",
       "justMyCode": true,
       "envFile": "${workspaceFolder}/.env",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src" },
       "cwd": "${workspaceFolder}"
     },
     {
@@ -39,34 +40,39 @@
       "cwd": "${workspaceFolder}"
     },
 
-    // ─── Node / Solidity (Hardhat) ────────────────────────────────────────────
+    // ─── Solidity (Ape Framework) ─────────────────────────────────────────────
     {
-      "name": "Hardhat: Run script",
-      "type": "node",
+      "name": "Ape: compile contracts",
+      "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/node_modules/.bin/hardhat",
-      "args": ["run", "${file}", "--network", "localhost"],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
+      "module": "ape",
+      "args": ["compile"],
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}"
     },
 
-    // ─── Docker attach ───────────────────────────────────────────────────────
+    // ─── Docker attach ────────────────────────────────────────────────────────
     {
       "name": "Docker: Attach to container",
-      "type": "node",
+      "type": "debugpy",
       "request": "attach",
-      "port": 9229,
-      "address": "localhost",
-      "localRoot": "${workspaceFolder}",
-      "remoteRoot": "/app",
-      "restart": true
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "/app"
+        }
+      ]
     }
   ],
 
   "compounds": [
     {
       "name": "Full stack",
-      "configurations": ["Rust: Debug main", "Python: Run module"]
+      "configurations": ["Rust: Debug (select bin)", "Python: Run module"]
     }
   ]
 }
