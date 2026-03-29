@@ -28,7 +28,7 @@ dependencies = [
     "alembic>=1.13",
 
     # ─── IPFS ──────────────────────────────────────────────────────────
-    "aioipfs>=0.8",
+    "aioipfs>=0.7.1,<0.8",
 
     # Solidity (Python-based via Ape Framework)
     "eth-ape>=0.8",
