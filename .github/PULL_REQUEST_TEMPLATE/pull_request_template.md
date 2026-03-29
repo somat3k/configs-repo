@@ -8,10 +8,10 @@
 - [ ] No direct DB access outside `src/storage/`
 
 ### Module Completeness
-- [ ] Module runs standalone (`make run-<module>`)
+- [ ] Module runs standalone (`make run MODULE=<name>`)
 - [ ] `GET /health` returns `200 OK`
 - [ ] Module registers on service mesh
-- [ ] Tests pass (`make test`)
+- [ ] Tests pass (`make test-module MODULE=<name>`)
 
 ### Session
 - [ ] Session notes committed to `sessions/<session-id>/SESSION.md`

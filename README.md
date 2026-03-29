@@ -1,7 +1,7 @@
 # configs-repo
 
 > **Universal containerised, network-first mono-repo template.**
-> Supports Rust · Python · Slint · Solidity — backed by Redis, PostgreSQL & IPFS.
+> Supports Rust · Python · Slint · Solidity (via Ape Framework) — backed by Redis, PostgreSQL & IPFS.
 
 ---
 
@@ -65,7 +65,7 @@ communication
 | `Cargo.toml` | Rust workspace root |
 | `pyproject.toml` | Python project root |
 | `slint.toml` | Slint UI configuration |
-| `hardhat.config.js` | Solidity/Hardhat configuration |
+| `ape-config.yaml` | Solidity/Ape Framework configuration |
 | `.github/copilot-rules/` | Enforced Copilot rules |
 | `.github/workflows/` | CI, dynamic merge, issue review |
 

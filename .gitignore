@@ -23,10 +23,10 @@ build/
 .ruff_cache/
 .pytest_cache/
 
-# ─── Node / Solidity ──────────────────────────────────────────────────────────
-node_modules/
+# ─── Solidity / Ape Framework ─────────────────────────────────────────────────
+.build/
+.cache/
 artifacts/
-cache/
 typechain-types/
 
 # ─── Editor ───────────────────────────────────────────────────────────────────
@@ -39,5 +39,5 @@ typechain-types/
 # ─── Memory / MCP ─────────────────────────────────────────────────────────────
 .memory/
 
-# ─── Docker ───────────────────────────────────────────────────────────────────
-# docker volumes are managed by Docker, not git
+# ─── Ape Framework ────────────────────────────────────────────────────────────
+.ape/

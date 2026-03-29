@@ -27,7 +27,7 @@ curl -sf http://localhost:9000/mesh/members | jq '.[].name'
 
 ### 4. Tests pass
 ```bash
-make test MODULE=<name>
+make test-module MODULE=<name>
 # All tests pass, 0 failures
 ```
 
@@ -51,7 +51,7 @@ Use this prompt to verify session completion:
 Run the session completion checklist for module <NAME>:
 1. make run MODULE=<NAME>  (check it starts)
 2. curl /health            (check 200 ok)
-3. make test MODULE=<NAME> (check all pass)
+3. make test-module MODULE=<NAME> (check all pass)
 4. Confirm sessions/<ID>/SESSION.md exists with results filled in
 Report PASS or FAIL for each item.
 ```

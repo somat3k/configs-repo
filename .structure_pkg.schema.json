@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": ".structure_pkg.schema.json",
+  "title": "StructurePkg",
+  "description": "Universal project manifest for the configs-repo template",
+  "type": "object",
+  "required": ["version", "project"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "project": {
+      "type": "object",
+      "required": ["name", "languages"],
+      "properties": {
+        "name":        { "type": "string" },
+        "description": { "type": "string" },
+        "repository":  { "type": "string", "format": "uri" },
+        "languages": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["rust", "python", "slint", "solidity"] }
+        }
+      }
+    },
+    "infrastructure": {
+      "type": "object",
+      "properties": {
+        "network": { "type": "string" },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "image"],
+            "properties": {
+              "id":       { "type": "string" },
+              "type":     { "type": "string", "enum": ["cache", "database", "storage"] },
+              "image":    { "type": "string" },
+              "port":     { "type": "integer" },
+              "ports":    { "type": "object" },
+              "url_env":  { "type": "string" },
+              "network":  { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "language", "port", "path"],
+        "properties": {
+          "id":        { "type": "string" },
+          "name":      { "type": "string" },
+          "language":  { "type": "string" },
+          "port":      { "type": "integer" },
+          "status":    { "type": "string", "enum": ["template", "active", "deprecated"] },
+          "path":      { "type": "string" },
+          "endpoints": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "enums": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "values"],
+        "properties": {
+          "name":        { "type": "string" },
+          "description": { "type": "string" },
+          "values":      { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "controller":  { "type": "string" },
+        "backends":    { "type": "object" },
+        "migrations":  { "type": "string" }
+      }
+    },
+    "sessions": {
+      "type": "object",
+      "properties": {
+        "template":     { "type": "string" },
+        "directory":    { "type": "string" },
+        "ai_prompts":   { "type": "string" },
+        "goals":        { "type": "string" },
+        "restrictions": { "type": "string" },
+        "rules":        { "type": "string" },
+        "instructions": { "type": "string" },
+        "configs":      { "type": "string" }
+      }
+    },
+    "mcp_servers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "purpose"],
+        "properties": {
+          "id":      { "type": "string" },
+          "type":    { "type": "string", "enum": ["http", "stdio"] },
+          "purpose": { "type": "string" }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "file"],
+        "properties": {
+          "id":   { "type": "string" },
+          "file": { "type": "string" }
+        }
+      }
+    },
+    "docs": {
+      "type": "object"
+    },
+    "scripts": {
+      "type": "object",
+      "properties": {
+        "new_session": { "type": "string" },
+        "new_module":  { "type": "string" }
+      }
+    }
+  }
+}

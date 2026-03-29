@@ -51,7 +51,7 @@ src/invokers/auth_invoker.rs   ← pub fn invoke_auth(...)
 - [ ] Module runs standalone: `make run MODULE=<name>`.
 - [ ] Health check passes: `curl /health` → 200.
 - [ ] Module registers on service mesh.
-- [ ] All tests pass: `make test MODULE=<name>`.
+- [ ] All tests pass: `make test-module MODULE=<name>`.
 - [ ] Session notes committed: `sessions/<session-id>/SESSION.md`.
 
 ---

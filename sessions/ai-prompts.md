@@ -83,7 +83,7 @@ Port: <PORT>. Network: devnet.
 ## Phase 4: Verification
 
 ```
-Run `make test MODULE=<MODULE>` and show me the output.
+Run `make test-module MODULE=<MODULE>` and show me the output.
 Fix any failures.
 ```
 

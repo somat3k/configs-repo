@@ -41,7 +41,7 @@
 
 2. **Run tests**:
    ```bash
-   make test MODULE=<name>
+   make test-module MODULE=<name>
    ```
 
 3. **Update session notes** in `SESSION.md` under "Results / Notes".

@@ -48,7 +48,15 @@ Every message exchanged between modules must conform to the `Envelope` schema.
 
 - Connect at `ws://<host>:<port>/ws`
 - All frames are UTF-8 JSON `Envelope` objects.
-- Heartbeat: server sends `{"type":"ping"}` every 30 s; client must reply `{"type":"pong"}`.
+- Heartbeat: server sends a `HealthCheck` Envelope every 30 s; client must reply with a `HealthCheckReply` Envelope.
+
+```json
+// Server → client (heartbeat probe)
+{ "type": "HealthCheck", "version": 1, "session_id": "<uuid>", "payload": {} }
+
+// Client → server (heartbeat reply)
+{ "type": "HealthCheckReply", "version": 1, "session_id": "<uuid>", "payload": { "status": "ok" } }
+```
 
 ---
 
@@ -80,6 +88,8 @@ result = await invoker.send(
     target=Module.STORAGE,
     envelope=Envelope(
         type=MessageType.COMMAND,
+        version=1,
+        session_id=session_id,
         payload=StoragePutPayload(data=data),
     )
 )

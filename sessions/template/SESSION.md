@@ -79,7 +79,7 @@ LOG_LEVEL=debug
 2. Create module scaffold: `make new-module NAME={{MODULE}}`
 3. Implement features following Function-as-File rule.
 4. Write unit tests alongside each function.
-5. Run `make test MODULE={{MODULE}}`.
+5. Run `make test-module MODULE={{MODULE}}`.
 6. Verify health endpoint: `curl http://localhost:{{PORT}}/health`.
 7. Register on mesh.
 8. Commit: `feat({{MODULE}}): <summary>`.

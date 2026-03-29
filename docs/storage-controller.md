@@ -28,24 +28,28 @@ src/
 ## Controller API (canonical commands)
 
 ### Commands (write)
-| Command                | Backend    | Description                    |
-|------------------------|------------|--------------------------------|
-| `storage::put`         | IPFS       | Store a blob, return CID       |
-| `storage::set`         | Redis      | Set a key-value pair           |
-| `storage::insert`      | Postgres   | Insert a record                |
-| `storage::update`      | Postgres   | Update a record                |
-| `storage::delete`      | Postgres   | Soft-delete a record           |
-| `storage::cache_set`   | Redis      | Set with TTL                   |
-| `storage::publish`     | Redis      | Publish to a channel           |
+
+Use the `StorageOperation` enum values from `.structure_pkg.json`:
+
+| Enum Path                        | Backend    | Description                    |
+|----------------------------------|------------|--------------------------------|
+| `StorageOperation::Put`          | IPFS       | Store a blob, return CID       |
+| `StorageOperation::Set`          | Redis      | Set a key-value pair           |
+| `StorageOperation::Insert`       | Postgres   | Insert a record                |
+| `StorageOperation::Update`       | Postgres   | Update a record                |
+| `StorageOperation::Delete`       | Postgres   | Soft-delete a record           |
+| `StorageOperation::CacheSet`     | Redis      | Set with TTL                   |
+| `StorageOperation::Publish`      | Redis      | Publish to a channel           |
 
 ### Queries (read)
-| Query                  | Backend    | Description                    |
-|------------------------|------------|--------------------------------|
-| `storage::get`         | IPFS       | Retrieve content by CID        |
-| `storage::fetch`       | Redis      | Get a key value                |
-| `storage::select`      | Postgres   | Run a parameterised query      |
-| `storage::cache_get`   | Redis      | Get cached value               |
-| `storage::subscribe`   | Redis      | Subscribe to a channel         |
+
+| Enum Path                        | Backend    | Description                    |
+|----------------------------------|------------|--------------------------------|
+| `StorageOperation::Get`          | IPFS       | Retrieve content by CID        |
+| `StorageOperation::Fetch`        | Redis      | Get a key value                |
+| `StorageOperation::Select`       | Postgres   | Run a parameterised query      |
+| `StorageOperation::CacheGet`     | Redis      | Get cached value               |
+| `StorageOperation::Subscribe`    | Redis      | Subscribe to a channel         |
 
 ## Data Flow Diagram
 

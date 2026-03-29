@@ -10,10 +10,10 @@
 - [ ] No direct DB access outside `src/storage/`.
 
 ### Module Completeness
-- [ ] Module compiles/runs standalone (`make run-<module>`).
+- [ ] Module compiles/runs standalone (`make run MODULE=<name>`).
 - [ ] `GET /health` returns `200 OK`.
 - [ ] Module registers on the service mesh.
-- [ ] Unit tests pass (`make test`).
+- [ ] Unit tests pass (`make test-module MODULE=<name>`).
 - [ ] Session notes committed to `sessions/<session-id>/`.
 
 ### Security
@@ -61,5 +61,5 @@ Examples:
 All architecture diagrams in `docs/graphs/` use **Mermaid** syntax so they render in GitHub Markdown. Reference them from doc pages with:
 
 ```markdown
-![Diagram](graphs/<name>.md)
+[Diagram](graphs/<name>.md)
 ```

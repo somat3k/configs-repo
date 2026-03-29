@@ -5,8 +5,8 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Rust: Debug main",
-      "cargo": { "args": ["build", "--bin=main", "--package=main"] },
+      "name": "Rust: Debug (select bin)",
+      "cargo": { "args": ["build"] },
       "args": [],
       "cwd": "${workspaceFolder}"
     },

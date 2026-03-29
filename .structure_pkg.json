@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/somat3k/configs-repo/main/.structure_pkg.schema.json",
+  "$schema": "./.structure_pkg.schema.json",
   "version": "1.0.0",
   "project": {
     "name": "configs-repo",
@@ -29,7 +29,7 @@
       {
         "id": "ipfs",
         "type": "storage",
-        "image": "ipfs/kubo:latest",
+        "image": "ipfs/kubo:v0.29.0",
         "ports": { "api": 5001, "gateway": 8080, "swarm": 4001 },
         "url_env": "IPFS_API",
         "network": "devnet"
@@ -166,5 +166,12 @@
   "scripts": {
     "new_session": "scripts/new-session.sh",
     "new_module":  "scripts/new-module.sh"
+  },
+
+  "solidity_tooling": {
+    "framework": "ape",
+    "config": "ape-config.yaml",
+    "contracts_folder": "src/contracts",
+    "tests_folder": "tests/contracts"
   }
 }

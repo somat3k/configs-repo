@@ -20,11 +20,26 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - name: fmt
-        run: cargo fmt --all -- --check
+        run: |
+          if cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "import json,sys; exit(0 if json.load(sys.stdin)['packages'] else 1)" 2>/dev/null; then
+            cargo fmt --all -- --check
+          else
+            echo "No Rust workspace members found — skipping cargo fmt"
+          fi
       - name: clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: |
+          if cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "import json,sys; exit(0 if json.load(sys.stdin)['packages'] else 1)" 2>/dev/null; then
+            cargo clippy --all-targets --all-features -- -D warnings
+          else
+            echo "No Rust workspace members found — skipping cargo clippy"
+          fi
       - name: test
-        run: cargo test --all --all-features
+        run: |
+          if cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "import json,sys; exit(0 if json.load(sys.stdin)['packages'] else 1)" 2>/dev/null; then
+            cargo test --all --all-features
+          else
+            echo "No Rust workspace members found — skipping cargo test"
+          fi
 
   # ─── Python ────────────────────────────────────────────────────────────────
   python:
@@ -39,28 +54,33 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: install deps
-        run: pip install -e ".[dev]" || echo "No pyproject.toml yet — skipping"
+        run: pip install -e ".[dev]"
       - name: ruff lint
-        run: ruff check . || echo "ruff not configured yet"
+        run: ruff check .
       - name: pytest
-        run: pytest tests/ -v || echo "No tests yet"
+        run: pytest -v
 
-  # ─── Solidity ──────────────────────────────────────────────────────────────
+  # ─── Solidity (Python / Ape Framework) ────────────────────────────────────
   solidity:
-    name: Solidity — compile
+    name: Solidity — compile (Ape)
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: "20"
-          cache: npm
-      - name: install
-        run: npm ci || echo "No package-lock.json yet"
-      - name: compile
-        run: npx hardhat compile || echo "No contracts yet"
+          python-version: "3.12"
+          cache: pip
+      - name: install ape
+        run: pip install eth-ape ape-solidity
+      - name: compile contracts
+        run: |
+          if [ -d src/contracts ] && [ -n "$(ls src/contracts/*.sol 2>/dev/null)" ]; then
+            ape compile
+          else
+            echo "No Solidity contracts found — skipping compile."
+          fi
 
   # ─── Docker build check ────────────────────────────────────────────────────
   docker:

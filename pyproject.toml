@@ -30,6 +30,10 @@ dependencies = [
     # ─── IPFS ──────────────────────────────────────────────────────────
     "aioipfs>=0.8",
 
+    # Solidity (Python-based via Ape Framework)
+    "eth-ape>=0.8",
+    "ape-solidity>=0.8",
+
     # ─── Observability ─────────────────────────────────────────────────
     "structlog>=24",
 
@@ -47,6 +51,9 @@ dev = [
     "mypy>=1.10",
     "black>=24",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/project"]
 
 [tool.ruff]
 line-length = 100

@@ -39,7 +39,7 @@ services:
 
   # ─── IPFS ─────────────────────────────────────────────────────────────────
   ipfs:
-    image: ipfs/kubo:latest
+    image: ipfs/kubo:v0.29.0
     restart: unless-stopped
     ports:
       - "4001:4001"       # swarm

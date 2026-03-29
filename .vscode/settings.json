@@ -14,11 +14,11 @@
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true,
   "files.exclude": {
-    "**/node_modules": true,
     "**/.git": false,
     "**/target": true,
     "**/__pycache__": true,
-    "**/*.pyc": true
+    "**/*.pyc": true,
+    "**/.ape": true
   },
 
   // ─── Language-specific overrides ───────────────────────────────────────────
@@ -37,7 +37,7 @@
     "editor.defaultFormatter": "JuanBlanco.solidity"
   },
   "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "vscode.json-language-features"
   },
   "[markdown]": {
     "editor.wordWrap": "on"
@@ -60,8 +60,6 @@
   "github.copilot.chat.reviewSelection.enabled": true,
   "github.copilot.renameSuggestions.triggerAutomatically": true,
   "github.copilot.nextEditSuggestions.enabled": true,
-  "github.copilot.chat.completionContext.typescript.mode": "on",
-  "github.copilot.chat.completionContext.typescript.useGitHub": "on",
   "chat.agent.maxRequests": 60,
   "chat.mcp.enabled": true,
   "chat.mcp.discovery.enabled": true,

@@ -1,0 +1,22 @@
+# Ape Framework configuration
+# Python-based Solidity development tool — https://docs.apeworx.io/ape/stable/
+
+name: project
+
+contracts_folder: src/contracts
+tests_folder: tests/contracts
+
+default_ecosystem: ethereum
+
+networks:
+  ethereum:
+    default_network: local
+    local:
+      default_provider: test
+
+plugins:
+  - name: solidity
+    version: ">=0.7.0,<0.9"
+    # Solidity compiler version managed via ape-solidity plugin
+
+dependencies: []

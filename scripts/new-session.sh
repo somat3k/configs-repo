@@ -12,16 +12,26 @@ fi
 
 cp -r sessions/template/ "$TARGET"
 
-# Replace template placeholders
+# Use Python for placeholder replacement — safe for values containing / & \ etc.
 DATE=$(date +%Y-%m-%d)
 AUTHOR=$(git config user.name 2>/dev/null || echo "unknown")
 
-sed -i.bak \
-  -e "s/{{SESSION_ID}}/$SESSION_ID/g" \
-  -e "s/{{DATE}}/$DATE/g" \
-  -e "s/{{AUTHOR}}/$AUTHOR/g" \
-  "$TARGET/SESSION.md"
-rm -f "$TARGET/SESSION.md.bak"
+python3 - "$SESSION_ID" "$DATE" "$AUTHOR" << 'PY'
+import sys
+
+session_id, date, author = sys.argv[1], sys.argv[2], sys.argv[3]
+path = f"sessions/{session_id}/SESSION.md"
+
+with open(path) as fh:
+    content = fh.read()
+
+content = content.replace("{{SESSION_ID}}", session_id)
+content = content.replace("{{DATE}}", date)
+content = content.replace("{{AUTHOR}}", author)
+
+with open(path, "w") as fh:
+    fh.write(content)
+PY
 
 echo "✓ Session created at $TARGET"
 echo "  Edit $TARGET/SESSION.md to fill in goals, module focus, etc."

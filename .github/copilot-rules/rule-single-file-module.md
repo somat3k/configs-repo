@@ -20,11 +20,11 @@ Every service module must be buildable and runnable as a single standalone binar
 - Modules not registered in `.structure_pkg.json → modules[]`.
 
 ### Build targets
-Each module must be buildable with:
+Each module must be usable with:
 ```bash
-make build MODULE=<name>
-make run MODULE=<name>
-make test MODULE=<name>
+make run MODULE=<name>          # run standalone
+make build-module MODULE=<name> # build the binary
+make test-module MODULE=<name>  # run unit tests
 ```
 
 ## Example module structure
