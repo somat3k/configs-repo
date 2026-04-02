@@ -48,6 +48,7 @@ Machine Learning Studio (MLS) for Trading, Arbitrage, and DeFi — a production-
 | data-layer       | 5700 |    6700   |
 | broker           | 5800 |    6800   |  
 | transactions     | 5900 |    6900   |
+| shell-vm         | 5950 |    6950   |
 
 ## Namespace Conventions
 - Core shared: `MLS.Core.{Feature}`

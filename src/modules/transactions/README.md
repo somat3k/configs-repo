@@ -36,4 +36,4 @@ src/modules/transactions/
 - `broker` (order execution triggers)
 - PostgreSQL `blockchain_addresses` table (contract addresses)
 
-See [SESSION.md](SESSION.md) for Copilot session prompt.
+See [SESSION.md](docs/SESSION.md) for Copilot session prompt.

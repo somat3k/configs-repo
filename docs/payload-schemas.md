@@ -97,3 +97,72 @@ interface Envelope {
   "model_version": "2.1.0"
 }
 ```
+
+<!-- For all SHELL_* messages, `Envelope.session_id` IS the shell session identifier.
+     Do not duplicate it inside the payload body. -->
+
+### SHELL_EXEC_REQUEST
+```json
+{
+  "command": "python train.py --model model_t --epochs 50",
+  "working_dir": "/app/scripts",
+  "env": { "PYTHONPATH": "/app", "MODEL_TYPE": "trading" },
+  "timeout_seconds": 600,
+  "capture_output": true
+}
+```
+
+### SHELL_INPUT
+```json
+{
+  "data": "ls -la\n"
+}
+```
+
+### SHELL_RESIZE
+```json
+{
+  "cols": 220,
+  "rows": 50
+}
+```
+
+### SHELL_OUTPUT
+```json
+{
+  "stream": "stdout",
+  "chunk": "Epoch 1/50 — loss: 0.421  acc: 0.873\n",
+  "sequence": 42,
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+### SHELL_SESSION_STATE
+```json
+{
+  "previous_state": "Running",
+  "current_state": "Completed",
+  "exit_code": 0,
+  "duration_ms": 4821
+}
+```
+
+### SHELL_SESSION_CREATED
+```json
+{
+  "label": "model-t training run #14",
+  "requesting_module_id": "ml-runtime-550e8400",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+### SHELL_SESSION_TERMINATED
+```json
+{
+  "label": "model-t training run #14",
+  "exit_code": 130,
+  "duration_ms": 4821,
+  "terminated_by": "timeout",
+  "timestamp": "2024-01-15T10:30:05.000Z"
+}
+```
