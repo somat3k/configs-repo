@@ -1,0 +1,134 @@
+name: Container Build & Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deploy environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, production]
+      modules:
+        description: 'Modules to deploy (comma-separated or "all")'
+        required: true
+        default: 'all'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/mls
+
+jobs:
+  build-and-push:
+    name: Build & Push — ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        module:
+          - block-controller
+          - web-app
+          - trader
+          - arbitrager
+          - defi
+          - ml-runtime
+          - data-layer
+          - broker
+          - transactions
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.module }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Resolve module build context
+        id: ctx
+        run: |
+          MODULE="${{ matrix.module }}"
+          # Modules with a dedicated top-level src/ directory
+          if [ -d "src/$MODULE" ]; then
+            CONTEXT="src/$MODULE"
+          # Modules under src/modules/
+          elif [ -d "src/modules/$MODULE" ]; then
+            CONTEXT="src/modules/$MODULE"
+          else
+            echo "ERROR: No build context found for module '$MODULE'." \
+              " Create src/$MODULE/ or src/modules/$MODULE/ with a Dockerfile." >&2
+            exit 1
+          fi
+          if [ ! -f "$CONTEXT/Dockerfile" ]; then
+            echo "ERROR: Dockerfile not found at '$CONTEXT/Dockerfile'." >&2
+            exit 1
+          fi
+          echo "context=$CONTEXT" >> "$GITHUB_OUTPUT"
+          echo "dockerfile=$CONTEXT/Dockerfile" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ steps.ctx.outputs.context }}
+          file: ${{ steps.ctx.outputs.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            MODULE_NAME=${{ matrix.module }}
+            BUILD_VERSION=${{ github.ref_name }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment: staging
+    if: github.ref == 'refs/heads/main' || inputs.environment == 'staging'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Deploy via Docker Compose
+        run: echo "Deploy to staging environment"
+
+  deploy-production:
+    name: Deploy to Production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment: production
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.environment == 'production'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Deploy to production
+        run: echo "Deploy to production environment"
