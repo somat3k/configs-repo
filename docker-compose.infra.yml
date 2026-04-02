@@ -1,0 +1,149 @@
+version: '3.9'
+
+# Infrastructure services only — Redis, PostgreSQL, IPFS
+# Run: docker compose -f docker-compose.infra.yml up -d
+
+networks:
+  mls-network:
+    name: mls-network
+    driver: bridge
+
+volumes:
+  postgres-data:
+    name: mls-postgres-data
+  redis-data:
+    name: mls-redis-data
+  ipfs-data:
+    name: mls-ipfs-data
+  ipfs-staging:
+    name: mls-ipfs-staging
+
+services:
+  # ─────────────────────────────────────────────
+  # Redis — Cache Layer
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: mls-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - mls-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      com.mls.service: "redis"
+      com.mls.role: "cache"
+
+  # ─────────────────────────────────────────────
+  # PostgreSQL — Primary Database
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: mls-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mls_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mls_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-mls_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - mls-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mls_user} -d ${POSTGRES_DB:-mls_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      com.mls.service: "postgres"
+      com.mls.role: "storage"
+
+  # ─────────────────────────────────────────────
+  # IPFS (Kubo) — Distributed Storage
+  # ─────────────────────────────────────────────
+  ipfs:
+    image: ipfs/kubo:v0.29.0
+    container_name: mls-ipfs
+    restart: unless-stopped
+    ports:
+      - "4001:4001"       # P2P swarm
+      - "4001:4001/udp"   # P2P swarm UDP
+      - "5001:5001"       # API (internal only in prod)
+      - "8080:8080"       # Gateway
+    volumes:
+      - ipfs-data:/data/ipfs
+      - ipfs-staging:/export
+      - ./infra/ipfs/config:/data/ipfs/config:rw
+    networks:
+      - mls-network
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    healthcheck:
+      test: ["CMD-SHELL", "ipfs id || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.service: "ipfs"
+      com.mls.role: "distributed-storage"
+
+  # ─────────────────────────────────────────────
+  # RedisInsight — Redis GUI (dev only)
+  # ─────────────────────────────────────────────
+  redis-insight:
+    image: redis/redisinsight:2.50
+    container_name: mls-redis-insight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    volumes:
+      - ./infra/redis-insight:/data
+    networks:
+      - mls-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - tools
+    labels:
+      com.mls.service: "redis-insight"
+      com.mls.role: "dev-tool"
+
+  # ─────────────────────────────────────────────
+  # pgAdmin — PostgreSQL GUI (dev only)
+  # ─────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:8.9
+    container_name: mls-pgadmin
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@mls.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-mls_admin}
+    volumes:
+      - ./infra/pgadmin:/var/lib/pgadmin
+    networks:
+      - mls-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - tools
+    labels:
+      com.mls.service: "pgadmin"
+      com.mls.role: "dev-tool"

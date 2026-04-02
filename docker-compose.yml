@@ -1,0 +1,197 @@
+version: '3.9'
+
+# Full MLS platform — all modules
+# Run: docker compose up -d
+# Requires: docker compose -f docker-compose.infra.yml up -d (or include infra here)
+
+networks:
+  mls-network:
+    external: true
+    name: mls-network
+
+services:
+  block-controller:
+    image: ghcr.io/somat3k/mls-block-controller:latest
+    build:
+      context: src/block-controller
+      dockerfile: Dockerfile
+    container_name: mls-block-controller
+    restart: unless-stopped
+    ports:
+      - "5100:5100"
+      - "6100:6100"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5100
+      - MLS_MODULE=block-controller
+      - MLS_WS_PORT=6100
+      - ConnectionStrings__Redis=redis:6379
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=mls_db;Username=mls_user;Password=${POSTGRES_PASSWORD}
+    networks:
+      - mls-network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "block-controller"
+      com.mls.role: "orchestrator"
+
+  web-app:
+    image: ghcr.io/somat3k/mls-web-app:latest
+    build:
+      context: src/web-app
+      dockerfile: Dockerfile
+    container_name: mls-web-app
+    restart: unless-stopped
+    ports:
+      - "5200:5200"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5200
+      - MLS_MODULE=web-app
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5200/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "web-app"
+      com.mls.role: "frontend"
+
+  trader:
+    image: ghcr.io/somat3k/mls-trader:latest
+    build:
+      context: src/modules/trader
+      dockerfile: Dockerfile
+    container_name: mls-trader
+    restart: unless-stopped
+    ports:
+      - "5300:5300"
+      - "6300:6300"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5300
+      - MLS_MODULE=trader
+      - MLS_WS_PORT=6300
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    labels:
+      com.mls.module: "trader"
+      com.mls.role: "algo-model"
+
+  arbitrager:
+    image: ghcr.io/somat3k/mls-arbitrager:latest
+    build:
+      context: src/modules/arbitrager
+      dockerfile: Dockerfile
+    container_name: mls-arbitrager
+    restart: unless-stopped
+    ports:
+      - "5400:5400"
+      - "6400:6400"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5400
+      - MLS_MODULE=arbitrager
+      - MLS_WS_PORT=6400
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    labels:
+      com.mls.module: "arbitrager"
+      com.mls.role: "algo-model"
+
+  defi:
+    image: ghcr.io/somat3k/mls-defi:latest
+    build:
+      context: src/modules/defi
+      dockerfile: Dockerfile
+    container_name: mls-defi
+    restart: unless-stopped
+    ports:
+      - "5500:5500"
+      - "6500:6500"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5500
+      - MLS_MODULE=defi
+      - MLS_WS_PORT=6500
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    labels:
+      com.mls.module: "defi"
+      com.mls.role: "algo-model"
+
+  ml-runtime:
+    image: ghcr.io/somat3k/mls-ml-runtime:latest
+    build:
+      context: src/modules/ml-runtime
+      dockerfile: Dockerfile
+    container_name: mls-ml-runtime
+    restart: unless-stopped
+    ports:
+      - "5600:5600"
+      - "6600:6600"
+    environment:
+      - MLS_MODULE=ml-runtime
+      - MLS_WS_PORT=6600
+      - MLS_BC_URL=http://block-controller:5100
+      - IPFS_API_URL=http://ipfs:5001
+    volumes:
+      - ./artifacts/models:/app/models:ro
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+      - ipfs
+    labels:
+      com.mls.module: "ml-runtime"
+      com.mls.role: "inference"
+
+  data-layer:
+    image: ghcr.io/somat3k/mls-data-layer:latest
+    build:
+      context: src/modules/data-layer
+      dockerfile: Dockerfile
+    container_name: mls-data-layer
+    restart: unless-stopped
+    ports:
+      - "5700:5700"
+      - "6700:6700"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5700
+      - MLS_MODULE=data-layer
+      - MLS_WS_PORT=6700
+      - MLS_BC_URL=http://block-controller:5100
+      - ConnectionStrings__Redis=redis:6379
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=mls_db;Username=mls_user;Password=${POSTGRES_PASSWORD}
+      - IPFS_API_URL=http://ipfs:5001
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+      - postgres
+      - redis
+      - ipfs
+    labels:
+      com.mls.module: "data-layer"
+      com.mls.role: "data-access"

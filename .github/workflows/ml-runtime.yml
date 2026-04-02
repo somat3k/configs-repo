@@ -1,0 +1,112 @@
+name: ML Runtime — Train & Export Models
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_type:
+        description: 'Model to train (trader/arbitrager/defi/all)'
+        required: true
+        default: 'all'
+        type: choice
+        options: [trader, arbitrager, defi, all]
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, production]
+  schedule:
+    - cron: '0 2 * * *'  # Nightly retraining at 2am UTC
+
+env:
+  PYTHON_VERSION: '3.12'
+  ARTIFACTS_DIR: artifacts/models
+
+jobs:
+  train-models:
+    name: Train & Export ML Models
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        model: ${{ fromJson(inputs.model_type == 'all' && '["trader","arbitrager","defi"]' || format('["{0}"]', inputs.model_type)) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install ML dependencies
+        working-directory: src/modules/ml-runtime
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock
+
+      - name: Run training pipeline
+        working-directory: src/modules/ml-runtime
+        env:
+          MODEL_TYPE: ${{ matrix.model }}
+          MLS_ENV: ${{ inputs.environment || 'staging' }}
+        run: |
+          python training/train_${{ matrix.model }}.py \
+            --output-dir ${{ env.ARTIFACTS_DIR }} \
+            --export-onnx \
+            --export-joblib \
+            --validate
+
+      - name: Run model validation tests
+        working-directory: src/modules/ml-runtime
+        run: |
+          python -m pytest tests/test_${{ matrix.model }}_model.py -v \
+            --benchmark-only \
+            --benchmark-json=benchmark_${{ matrix.model }}.json
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-models-${{ matrix.model }}-${{ github.run_number }}
+          path: |
+            src/modules/ml-runtime/artifacts/models/${{ matrix.model }}.onnx
+            src/modules/ml-runtime/artifacts/models/${{ matrix.model }}.joblib
+            src/modules/ml-runtime/benchmark_${{ matrix.model }}.json
+          retention-days: 30
+
+  validate-and-register:
+    name: Validate & Register Models
+    needs: train-models
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all model artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ml-models-*-${{ github.run_number }}
+          merge-multiple: true
+          path: artifacts/models
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Validate ONNX models
+        run: |
+          dotnet run --project src/tools/ModelValidator \
+            --models-dir artifacts/models \
+            --output validation-report.json
+
+      - name: Upload validation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-validation-report-${{ github.run_number }}
+          path: validation-report.json
+          retention-days: 90
