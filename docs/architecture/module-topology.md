@@ -16,19 +16,24 @@ graph TB
     BC -->|WS :6100| DL[Data Layer :5700]
     BC -->|WS :6100| BK[Broker :5800]
     BC -->|WS :6100| TX[Transactions :5900]
+    BC -->|WS :6100| SV[Shell VM :5950]
 
     TR -->|queries| DL
     AR -->|queries| DL
     DF -->|queries| TX
     ML -->|inference| TR
     ML -->|inference| AR
+    ML -->|exec scripts| SV
     BK -->|orders| DF
     TX -->|blockchain| BK
+    WA -->|console| SV
 
     DL --- PG[(PostgreSQL :5432)]
     DL --- RD[(Redis :6379)]
     DL --- IP[(IPFS :5001)]
     ML --- IP
+    SV --- PG
+    SV --- RD
 ```
 
 ## Port Allocation
@@ -44,6 +49,7 @@ graph TB
 | data-layer | 5700 | 6700 | 5700, 6700 |
 | broker | 5800 | 6800 | 5800, 6800 |
 | transactions | 5900 | 6900 | 5900, 6900 |
+| shell-vm | 5950 | 6950 | 5950, 6950 |
 
 ## Envelope Protocol
 

@@ -203,3 +203,35 @@ services:
     labels:
       com.mls.module: "data-layer"
       com.mls.role: "data-access"
+
+  shell-vm:
+    image: ghcr.io/somat3k/mls-shell-vm:latest
+    build:
+      context: src/modules/shell-vm
+      dockerfile: Dockerfile
+    container_name: mls-shell-vm
+    restart: unless-stopped
+    ports:
+      - "5950:5950"
+      - "6950:6950"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5950
+      - MLS_MODULE=shell-vm
+      - MLS_WS_PORT=6950
+      - MLS_BC_URL=http://block-controller:5100
+      - ConnectionStrings__Redis=redis:6379
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=mls_db;Username=mls_user;Password=${POSTGRES_PASSWORD}
+    networks:
+      - mls-network
+    # Requires infra services: postgres, redis (start docker-compose.infra.yml first)
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5950/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "shell-vm"
+      com.mls.role: "execution-console"

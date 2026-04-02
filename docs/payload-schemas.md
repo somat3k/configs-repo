@@ -97,3 +97,64 @@ interface Envelope {
   "model_version": "2.1.0"
 }
 ```
+
+### SHELL_EXEC_REQUEST
+```json
+{
+  "session_id": "uuid",
+  "command": "python train.py --model model_t --epochs 50",
+  "working_dir": "/app/scripts",
+  "env": { "PYTHONPATH": "/app", "MODEL_TYPE": "trading" },
+  "timeout_seconds": 600,
+  "capture_output": true
+}
+```
+
+### SHELL_INPUT
+```json
+{
+  "session_id": "uuid",
+  "data": "ls -la\n"
+}
+```
+
+### SHELL_RESIZE
+```json
+{
+  "session_id": "uuid",
+  "cols": 220,
+  "rows": 50
+}
+```
+
+### SHELL_OUTPUT
+```json
+{
+  "session_id": "uuid",
+  "stream": "stdout",
+  "chunk": "Epoch 1/50 — loss: 0.421  acc: 0.873\n",
+  "sequence": 42,
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+### SHELL_SESSION_STATE
+```json
+{
+  "session_id": "uuid",
+  "previous_state": "Running",
+  "current_state": "Completed",
+  "exit_code": 0,
+  "duration_ms": 4821
+}
+```
+
+### SHELL_SESSION_CREATED
+```json
+{
+  "session_id": "uuid",
+  "label": "model-t training run #14",
+  "requesting_module_id": "ml-runtime-550e8400",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
