@@ -87,6 +87,8 @@ jobs:
     name: Deploy to Staging
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     environment: staging
     if: github.ref == 'refs/heads/main' || inputs.environment == 'staging'
     steps:
@@ -99,6 +101,8 @@ jobs:
     name: Deploy to Production
     needs: deploy-staging
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     environment: production
     if: startsWith(github.ref, 'refs/tags/v') || inputs.environment == 'production'
     steps:

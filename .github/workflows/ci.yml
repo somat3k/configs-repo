@@ -14,6 +14,9 @@ jobs:
   build-and-test:
     name: Build & Test (.NET)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
 
     services:
       postgres:
@@ -106,6 +109,8 @@ jobs:
   lint-dotnet:
     name: Lint (.NET Format)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -117,6 +122,8 @@ jobs:
   lint-python:
     name: Lint (Python/Ruff)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -26,6 +26,8 @@ jobs:
   train-models:
     name: Train & Export ML Models
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         model: ${{ fromJson(inputs.model_type == 'all' && '["trader","arbitrager","defi"]' || format('["{0}"]', inputs.model_type)) }}
@@ -80,6 +82,8 @@ jobs:
     name: Validate & Register Models
     needs: train-models
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: success()
 
     steps:
