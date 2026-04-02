@@ -1,0 +1,145 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🏗️ Build All",
+      "type": "shell",
+      "command": "dotnet build MLS.sln --configuration Debug",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "🧪 Test All",
+      "type": "shell",
+      "command": "dotnet test MLS.sln --configuration Debug --logger trx --results-directory ./TestResults",
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "🐳 Start Infrastructure",
+      "type": "shell",
+      "command": "docker compose -f docker-compose.infra.yml up -d",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" },
+      "runOptions": { "runOn": "folderOpen" }
+    },
+    {
+      "label": "🛑 Stop Infrastructure",
+      "type": "shell",
+      "command": "docker compose -f docker-compose.infra.yml down",
+      "presentation": { "echo": true, "reveal": "silent", "focus": false, "panel": "shared" }
+    },
+    {
+      "label": "🚀 Run Block Controller",
+      "type": "shell",
+      "command": "dotnet run --project src/block-controller/BlockController/BlockController.csproj",
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "dedicated" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "🌐 Run Web App",
+      "type": "shell",
+      "command": "dotnet run --project src/web-app/WebApp/WebApp.csproj",
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "dedicated" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "📊 Run Trader Module",
+      "type": "shell",
+      "command": "dotnet run --project src/modules/trader/Trader/Trader.csproj",
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "dedicated" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "🔄 Run Arbitrager Module",
+      "type": "shell",
+      "command": "dotnet run --project src/modules/arbitrager/Arbitrager/Arbitrager.csproj",
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "dedicated" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "⛓️ Run DeFi Module",
+      "type": "shell",
+      "command": "dotnet run --project src/modules/defi/DeFi/DeFi.csproj",
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "dedicated" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "🐳 Build All Docker Images",
+      "type": "shell",
+      "command": "docker compose build",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" }
+    },
+    {
+      "label": "🐳 Start All Services",
+      "type": "shell",
+      "command": "docker compose up -d",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" }
+    },
+    {
+      "label": "🐳 Stop All Services",
+      "type": "shell",
+      "command": "docker compose down",
+      "presentation": { "echo": true, "reveal": "silent", "focus": false, "panel": "shared" }
+    },
+    {
+      "label": "📦 Publish NuGet Packages",
+      "type": "shell",
+      "command": "dotnet pack MLS.sln -c Release -o ./nupkg",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" }
+    },
+    {
+      "label": "🌍 Run NuxtJS Dev Server",
+      "type": "shell",
+      "command": "cd nuxt-pages && npm run dev",
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "dedicated" }
+    },
+    {
+      "label": "🏗️ Build NuxtJS Pages",
+      "type": "shell",
+      "command": "cd nuxt-pages && npm run generate",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" }
+    },
+    {
+      "label": "🔍 Lint C# Code",
+      "type": "shell",
+      "command": "dotnet format MLS.sln --verify-no-changes",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "🔧 Restore Dependencies",
+      "type": "shell",
+      "command": "dotnet restore MLS.sln",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "📊 Coverage Report",
+      "type": "shell",
+      "command": "dotnet test MLS.sln --collect:'XPlat Code Coverage' --results-directory ./TestResults && reportgenerator -reports:./TestResults/**/*.xml -targetdir:./TestResults/Coverage -reporttypes:Html",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "shared" }
+    },
+    {
+      "label": "🔐 Redis CLI",
+      "type": "shell",
+      "command": "docker exec -it mls-redis redis-cli",
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "dedicated" }
+    },
+    {
+      "label": "🗄️ Postgres CLI",
+      "type": "shell",
+      "command": "docker exec -it mls-postgres psql -U mls_user -d mls_db",
+      "presentation": { "echo": true, "reveal": "always", "focus": true, "panel": "dedicated" }
+    },
+    {
+      "label": "📌 Watch Build",
+      "type": "shell",
+      "command": "dotnet watch build --project src/block-controller/BlockController/BlockController.csproj",
+      "presentation": { "echo": true, "reveal": "always", "focus": false, "panel": "dedicated" },
+      "isBackground": true,
+      "problemMatcher": { "base": "$msCompile", "background": { "activeOnStart": true, "beginsPattern": "Build started", "endsPattern": "Build succeeded" } }
+    }
+  ]
+}
