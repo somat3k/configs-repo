@@ -72,7 +72,7 @@ broadcast to all WebSocket subscribers as a `SHELL_SESSION_STATE` envelope.
 
 ## WebSocket Events
 
-All WebSocket messages use the [Envelope Protocol](../../docs/payload-schemas.md).
+All WebSocket messages use the [Envelope Protocol](../../../docs/payload-schemas.md).
 
 | Type | Direction | Description |
 |------|-----------|-------------|
@@ -135,10 +135,11 @@ src/modules/shell-vm/
 
 ## Key Payload Types
 
+> `Envelope.session_id` carries the shell session identifier for all `SHELL_*` messages — it is not repeated inside the payload body.
+
 ### `SHELL_EXEC_REQUEST`
 ```json
 {
-  "session_id": "uuid",
   "command": "python train.py --model model_t",
   "working_dir": "/app/scripts",
   "env": { "PYTHONPATH": "/app" },
@@ -150,7 +151,6 @@ src/modules/shell-vm/
 ### `SHELL_OUTPUT`
 ```json
 {
-  "session_id": "uuid",
   "stream": "stdout",
   "chunk": "Epoch 1/50 — loss: 0.421\n",
   "sequence": 42,
@@ -161,7 +161,6 @@ src/modules/shell-vm/
 ### `SHELL_SESSION_STATE`
 ```json
 {
-  "session_id": "uuid",
   "previous_state": "Running",
   "current_state": "Completed",
   "exit_code": 0,

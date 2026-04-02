@@ -206,9 +206,11 @@ services:
 
   shell-vm:
     image: ghcr.io/somat3k/mls-shell-vm:latest
-    build:
-      context: src/modules/shell-vm
-      dockerfile: Dockerfile
+    # build:
+    #   context: src/modules/shell-vm
+    #   dockerfile: Dockerfile
+    # Dockerfile will be added when the project is scaffolded.
+    # Until then, only the published image is used.
     container_name: mls-shell-vm
     restart: unless-stopped
     ports:

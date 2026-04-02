@@ -207,12 +207,15 @@ public sealed record PtySpawnOptions(
 
 ## 5. Payload Records (Envelope Payload Bodies)
 
+> **Note**: `Envelope.SessionId` carries the shell session identifier for all `SHELL_*` messages.
+> Do **not** repeat it inside the payload body — the records below omit it intentionally.
+
 ```csharp
 namespace MLS.ShellVM.Payloads;
 
-/// <summary>Request to execute a command in an existing shell session.</summary>
+/// <summary>Request to execute a command in an existing shell session.
+/// The target session is identified by Envelope.SessionId.</summary>
 public sealed record ShellExecRequestPayload(
-    Guid SessionId,
     string Command,
     string WorkingDir,
     IReadOnlyDictionary<string, string>? Env,
@@ -220,31 +223,31 @@ public sealed record ShellExecRequestPayload(
     bool CaptureOutput = true
 );
 
-/// <summary>Raw stdin bytes sent to an interactive PTY session.</summary>
+/// <summary>Raw stdin bytes sent to an interactive PTY session.
+/// The target session is identified by Envelope.SessionId.</summary>
 public sealed record ShellInputPayload(
-    Guid SessionId,
     string Data    // UTF-8 input text or control sequences
 );
 
-/// <summary>PTY resize request.</summary>
+/// <summary>PTY resize request.
+/// The target session is identified by Envelope.SessionId.</summary>
 public sealed record ShellResizePayload(
-    Guid SessionId,
     int Cols,
     int Rows
 );
 
-/// <summary>A chunk of PTY output streamed to subscribers.</summary>
+/// <summary>A chunk of PTY output streamed to subscribers.
+/// The originating session is identified by Envelope.SessionId.</summary>
 public sealed record ShellOutputPayload(
-    Guid SessionId,
     string Stream,     // "stdout" or "stderr"
     string Chunk,      // UTF-8 decoded output
     long Sequence,
     string Timestamp   // ISO 8601
 );
 
-/// <summary>State change notification for an execution block.</summary>
+/// <summary>State change notification for an execution block.
+/// The affected session is identified by Envelope.SessionId.</summary>
 public sealed record ShellSessionStatePayload(
-    Guid SessionId,
     string PreviousState,
     string CurrentState,
     int? ExitCode,
@@ -253,9 +256,17 @@ public sealed record ShellSessionStatePayload(
 
 /// <summary>Broadcast when a new session is created.</summary>
 public sealed record ShellSessionCreatedPayload(
-    Guid SessionId,
     string Label,
     string RequestingModuleId,
+    string Timestamp
+);
+
+/// <summary>Broadcast when a session terminates (normal exit, timeout, or watchdog reap).</summary>
+public sealed record ShellSessionTerminatedPayload(
+    string Label,
+    int? ExitCode,
+    long DurationMs,
+    string TerminatedBy,   // "client" | "watchdog" | "timeout" | "error"
     string Timestamp
 );
 ```
@@ -482,6 +493,9 @@ HeartbeatService (every 5s):
 ## 12. Database Schema
 
 ```sql
+-- Enable pgcrypto for gen_random_uuid() (idempotent, safe to re-run)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- Persistent execution block registry
 CREATE TABLE execution_blocks (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -497,7 +511,9 @@ CREATE TABLE execution_blocks (
     exit_code           INT
 );
 
--- Full audit log — never truncated; partition by month
+-- Full audit log — never truncated; partition by month.
+-- A DEFAULT partition is required so inserts succeed before month-specific
+-- partitions are created by the monthly maintenance job.
 CREATE TABLE shell_audit_log (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     block_id    UUID REFERENCES execution_blocks(id),
@@ -508,6 +524,12 @@ CREATE TABLE shell_audit_log (
     duration_ms BIGINT,
     module_id   TEXT
 ) PARTITION BY RANGE (started_at);
+
+-- Default partition catches rows that don't match any month partition yet.
+-- This partition can remain indefinitely as a safety catch-all, or data can be
+-- migrated to month-specific partitions before it is dropped (PostgreSQL requires
+-- the partition to be empty before it can be removed).
+CREATE TABLE shell_audit_log_default PARTITION OF shell_audit_log DEFAULT;
 ```
 
 ---

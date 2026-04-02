@@ -98,10 +98,12 @@ interface Envelope {
 }
 ```
 
+<!-- For all SHELL_* messages, `Envelope.session_id` IS the shell session identifier.
+     Do not duplicate it inside the payload body. -->
+
 ### SHELL_EXEC_REQUEST
 ```json
 {
-  "session_id": "uuid",
   "command": "python train.py --model model_t --epochs 50",
   "working_dir": "/app/scripts",
   "env": { "PYTHONPATH": "/app", "MODEL_TYPE": "trading" },
@@ -113,7 +115,6 @@ interface Envelope {
 ### SHELL_INPUT
 ```json
 {
-  "session_id": "uuid",
   "data": "ls -la\n"
 }
 ```
@@ -121,7 +122,6 @@ interface Envelope {
 ### SHELL_RESIZE
 ```json
 {
-  "session_id": "uuid",
   "cols": 220,
   "rows": 50
 }
@@ -130,7 +130,6 @@ interface Envelope {
 ### SHELL_OUTPUT
 ```json
 {
-  "session_id": "uuid",
   "stream": "stdout",
   "chunk": "Epoch 1/50 — loss: 0.421  acc: 0.873\n",
   "sequence": 42,
@@ -141,7 +140,6 @@ interface Envelope {
 ### SHELL_SESSION_STATE
 ```json
 {
-  "session_id": "uuid",
   "previous_state": "Running",
   "current_state": "Completed",
   "exit_code": 0,
@@ -152,9 +150,19 @@ interface Envelope {
 ### SHELL_SESSION_CREATED
 ```json
 {
-  "session_id": "uuid",
   "label": "model-t training run #14",
   "requesting_module_id": "ml-runtime-550e8400",
   "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+### SHELL_SESSION_TERMINATED
+```json
+{
+  "label": "model-t training run #14",
+  "exit_code": 130,
+  "duration_ms": 4821,
+  "terminated_by": "timeout",
+  "timestamp": "2024-01-15T10:30:05.000Z"
 }
 ```
