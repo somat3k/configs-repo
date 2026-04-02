@@ -28,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Skip until ml-runtime Python training scripts and requirements.lock are scaffolded
+    if: hashFiles('src/modules/ml-runtime/requirements.lock') != ''
     strategy:
       matrix:
         model: ${{ fromJson(inputs.model_type == 'all' && '["trader","arbitrager","defi"]' || format('["{0}"]', inputs.model_type)) }}
@@ -84,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: success()
+    if: success() && hashFiles('src/tools/ModelValidator/**') != ''
 
     steps:
       - name: Checkout

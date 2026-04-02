@@ -15,8 +15,15 @@ Every MLS module implements a dual WebSocket role:
 ```csharp
 public class ModuleHub : Hub<IModuleHubClient>
 {
-    public async Task Subscribe(string[] topics) =>
-        await Groups.AddToGroupAsync(Context.ConnectionId, string.Join(",", topics));
+    public async Task Subscribe(string[] topics)
+    {
+        // Add connection to each topic group individually so publish
+        // can target a single group (e.g., Groups.SendAsync("TRADE_SIGNAL", ...))
+        foreach (var topic in topics)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, topic);
+        }
+    }
 
     public async Task SendPayload(EnvelopePayload envelope) =>
         await _moduleService.ProcessAsync(envelope, Context.ConnectionAborted);

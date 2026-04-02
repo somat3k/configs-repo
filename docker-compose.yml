@@ -1,8 +1,19 @@
 version: '3.9'
 
 # Full MLS platform — all modules
-# Run: docker compose up -d
-# Requires: docker compose -f docker-compose.infra.yml up -d (or include infra here)
+# Infrastructure (Postgres, Redis, IPFS) lives in docker-compose.infra.yml.
+# Always start infrastructure first, then start modules:
+#
+#   docker compose -f docker-compose.infra.yml up -d
+#   docker compose up -d
+#
+# Or combine both files in a single command (creates a shared Compose project):
+#
+#   docker compose -f docker-compose.infra.yml -f docker-compose.yml up -d
+#
+# Note: depends_on only works within the same Compose file/project. Cross-file
+# service dependencies (postgres, redis, ipfs) are listed as comments below
+# each service instead of as depends_on entries.
 
 networks:
   mls-network:
@@ -29,9 +40,7 @@ services:
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=mls_db;Username=mls_user;Password=${POSTGRES_PASSWORD}
     networks:
       - mls-network
-    depends_on:
-      - postgres
-      - redis
+    # Requires infra services: postgres, redis (start docker-compose.infra.yml first)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5100/health"]
       interval: 30s
@@ -44,6 +53,7 @@ services:
   web-app:
     image: ghcr.io/somat3k/mls-web-app:latest
     build:
+      # context: src/web-app — project not yet scaffolded; create src/web-app/Dockerfile first
       context: src/web-app
       dockerfile: Dockerfile
     container_name: mls-web-app
@@ -159,9 +169,9 @@ services:
       - ./artifacts/models:/app/models:ro
     networks:
       - mls-network
+    # Requires infra service: ipfs (start docker-compose.infra.yml first)
     depends_on:
       - block-controller
-      - ipfs
     labels:
       com.mls.module: "ml-runtime"
       com.mls.role: "inference"
@@ -187,11 +197,9 @@ services:
       - IPFS_API_URL=http://ipfs:5001
     networks:
       - mls-network
+    # Requires infra services: postgres, redis, ipfs (start docker-compose.infra.yml first)
     depends_on:
       - block-controller
-      - postgres
-      - redis
-      - ipfs
     labels:
       com.mls.module: "data-layer"
       com.mls.role: "data-access"

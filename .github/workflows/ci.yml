@@ -14,6 +14,8 @@ jobs:
   build-and-test:
     name: Build & Test (.NET)
     runs-on: ubuntu-latest
+    # Skip until MLS.sln and project files are scaffolded
+    if: hashFiles('MLS.sln') != ''
     permissions:
       contents: read
       checks: write
@@ -109,6 +111,8 @@ jobs:
   lint-dotnet:
     name: Lint (.NET Format)
     runs-on: ubuntu-latest
+    # Skip until MLS.sln and project files are scaffolded
+    if: hashFiles('MLS.sln') != ''
     permissions:
       contents: read
     steps:
@@ -122,6 +126,8 @@ jobs:
   lint-python:
     name: Lint (Python/Ruff)
     runs-on: ubuntu-latest
+    # Skip until ml-runtime Python sources are scaffolded
+    if: hashFiles('src/modules/ml-runtime/**/*.py') != ''
     permissions:
       contents: read
     steps:

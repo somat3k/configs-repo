@@ -36,7 +36,7 @@ graph TB
 | Module | HTTP API | WebSocket | Container Port |
 |--------|----------|-----------|----------------|
 | block-controller | 5100 | 6100 | 5100, 6100 |
-| web-app | 5200 | 6200 | 5200 |
+| web-app | 5200 | 6200 | 5200, 6200 |
 | trader | 5300 | 6300 | 5300, 6300 |
 | arbitrager | 5400 | 6400 | 5400, 6400 |
 | defi | 5500 | 6500 | 5500, 6500 |

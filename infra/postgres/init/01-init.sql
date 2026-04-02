@@ -118,4 +118,11 @@ CREATE INDEX idx_market_data_symbol_time ON market_data(symbol, timestamp DESC);
 -- Create initial partition
 CREATE TABLE market_data_default PARTITION OF market_data DEFAULT;
 
-COMMENT ON DATABASE mls_db IS 'Machine Learning Studio for Trading, Arbitrage, and DeFi';
+DO $$
+BEGIN
+  EXECUTE format(
+    'COMMENT ON DATABASE %I IS ''Machine Learning Studio for Trading, Arbitrage, and DeFi''',
+    current_database()
+  );
+END;
+$$;

@@ -25,7 +25,8 @@ jobs:
   pack-nuget:
     name: Pack & Publish NuGet Packages
     runs-on: ubuntu-latest
-    if: inputs.publish_nuget != false
+    # Skip until MLS.sln and project files are scaffolded
+    if: inputs.publish_nuget != false && hashFiles('MLS.sln') != ''
     permissions:
       contents: read
       packages: write

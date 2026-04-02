@@ -60,8 +60,8 @@ docker compose -f docker-compose.infra.yml up -d
 
 ### 2. Start All Modules (Development)
 ```bash
-# Using .NET Aspire
-dotnet run --project src/MLS.AppHost
+# Using .NET Aspire (once src/MLS.AppHost is scaffolded)
+# dotnet run --project src/MLS.AppHost
 
 # Or individual modules via VS Code tasks
 # Press Ctrl+Shift+P → "Tasks: Run Task" → "🚀 Full Stack (All Modules)"

@@ -86,7 +86,7 @@ services:
     volumes:
       - ipfs-data:/data/ipfs
       - ipfs-staging:/export
-      - ./infra/ipfs/config:/data/ipfs/config:rw
+      # Kubo uses image defaults for /data/ipfs/config (no custom config file committed yet)
     networks:
       - mls-network
     environment:

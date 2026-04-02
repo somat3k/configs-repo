@@ -69,11 +69,33 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Resolve module build context
+        id: ctx
+        run: |
+          MODULE="${{ matrix.module }}"
+          # Modules with a dedicated top-level src/ directory
+          if [ -d "src/$MODULE" ]; then
+            CONTEXT="src/$MODULE"
+          # Modules under src/modules/
+          elif [ -d "src/modules/$MODULE" ]; then
+            CONTEXT="src/modules/$MODULE"
+          else
+            echo "ERROR: No build context found for module '$MODULE'." \
+              " Create src/$MODULE/ or src/modules/$MODULE/ with a Dockerfile." >&2
+            exit 1
+          fi
+          if [ ! -f "$CONTEXT/Dockerfile" ]; then
+            echo "ERROR: Dockerfile not found at '$CONTEXT/Dockerfile'." >&2
+            exit 1
+          fi
+          echo "context=$CONTEXT" >> "$GITHUB_OUTPUT"
+          echo "dockerfile=$CONTEXT/Dockerfile" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: src/${{ matrix.module }}
-          file: src/${{ matrix.module }}/Dockerfile
+          context: ${{ steps.ctx.outputs.context }}
+          file: ${{ steps.ctx.outputs.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
