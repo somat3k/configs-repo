@@ -14,13 +14,15 @@ Machine Learning Studio (MLS) for Trading, Arbitrage, and DeFi — a production-
 
 ## Architectural Rules (STRICT)
 1. Every module MUST host a WebSocket server AND expose an HTTP API
-2. All inter-module messages MUST use the Envelope Protocol: `{ type, version, session_id, module_id, timestamp, payload }`
+2. All inter-module messages MUST use the Envelope Protocol: `{ block_id, block_sha, block_data, block_state, type, version, unique_id, task_id, session_id, module_id, module_network_address, module_network_port, timestamp, payload }`
 3. Every module MUST register with Block Controller on startup and send heartbeats every 5 seconds
-4. NO Uniswap integrations — use HYPERLIQUID as primary DEX/perpetuals broker
-5. All blockchain addresses stored in PostgreSQL, never hardcoded
+4. NO Uniswap integrations — use Camelot, DFYN, nHOP, (more in progress) for arbitrage on Arbitrum Network, HYPERLIQUID as primary DEX/perpetuals broker, Morpho and Balancer as AMM and Supply/Borrow/Collateral Swap/Repay mechanics.
+5. All blockchain addresses stored in PostgreSQL as resources, tokens, infrastructure, never hardcoded
 6. Use named enums and constants in `MLS.Core.Constants` for all magic values
 7. Each module runs in its own Docker container on the `mls-network` bridge network
 8. All external data pre-defined in typed extension classes before storage
+9. Extensive presence Invoker in framework-based architecture
+10. Modules code-structures writen in modularized compact architecture
 
 ## Coding Standards
 - Target framework: `net9.0`
@@ -34,17 +36,17 @@ Machine Learning Studio (MLS) for Trading, Arbitrage, and DeFi — a production-
 - XML documentation on all public APIs
 
 ## Module Port Allocation
-| Module | HTTP | WebSocket |
-|--------|------|-----------|
-| block-controller | 5100 | 6100 |
-| web-app | 5200 | 6200 |
-| trader | 5300 | 6300 |
-| arbitrager | 5400 | 6400 |
-| defi | 5500 | 6500 |
-| ml-runtime | 5600 | 6600 |
-| data-layer | 5700 | 6700 |
-| broker | 5800 | 6800 |
-| transactions | 5900 | 6900 |
+|      Module      | HTTP | WebSocket |
+|------------------|------|-----------|
+| block-controller | 5100 |    6100   |
+| web-app          | 5200 |    6200   |
+| trader           | 5300 |    6300   |
+| arbitrager       | 5400 |    6400   |
+| defi             | 5500 |    6500   |
+| ml-runtime       | 5600 |    6600   |
+| data-layer       | 5700 |    6700   |
+| broker           | 5800 |    6800   |  
+| transactions     | 5900 |    6900   |
 
 ## Namespace Conventions
 - Core shared: `MLS.Core.{Feature}`
@@ -61,6 +63,8 @@ Machine Learning Studio (MLS) for Trading, Arbitrage, and DeFi — a production-
 
 ## Skills Reference
 When generating code, apply the relevant skill from `.skills/`:
+/// Adding skills for references aligned to github/awesome-copilot
+- Copilot Blueprint: `.skills/copilot-instruction-blueprint.md`
 - C#/.NET: `.skills/dotnet-devs.md`
 - Blazor UI: `.skills/premium-uiux-blazor.md` + `.skills/web-apps.md`
 - Architecture: `.skills/system-architect.md`
