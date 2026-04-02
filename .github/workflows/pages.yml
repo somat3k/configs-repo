@@ -31,11 +31,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: nuxt-pages/package.json
+          cache-dependency-path: nuxt-pages/package-lock.json
 
       - name: Install dependencies
         working-directory: nuxt-pages
-        run: npm install
+        run: npm ci
 
       - name: Generate static site
         working-directory: nuxt-pages
