@@ -64,7 +64,7 @@ When generating code, apply the relevant skill from `.skills/`:
 - C#/.NET: `.skills/dotnet-devs.md`
 - Blazor UI: `.skills/premium-uiux-blazor.md` + `.skills/web-apps.md`
 - Architecture: `.skills/system-architect.md`
-- ML/AI: `.skills/machine-learning.md` + `.skills/artificial-intelligence.md`
+- ML/AI (core): `.skills/machine-learning.md` + `.skills/artificial-intelligence.md`
 - Storage: `.skills/storage-data-management.md`
 - WebSockets: `.skills/websockets-inferences.md`
 - Web3/DeFi: `.skills/web3.md`
@@ -72,3 +72,16 @@ When generating code, apply the relevant skill from `.skills/`:
 - Python: `.skills/python.md`
 - Performance: `.skills/beast-development.md`
 - Agents: `.skills/agents.md`
+
+### AI Sub-Components (two separate concerns)
+- **System Acceleration** (L1/L2/L3/L4 + CPU thread control): `.skills/acceleration/acceleration.md`
+- **Trading Model** (`model-t`, trader module): `.skills/models/model-t.md`
+- **Arbitrage Model** (`model-a`, arbitrager module): `.skills/models/model-a.md`
+- **DeFi Model** (`model-d`, defi module): `.skills/models/model-d.md`
+
+### Model Naming Conventions
+| Enum Value | Python Class | File Prefix | DB Key | Consumer Module |
+|-----------|-------------|------------|--------|----------------|
+| `ModelType.Trading` | `ModelT` | `model_t_` | `model-t` | `trader` |
+| `ModelType.Arbitrage` | `ModelA` | `model_a_` | `model-a` | `arbitrager` |
+| `ModelType.DeFi` | `ModelD` | `model_d_` | `model-d` | `defi` |
