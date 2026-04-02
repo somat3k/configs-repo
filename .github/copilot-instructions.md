@@ -21,8 +21,9 @@ Machine Learning Studio (MLS) for Trading, Arbitrage, and DeFi — a production-
 6. Use named enums and constants in `MLS.Core.Constants` for all magic values
 7. Each module runs in its own Docker container on the `mls-network` bridge network
 8. All external data pre-defined in typed extension classes before storage
-9. Extensive presence Invoker in framework-based architecture
-10. Modules code-structures writen in modularized compact architecture
+9. Extensive presence of Invokers in framework-based architecture
+10. Modules code-structures writen in compact architecture
+11. Modules must run online at sesssion end with clear documentation and all ports data-driven online
 
 ## Coding Standards
 - Target framework: `net9.0`
