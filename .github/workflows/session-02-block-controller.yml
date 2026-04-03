@@ -1,0 +1,103 @@
+name: "Session 02 — Block Controller"
+
+on:
+  workflow_dispatch:
+
+# No schedule trigger — production module, run manually only.
+
+env:
+  DOTNET_VERSION: "9.0.x"
+
+jobs:
+  build-and-test:
+    name: "Build & Test — MLS.BlockController"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/MLS.BlockController*/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore MLS.sln
+
+      - name: Build (Release)
+        run: dotnet build MLS.sln --no-restore --configuration Release
+
+      - name: Test
+        run: |
+          dotnet test MLS.sln \
+            --no-build \
+            --configuration Release \
+            --logger "trx;LogFileName=session-02-results.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --verbosity normal
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: session-02-test-results-${{ github.run_number }}
+          path: TestResults/
+          retention-days: 30
+
+      - name: Generate coverage report
+        uses: danielpalme/ReportGenerator-GitHub-Action@5.3.8
+        with:
+          reports: "TestResults/**/*.xml"
+          targetdir: "TestResults/Coverage"
+          reporttypes: "Html;MarkdownSummaryGithub"
+
+      - name: Code coverage summary
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: TestResults/**/*.xml
+          badge: true
+          format: markdown
+          output: both
+          thresholds: "70 80"
+
+  docker-build:
+    name: "Docker Build — block-controller"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: src
+          file: src/block-controller/Dockerfile
+          push: false
+          tags: mls-block-controller:ci
+
+  lint:
+    name: "Lint — dotnet format"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore MLS.sln
+      - run: dotnet format MLS.sln --verify-no-changes --severity warn

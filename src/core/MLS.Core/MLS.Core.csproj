@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>13</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Optimize>true</Optimize>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>MLS.Core</AssemblyName>
+    <RootNamespace>MLS.Core</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>MLS Trading Platform — Core contracts, constants, and payload types</Description>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="9.0.3" />
+  </ItemGroup>
+</Project>
