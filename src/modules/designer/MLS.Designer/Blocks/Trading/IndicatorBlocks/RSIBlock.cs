@@ -35,13 +35,11 @@ public sealed class RSIBlock : BlockBase
 
     /// <summary>Initialises a new <see cref="RSIBlock"/> with default period 14.</summary>
     public RSIBlock() : base(
-        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Input("candle_input",     BlockSocketType.CandleStream)],
         [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)]) { }
 
-    /// <summary>Initialises with a specific period (for testing).</summary>
-    internal RSIBlock(int period) : base(
-        [BlockSocket.Input("candle_input",    BlockSocketType.CandleStream)],
-        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)])
+    /// <summary>Initialises with a specific period (for testing). Chains through the default ctor so sockets remain per-instance.</summary>
+    internal RSIBlock(int period) : this()
     {
         _periodParam = new BlockParameter<int>("Period", "Period", "RSI lookback period", period, MinValue: 2, MaxValue: 200, IsOptimizable: true);
     }

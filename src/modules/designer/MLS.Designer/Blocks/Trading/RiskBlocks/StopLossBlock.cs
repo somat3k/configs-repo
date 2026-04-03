@@ -56,10 +56,10 @@ public sealed class StopLossBlock : BlockBase
             {
                 var status = signal.Value.TryGetProperty("status", out var st) ? st.GetString() : null;
                 var side   = signal.Value.TryGetProperty("side",   out var sd) ? sd.GetString() : null;
-                if (status == "filled" && side == "BUY" && TryExtractClose(signal.Value, out var fillPrice))
+                if (status == "filled" && side == "BUY" && TryExtractClose(signal.Value, out var price))
                 {
-                    _entryPrice      = fillPrice;
-                    _trailingHighest = fillPrice;
+                    _entryPrice      = price;
+                    _trailingHighest = price;
                 }
                 else if (status == "filled" && side == "SELL")
                 {

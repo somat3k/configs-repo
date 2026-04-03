@@ -5,9 +5,15 @@ using MLS.Designer.Blocks;
 namespace MLS.Designer.Blocks.Trading.ExecutionBlocks;
 
 /// <summary>
-/// Fill tracker block that awaits <see cref="BlockSocketType.OrderResult"/> confirmations
-/// and re-emits the <see cref="BlockSocketType.OrderResult"/> for downstream retry handling
-/// when the fill is rejected.
+/// Fill tracker block that awaits <see cref="BlockSocketType.OrderResult"/> confirmations.
+/// <list type="bullet">
+///   <item><term>fill_output</term><description>Emits the <see cref="BlockSocketType.OrderResult"/> for any outcome (filled or final rejection).</description></item>
+///   <item><term>retry_output</term><description>
+///     Emits the <see cref="BlockSocketType.OrderResult"/> (rejected) for downstream retry orchestration.
+///     A downstream router or order-emitter block is responsible for converting the result back into
+///     a fresh <see cref="BlockSocketType.TradeOrder"/> and resubmitting it to the broker.
+///   </description></item>
+/// </list>
 /// </summary>
 public sealed class FillTrackerBlock : BlockBase
 {
