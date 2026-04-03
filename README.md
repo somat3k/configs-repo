@@ -36,7 +36,7 @@
 |--------|----------------|------|--------|
 | [block-controller](src/block-controller/README.md) | 5100/6100 | Orchestration hub | ✅ Active |
 | [web-app](src/web-app/README.md) | 5200/6200 | Blazor MDI UI | 🔧 Scaffold |
-| designer | 5250/6250 | Block graph composer | 🔧 Scaffold |
+| [designer](src/modules/designer/README.md) | 5250/6250 | Block graph composer | ✅ Active |
 | [trader](src/modules/trader/README.md) | 5300/6300 | Algo trading model | 🔧 Scaffold |
 | [arbitrager](src/modules/arbitrager/README.md) | 5400/6400 | Arbitrage model | 🔧 Scaffold |
 | [defi](src/modules/defi/README.md) | 5500/6500 | DeFi services | 🔧 Scaffold |

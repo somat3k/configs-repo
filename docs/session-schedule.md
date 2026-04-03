@@ -275,13 +275,13 @@ Blocks/Trading/
 - `.skills/dotnet-devs.md`
 
 **Acceptance Criteria**
-- [ ] Module registers with Block Controller on startup (MODULE_REGISTER)
-- [ ] Heartbeat every 5 seconds (MODULE_HEARTBEAT)
-- [ ] `BlockRegistry.GetAll()` returns all Trading domain blocks with metadata
-- [ ] `RSIBlock.ProcessAsync` produces correct RSI for known OHLCV fixture data
-- [ ] `ModelTInferenceBlock.ProcessAsync` calls ML Runtime HTTP inference in < 15ms
-- [ ] xUnit: `TradingBlockTests` — all indicator blocks with known inputs
-- [ ] Docker: `mls-designer` container starts on ports 5250/6250
+- [x] Module registers with Block Controller on startup (MODULE_REGISTER)
+- [x] Heartbeat every 5 seconds (MODULE_HEARTBEAT)
+- [x] `BlockRegistry.GetAll()` returns all Trading domain blocks with metadata
+- [x] `RSIBlock.ProcessAsync` produces correct RSI for known OHLCV fixture data
+- [x] `ModelTInferenceBlock.ProcessAsync` calls ML Runtime HTTP inference in < 15ms
+- [x] xUnit: `TradingBlockTests` — all indicator blocks with known inputs
+- [x] Docker: `mls-designer` container starts on ports 5250/6250
 
 ---
 
