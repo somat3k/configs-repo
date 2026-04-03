@@ -155,7 +155,8 @@ public sealed class StrategyRouter(
                 if (inStack.Contains(neighbour))
                 {
                     throw new ArgumentException(
-                        $"Graph {graphId}: cycle detected involving block {neighbour}.");
+                        $"Graph {graphId}: cycle detected involving block {neighbour}.",
+                        "graph");
                 }
 
                 if (!visited.Contains(neighbour))
