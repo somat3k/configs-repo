@@ -1,0 +1,105 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using MLS.Core.Designer;
+using MLS.Designer.Blocks;
+
+namespace MLS.Designer.Blocks.MLTraining;
+
+/// <summary>
+/// Data loader block — accumulates raw OHLCV <see cref="BlockSocketType.CandleStream"/> signals
+/// into a fixed-size rolling buffer and emits a <see cref="BlockSocketType.FeatureVector"/>
+/// batch when the buffer reaches the configured <c>WindowSize</c> candles.
+/// <para>
+/// This block is the entry point of the ML training pipeline. Upstream data source blocks
+/// (e.g. <c>BacktestReplayBlock</c>) feed historical OHLCV candles here; the batched output
+/// is then passed to <c>FeatureEngineerBlock</c> for indicator computation.
+/// </para>
+/// </summary>
+/// <remarks>
+/// Expected candle signal payload: <c>{ open, high, low, close, volume }</c>
+/// </remarks>
+public sealed class DataLoaderBlock : BlockBase
+{
+    private readonly List<float[]> _buffer = [];
+
+    private readonly BlockParameter<string> _symbolParam =
+        new("Symbol", "Symbol", "Trading symbol to filter (e.g. BTC-PERP)", "BTC-PERP");
+    private readonly BlockParameter<string> _exchangeParam =
+        new("Exchange", "Exchange", "Source exchange identifier (e.g. hyperliquid)", "hyperliquid");
+    private readonly BlockParameter<int> _windowSizeParam =
+        new("WindowSize", "Window Size", "Number of candles to accumulate before emitting a batch",
+            512, MinValue: 64, MaxValue: 4096);
+    private readonly BlockParameter<string> _modelTypeParam =
+        new("ModelType", "Model Type", "Target model registry key: model-t, model-a, or model-d", "model-t");
+
+    /// <inheritdoc/>
+    public override string BlockType   => "DataLoaderBlock";
+    /// <inheritdoc/>
+    public override string DisplayName => "Data Loader";
+    /// <inheritdoc/>
+    public override IReadOnlyList<BlockParameter> Parameters =>
+        [_symbolParam, _exchangeParam, _windowSizeParam, _modelTypeParam];
+
+    /// <summary>Initialises a new <see cref="DataLoaderBlock"/>.</summary>
+    public DataLoaderBlock() : base(
+        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Output("feature_output", BlockSocketType.FeatureVector)]) { }
+
+    /// <inheritdoc/>
+    public override void Reset() => _buffer.Clear();
+
+    /// <inheritdoc/>
+    protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
+    {
+        if (signal.SocketType != BlockSocketType.CandleStream)
+            return new ValueTask<BlockSignal?>(result: null);
+
+        if (!TryExtractOhlcv(signal.Value, out var ohlcv))
+            return new ValueTask<BlockSignal?>(result: null);
+
+        _buffer.Add(ohlcv);
+
+        if (_buffer.Count < _windowSizeParam.DefaultValue)
+            return new ValueTask<BlockSignal?>(result: null);
+
+        var batch = _buffer.ToArray();
+        _buffer.Clear();
+
+        var featureBatch = new FeatureBatch(
+            ModelType: _modelTypeParam.DefaultValue,
+            Symbol:    _symbolParam.DefaultValue,
+            Exchange:  _exchangeParam.DefaultValue,
+            WindowSize: batch.Length,
+            Samples:   batch);
+
+        return new ValueTask<BlockSignal?>(
+            EmitObject(BlockId, "feature_output", BlockSocketType.FeatureVector, featureBatch));
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────────
+
+    private static bool TryExtractOhlcv(JsonElement value, out float[] ohlcv)
+    {
+        ohlcv = [];
+        if (value.ValueKind != JsonValueKind.Object) return false;
+
+        if (!value.TryGetProperty("open",   out var o) ||
+            !value.TryGetProperty("high",   out var h) ||
+            !value.TryGetProperty("low",    out var l) ||
+            !value.TryGetProperty("close",  out var c) ||
+            !value.TryGetProperty("volume", out var v))
+            return false;
+
+        ohlcv = [o.GetSingle(), h.GetSingle(), l.GetSingle(), c.GetSingle(), v.GetSingle()];
+        return true;
+    }
+
+    // ── Wire types ────────────────────────────────────────────────────────────────
+
+    internal sealed record FeatureBatch(
+        [property: JsonPropertyName("model_type")]  string   ModelType,
+        [property: JsonPropertyName("symbol")]      string   Symbol,
+        [property: JsonPropertyName("exchange")]    string   Exchange,
+        [property: JsonPropertyName("window_size")] int      WindowSize,
+        [property: JsonPropertyName("samples")]     float[][] Samples);
+}
