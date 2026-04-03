@@ -51,28 +51,49 @@ public sealed class FlashLoanBlock : BlockBase
 
     /// <inheritdoc/>
     protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
+    private static bool TryGetDecimalProperty(JsonElement element, string propertyName, out decimal value)
+    {
+        value = 0m;
+
+        return element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(propertyName, out var property)
+            && property.TryGetDecimal(out value);
+    }
+
+    private static bool TryGetAssetPriceUsd(JsonElement element, out decimal assetPriceUsd)
+    {
+        assetPriceUsd = 0m;
+
+        return TryGetDecimalProperty(element, "asset_price_usd", out assetPriceUsd)
+            || TryGetDecimalProperty(element, "loan_asset_price_usd", out assetPriceUsd)
+            || TryGetDecimalProperty(element, "price_usd", out assetPriceUsd);
+    }
+
+    /// <inheritdoc/>
+    protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
     {
         if (signal.SocketType != BlockSocketType.ArbitrageOpportunity)
             return new ValueTask<BlockSignal?>(result: null);
 
-        // net_profit is expressed in start-token units (e.g. WETH).
-        // flashFee is also in loan-asset token units.
-        // To compare them on a level playing field we require asset_price_usd from the signal
-        // so both can be expressed in USD before gating.
-        if (!TryGetDecimalProperty(signal.Value, "net_profit", out var netProfit))
-            return new ValueTask<BlockSignal?>(result: null);
+        // `net_profit` is emitted in USD by the upstream arbitrage path finder.
+        decimal netProfit = 0m;
+        if (TryGetDecimalProperty(signal.Value, "net_profit", out var nDec))
+        {
+            netProfit = nDec;
+        }
 
+        var loanAmount   = _loanAmountParam.DefaultValue;
+        var flashFee     = loanAmount * (_maxFeePctParam.DefaultValue / 100m);
+
+        // Convert the flash-loan fee from token units to USD before comparing it to `net_profit`.
         if (!TryGetAssetPriceUsd(signal.Value, out var assetPriceUsd) || assetPriceUsd <= 0m)
             return new ValueTask<BlockSignal?>(result: null);
 
-        var loanAmount  = _loanAmountParam.DefaultValue;
-        var flashFee    = loanAmount * (_maxFeePctParam.DefaultValue / 100m);
         var flashFeeUsd = flashFee * assetPriceUsd;
 
-        // Only initiate if net profit in USD covers the flash loan fee in USD
+        // Only initiate if net profit in USD covers the flash-loan fee in USD.
         if (netProfit <= flashFeeUsd)
             return new ValueTask<BlockSignal?>(result: null);
-
         var flashLoanSignal = new
         {
             protocol = _flashLoanProviderParam.DefaultValue,
