@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -14,13 +14,13 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="NetProfitUsd">Estimated net profit after gas: <c>EstimatedOutputUsd − InputAmountUsd − GasEstimateUsd</c>.</param>
 /// <param name="ExpiresAt">Earliest time at which price data used to compute this path becomes stale.</param>
 public sealed record ArbPathFoundPayload(
-    [property: JsonPropertyName("path_id")]               Guid PathId,
-    [property: JsonPropertyName("hops")]                  IReadOnlyList<ArbHop> Hops,
-    [property: JsonPropertyName("input_amount_usd")]      decimal InputAmountUsd,
-    [property: JsonPropertyName("estimated_output_usd")]  decimal EstimatedOutputUsd,
-    [property: JsonPropertyName("gas_estimate_usd")]      decimal GasEstimateUsd,
-    [property: JsonPropertyName("net_profit_usd")]        decimal NetProfitUsd,
-    [property: JsonPropertyName("expires_at")]            DateTimeOffset ExpiresAt);
+    [property: JsonPropertyName("path_id")] Guid PathId,
+    [property: JsonPropertyName("hops")] IReadOnlyList<ArbHop> Hops,
+    [property: JsonPropertyName("input_amount_usd")] decimal InputAmountUsd,
+    [property: JsonPropertyName("estimated_output_usd")] decimal EstimatedOutputUsd,
+    [property: JsonPropertyName("gas_estimate_usd")] decimal GasEstimateUsd,
+    [property: JsonPropertyName("net_profit_usd")] decimal NetProfitUsd,
+    [property: JsonPropertyName("expires_at")] DateTimeOffset ExpiresAt);
 
 /// <summary>A single swap hop within an arbitrage path.</summary>
 /// <param name="FromToken">Input token symbol.</param>
@@ -29,6 +29,6 @@ public sealed record ArbPathFoundPayload(
 /// <param name="Price">Execution price (ToToken per FromToken).</param>
 public sealed record ArbHop(
     [property: JsonPropertyName("from_token")] string FromToken,
-    [property: JsonPropertyName("to_token")]   string ToToken,
-    [property: JsonPropertyName("exchange")]   string Exchange,
-    [property: JsonPropertyName("price")]      decimal Price);
+    [property: JsonPropertyName("to_token")] string ToToken,
+    [property: JsonPropertyName("exchange")] string Exchange,
+    [property: JsonPropertyName("price")] decimal Price);

@@ -1,4 +1,4 @@
-namespace MLS.Core.Constants;
+﻿namespace MLS.Core.Constants;
 
 public static partial class MessageTypes
 {

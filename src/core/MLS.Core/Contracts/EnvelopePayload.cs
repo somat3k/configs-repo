@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using MLS.Core.Constants;
 
@@ -26,12 +26,12 @@ namespace MLS.Core.Contracts;
 /// <param name="Timestamp">UTC creation timestamp.</param>
 /// <param name="Payload">Strongly-typed payload serialised as a <see cref="JsonElement"/>.</param>
 public sealed record EnvelopePayload(
-    [property: JsonPropertyName("type")]       string Type,
-    [property: JsonPropertyName("version")]    int Version,
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("version")] int Version,
     [property: JsonPropertyName("session_id")] Guid SessionId,
-    [property: JsonPropertyName("module_id")]  string ModuleId,
-    [property: JsonPropertyName("timestamp")]  DateTimeOffset Timestamp,
-    [property: JsonPropertyName("payload")]    JsonElement Payload)
+    [property: JsonPropertyName("module_id")] string ModuleId,
+    [property: JsonPropertyName("timestamp")] DateTimeOffset Timestamp,
+    [property: JsonPropertyName("payload")] JsonElement Payload)
 {
     /// <summary>
     /// Convenience factory — creates an envelope with a new session ID and the current UTC time.
@@ -54,20 +54,24 @@ public sealed record EnvelopePayload(
         ArgumentException.ThrowIfNullOrWhiteSpace(moduleId);
 
         if (version < 1)
+        {
             throw new ArgumentOutOfRangeException(nameof(version), version,
                 "Envelope version must be greater than or equal to 1.");
+        }
 
         var serialisedPayload = JsonSerializer.SerializeToElement(payload);
         if (serialisedPayload.ValueKind != JsonValueKind.Object)
+        {
             throw new ArgumentException(
                 "Envelope payload must serialise to a non-null JSON object.", nameof(payload));
+        }
 
         return new EnvelopePayload(
-            Type:      type,
-            Version:   version,
+            Type: type,
+            Version: version,
             SessionId: Guid.NewGuid(),
-            ModuleId:  moduleId,
+            ModuleId: moduleId,
             Timestamp: DateTimeOffset.UtcNow,
-            Payload:   serialisedPayload);
+            Payload: serialisedPayload);
     }
 }

@@ -1,10 +1,10 @@
+﻿using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using MLS.BlockController.Services;
 using MLS.Core.Constants;
 using MLS.Core.Contracts;
 using MLS.Core.Contracts.Designer;
-using System.Text.Json;
 
 namespace MLS.BlockController.Hubs;
 
@@ -43,7 +43,7 @@ public sealed class BlockControllerHub(
     /// </summary>
     public override async Task OnConnectedAsync()
     {
-        var query  = Context.GetHttpContext()?.Request.Query;
+        var query = Context.GetHttpContext()?.Request.Query;
         var peerId = query?["moduleId"].FirstOrDefault()
                   ?? query?["clientId"].FirstOrDefault();
 
@@ -72,7 +72,7 @@ public sealed class BlockControllerHub(
     /// </summary>
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var query  = Context.GetHttpContext()?.Request.Query;
+        var query = Context.GetHttpContext()?.Request.Query;
         var peerId = query?["moduleId"].FirstOrDefault()
                   ?? query?["clientId"].FirstOrDefault();
 
@@ -87,8 +87,10 @@ public sealed class BlockControllerHub(
         }
 
         if (exception is not null)
+        {
             _logger.LogWarning(exception, "Connection {ConnectionId} closed with error",
                 Context.ConnectionId);
+        }
 
         await base.OnDisconnectedAsync(exception).ConfigureAwait(false);
     }
@@ -105,9 +107,9 @@ public sealed class BlockControllerHub(
 
         await (envelope.Type switch
         {
-            MessageTypes.StrategyDeploy   => HandleStrategyDeployAsync(envelope),
+            MessageTypes.StrategyDeploy => HandleStrategyDeployAsync(envelope),
             MessageTypes.CanvasLayoutSave => HandleCanvasLayoutSaveAsync(envelope),
-            _                             => _router.RouteAsync(envelope)
+            _ => _router.RouteAsync(envelope)
         }).ConfigureAwait(false);
     }
 
@@ -121,14 +123,18 @@ public sealed class BlockControllerHub(
     public async Task SubscribeToTopicAsync(string topic)
     {
         if (string.IsNullOrWhiteSpace(topic))
+        {
             return;
+        }
 
-        var query  = Context.GetHttpContext()?.Request.Query;
+        var query = Context.GetHttpContext()?.Request.Query;
         var peerId = query?["moduleId"].FirstOrDefault()
                   ?? query?["clientId"].FirstOrDefault();
 
         if (!string.IsNullOrWhiteSpace(peerId) && Guid.TryParse(peerId, out var subscriberId))
+        {
             await _subscriptions.AddAsync(topic, subscriberId).ConfigureAwait(false);
+        }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, topic).ConfigureAwait(false);
         _logger.LogDebug("Connection {ConnectionId} subscribed to topic {Topic}",
@@ -142,14 +148,18 @@ public sealed class BlockControllerHub(
     public async Task UnsubscribeFromTopicAsync(string topic)
     {
         if (string.IsNullOrWhiteSpace(topic))
+        {
             return;
+        }
 
-        var query  = Context.GetHttpContext()?.Request.Query;
+        var query = Context.GetHttpContext()?.Request.Query;
         var peerId = query?["moduleId"].FirstOrDefault()
                   ?? query?["clientId"].FirstOrDefault();
 
         if (!string.IsNullOrWhiteSpace(peerId) && Guid.TryParse(peerId, out var subscriberId))
+        {
             await _subscriptions.RemoveAsync(topic, subscriberId).ConfigureAwait(false);
+        }
 
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, topic).ConfigureAwait(false);
         _logger.LogDebug("Connection {ConnectionId} unsubscribed from topic {Topic}",

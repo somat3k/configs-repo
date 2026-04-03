@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -14,10 +14,10 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="CandlesInserted">Number of candles inserted by the backfill.</param>
 /// <param name="DurationMs">Wall-clock duration of the backfill operation in milliseconds.</param>
 public sealed record DataGapFilledPayload(
-    [property: JsonPropertyName("exchange")]         string Exchange,
-    [property: JsonPropertyName("symbol")]           string Symbol,
-    [property: JsonPropertyName("timeframe")]        string Timeframe,
-    [property: JsonPropertyName("gap_start")]        DateTimeOffset GapStart,
-    [property: JsonPropertyName("gap_end")]          DateTimeOffset GapEnd,
+    [property: JsonPropertyName("exchange")] string Exchange,
+    [property: JsonPropertyName("symbol")] string Symbol,
+    [property: JsonPropertyName("timeframe")] string Timeframe,
+    [property: JsonPropertyName("gap_start")] DateTimeOffset GapStart,
+    [property: JsonPropertyName("gap_end")] DateTimeOffset GapEnd,
     [property: JsonPropertyName("candles_inserted")] int CandlesInserted,
-    [property: JsonPropertyName("duration_ms")]      long DurationMs);
+    [property: JsonPropertyName("duration_ms")] long DurationMs);

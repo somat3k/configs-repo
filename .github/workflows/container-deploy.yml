@@ -73,25 +73,33 @@ jobs:
         id: ctx
         run: |
           MODULE="${{ matrix.module }}"
-          # Modules with a dedicated top-level src/ directory
-          if [ -d "src/$MODULE" ]; then
-            CONTEXT="src/$MODULE"
-          # Modules under src/modules/
-          elif [ -d "src/modules/$MODULE" ]; then
-            CONTEXT="src/modules/$MODULE"
+          SKIP="false"
+          CONTEXT=""
+          DOCKERFILE=""
+
+          # All Dockerfiles use src/ as the build context (they reference core/ and
+          # module sub-directories relative to src/).
+          if [ -f "src/$MODULE/Dockerfile" ]; then
+            CONTEXT="src"
+            DOCKERFILE="src/$MODULE/Dockerfile"
+          elif [ -f "src/modules/$MODULE/Dockerfile" ]; then
+            CONTEXT="src"
+            DOCKERFILE="src/modules/$MODULE/Dockerfile"
+          elif [ -d "src/$MODULE" ] || [ -d "src/modules/$MODULE" ]; then
+            echo "::notice::No Dockerfile found for module '$MODULE' — skipping build."
+            SKIP="true"
           else
-            echo "ERROR: No build context found for module '$MODULE'." \
-              " Create src/$MODULE/ or src/modules/$MODULE/ with a Dockerfile." >&2
+            echo "::error::No directory found for module '$MODULE'." \
+              " Create src/$MODULE/ or src/modules/$MODULE/ with a Dockerfile."
             exit 1
           fi
-          if [ ! -f "$CONTEXT/Dockerfile" ]; then
-            echo "ERROR: Dockerfile not found at '$CONTEXT/Dockerfile'." >&2
-            exit 1
-          fi
-          echo "context=$CONTEXT" >> "$GITHUB_OUTPUT"
-          echo "dockerfile=$CONTEXT/Dockerfile" >> "$GITHUB_OUTPUT"
+
+          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
+          [ -n "$CONTEXT" ]    && echo "context=$CONTEXT"       >> "$GITHUB_OUTPUT"
+          [ -n "$DOCKERFILE" ] && echo "dockerfile=$DOCKERFILE" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
+        if: steps.ctx.outputs.skip != 'true'
         uses: docker/build-push-action@v5
         with:
           context: ${{ steps.ctx.outputs.context }}

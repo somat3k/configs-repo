@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
@@ -16,6 +16,6 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="Title">Optional window title for new MDI panels.</param>
 public sealed record AiCanvasActionPayload(
     [property: JsonPropertyName("action_type")] string ActionType,
-    [property: JsonPropertyName("panel_type")]  string? PanelType,
-    [property: JsonPropertyName("data")]        JsonElement Data,
-    [property: JsonPropertyName("title")]       string? Title);
+    [property: JsonPropertyName("panel_type")] string? PanelType,
+    [property: JsonPropertyName("data")] JsonElement Data,
+    [property: JsonPropertyName("title")] string? Title);

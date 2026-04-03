@@ -1,10 +1,10 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using MLS.BlockController.Services;
 using MLS.Core.Constants;
 using MLS.Core.Contracts;
 using MLS.Core.Contracts.Designer;
+using Moq;
 using Xunit;
 
 namespace MLS.BlockController.Tests.Services;
@@ -16,7 +16,7 @@ namespace MLS.BlockController.Tests.Services;
 public sealed class StrategyRouterTests
 {
     private readonly SubscriptionTable _subscriptionTable = new();
-    private readonly Mock<IMessageRouter> _routerMock     = new();
+    private readonly Mock<IMessageRouter> _routerMock = new();
     private readonly StrategyRouter _router;
 
     public StrategyRouterTests()
@@ -36,15 +36,15 @@ public sealed class StrategyRouterTests
     [Fact]
     public async Task DeployAsync_RoutesEnvelopesToSubscribedModules()
     {
-        var strategyId    = Guid.NewGuid();
-        var fromBlockId   = Guid.NewGuid();
-        var toBlockId     = Guid.NewGuid();
+        var strategyId = Guid.NewGuid();
+        var fromBlockId = Guid.NewGuid();
+        var toBlockId = Guid.NewGuid();
 
         var graph = BuildGraph(strategyId, fromBlockId, toBlockId, "candle_output");
 
         await _router.DeployAsync(graph);
 
-        var topic       = StrategyRouter.BuildTopic(strategyId, fromBlockId, "candle_output");
+        var topic = StrategyRouter.BuildTopic(strategyId, fromBlockId, "candle_output");
         var subscribers = _subscriptionTable.GetSubscribers(topic);
 
         subscribers.Should().Contain(toBlockId);
@@ -67,22 +67,22 @@ public sealed class StrategyRouterTests
     [Fact]
     public async Task DeployAsync_MultipleConnections_AllRegistered()
     {
-        var strategyId  = Guid.NewGuid();
-        var blockA      = Guid.NewGuid();
-        var blockB      = Guid.NewGuid();
-        var blockC      = Guid.NewGuid();
+        var strategyId = Guid.NewGuid();
+        var blockA = Guid.NewGuid();
+        var blockB = Guid.NewGuid();
+        var blockC = Guid.NewGuid();
 
         var graph = new StrategyGraphPayload(
-            GraphId:       strategyId,
-            Name:          "Multi-hop",
+            GraphId: strategyId,
+            Name: "Multi-hop",
             SchemaVersion: 1,
-            Blocks:        new[]
+            Blocks: new[]
             {
                 new StrategyBlockSpec(blockA, "CandleFeedBlock", default),
                 new StrategyBlockSpec(blockB, "RSIBlock", default),
                 new StrategyBlockSpec(blockC, "ModelTInferenceBlock", default),
             },
-            Connections:   new[]
+            Connections: new[]
             {
                 new StrategyConnectionSpec("c1", blockA, "candle_output", blockB, "candle_input"),
                 new StrategyConnectionSpec("c2", blockB, "indicator_output", blockC, "feature_input"),
@@ -102,16 +102,16 @@ public sealed class StrategyRouterTests
     [Fact]
     public async Task StopAsync_ClearsStrategySubscriptions()
     {
-        var strategyId  = Guid.NewGuid();
+        var strategyId = Guid.NewGuid();
         var fromBlockId = Guid.NewGuid();
-        var toBlockId   = Guid.NewGuid();
+        var toBlockId = Guid.NewGuid();
 
         var graph = BuildGraph(strategyId, fromBlockId, toBlockId, "candle_output");
         await _router.DeployAsync(graph);
 
         await _router.StopAsync(strategyId);
 
-        var topic       = StrategyRouter.BuildTopic(strategyId, fromBlockId, "candle_output");
+        var topic = StrategyRouter.BuildTopic(strategyId, fromBlockId, "candle_output");
         var subscribers = _subscriptionTable.GetSubscribers(topic);
 
         subscribers.Should().BeEmpty();
@@ -136,19 +136,19 @@ public sealed class StrategyRouterTests
     public async Task DeployAsync_CycleInGraph_Throws()
     {
         var strategyId = Guid.NewGuid();
-        var blockA     = Guid.NewGuid();
-        var blockB     = Guid.NewGuid();
+        var blockA = Guid.NewGuid();
+        var blockB = Guid.NewGuid();
 
         var cyclicGraph = new StrategyGraphPayload(
-            GraphId:       strategyId,
-            Name:          "Cyclic",
+            GraphId: strategyId,
+            Name: "Cyclic",
             SchemaVersion: 1,
-            Blocks:        new[]
+            Blocks: new[]
             {
                 new StrategyBlockSpec(blockA, "RSIBlock", default),
                 new StrategyBlockSpec(blockB, "MACDBlock", default),
             },
-            Connections:   new[]
+            Connections: new[]
             {
                 new StrategyConnectionSpec("c1", blockA, "indicator_output", blockB, "candle_input"),
                 new StrategyConnectionSpec("c2", blockB, "indicator_output", blockA, "candle_input"),
@@ -162,14 +162,14 @@ public sealed class StrategyRouterTests
     public async Task DeployAsync_SelfLoop_Throws()
     {
         var strategyId = Guid.NewGuid();
-        var blockA     = Guid.NewGuid();
+        var blockA = Guid.NewGuid();
 
         var selfLoopGraph = new StrategyGraphPayload(
-            GraphId:       strategyId,
-            Name:          "Self-loop",
+            GraphId: strategyId,
+            Name: "Self-loop",
             SchemaVersion: 1,
-            Blocks:        new[] { new StrategyBlockSpec(blockA, "RSIBlock", default) },
-            Connections:   new[] { new StrategyConnectionSpec("c1", blockA, "indicator_output", blockA, "candle_input") });
+            Blocks: new[] { new StrategyBlockSpec(blockA, "RSIBlock", default) },
+            Connections: new[] { new StrategyConnectionSpec("c1", blockA, "indicator_output", blockA, "candle_input") });
 
         var act = async () => await _router.DeployAsync(selfLoopGraph);
         await act.Should().ThrowAsync<ArgumentException>().WithMessage("*self-loop*");
@@ -179,11 +179,11 @@ public sealed class StrategyRouterTests
     public async Task DeployAsync_InvalidSchemaVersion_Throws()
     {
         var graph = new StrategyGraphPayload(
-            GraphId:       Guid.NewGuid(),
-            Name:          "Bad",
+            GraphId: Guid.NewGuid(),
+            Name: "Bad",
             SchemaVersion: 0,
-            Blocks:        new[] { new StrategyBlockSpec(Guid.NewGuid(), "RSIBlock", default) },
-            Connections:   Array.Empty<StrategyConnectionSpec>());
+            Blocks: new[] { new StrategyBlockSpec(Guid.NewGuid(), "RSIBlock", default) },
+            Connections: Array.Empty<StrategyConnectionSpec>());
 
         var act = async () => await _router.DeployAsync(graph);
         await act.Should().ThrowAsync<ArgumentException>().WithMessage("*SchemaVersion*");
@@ -195,7 +195,7 @@ public sealed class StrategyRouterTests
     public void BuildTopic_Deterministic_ForSameInputs()
     {
         var strategyId = Guid.NewGuid();
-        var blockId    = Guid.NewGuid();
+        var blockId = Guid.NewGuid();
 
         var t1 = StrategyRouter.BuildTopic(strategyId, blockId, "candle_output");
         var t2 = StrategyRouter.BuildTopic(strategyId, blockId, "candle_output");
@@ -227,15 +227,15 @@ public sealed class StrategyRouterTests
     private static StrategyGraphPayload BuildGraph(
         Guid strategyId, Guid fromBlockId, Guid toBlockId, string fromSocket) =>
         new(
-            GraphId:       strategyId,
-            Name:          "Test Strategy",
+            GraphId: strategyId,
+            Name: "Test Strategy",
             SchemaVersion: 1,
-            Blocks:        new[]
+            Blocks: new[]
             {
                 new StrategyBlockSpec(fromBlockId, "CandleFeedBlock", default),
                 new StrategyBlockSpec(toBlockId,   "RSIBlock", default),
             },
-            Connections:   new[]
+            Connections: new[]
             {
                 new StrategyConnectionSpec("c1", fromBlockId, fromSocket, toBlockId, "candle_input"),
             });

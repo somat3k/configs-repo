@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using MLS.BlockController.Models;
 
 namespace MLS.BlockController.Services;
@@ -14,13 +14,13 @@ public sealed class InMemoryModuleRegistry : IModuleRegistry
     public Task<ModuleRegistration> RegisterAsync(RegisterModuleRequest request, CancellationToken ct = default)
     {
         var registration = new ModuleRegistration(
-            ModuleId:      Guid.NewGuid(),
-            ModuleName:    request.ModuleName,
-            EndpointHttp:  request.EndpointHttp,
-            EndpointWs:    request.EndpointWs,
-            Capabilities:  request.Capabilities,
-            Version:       request.Version,
-            RegisteredAt:  DateTimeOffset.UtcNow,
+            ModuleId: Guid.NewGuid(),
+            ModuleName: request.ModuleName,
+            EndpointHttp: request.EndpointHttp,
+            EndpointWs: request.EndpointWs,
+            Capabilities: request.Capabilities,
+            Version: request.Version,
+            RegisteredAt: DateTimeOffset.UtcNow,
             LastHeartbeat: DateTimeOffset.UtcNow);
 
         _modules[registration.ModuleId] = registration;
@@ -49,7 +49,10 @@ public sealed class InMemoryModuleRegistry : IModuleRegistry
     public Task UpdateHeartbeatAsync(Guid moduleId, DateTimeOffset heartbeatTime, CancellationToken ct = default)
     {
         if (_modules.TryGetValue(moduleId, out var existing))
+        {
             _modules[moduleId] = existing with { LastHeartbeat = heartbeatTime };
+        }
+
         return Task.CompletedTask;
     }
 }

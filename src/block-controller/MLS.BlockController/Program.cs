@@ -1,4 +1,4 @@
-using MLS.BlockController.Hubs;
+﻿using MLS.BlockController.Hubs;
 using MLS.BlockController.Services;
 
 var builder = WebApplication.CreateBuilder(args);

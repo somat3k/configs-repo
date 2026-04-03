@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -10,7 +10,7 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="IsFinal">When <see langword="true"/>, this is the last chunk; close the stream.</param>
 /// <param name="FunctionCallsPending">Number of SK tool calls still in-flight.</param>
 public sealed record AiResponseChunkPayload(
-    [property: JsonPropertyName("chunk_index")]           int ChunkIndex,
-    [property: JsonPropertyName("text")]                  string Text,
-    [property: JsonPropertyName("is_final")]              bool IsFinal,
+    [property: JsonPropertyName("chunk_index")] int ChunkIndex,
+    [property: JsonPropertyName("text")] string Text,
+    [property: JsonPropertyName("is_final")] bool IsFinal,
     [property: JsonPropertyName("function_calls_pending")] int FunctionCallsPending);

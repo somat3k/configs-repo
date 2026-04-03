@@ -1,4 +1,4 @@
-namespace MLS.Core.Designer;
+﻿namespace MLS.Core.Designer;
 
 /// <summary>
 /// Nestable strategy container — equivalent to StockSharp's <c>CompositionDiagramElement</c>.
@@ -8,34 +8,34 @@ namespace MLS.Core.Designer;
 public interface ICompositionGraph
 {
     /// <summary>Unique identifier of this graph.</summary>
-    Guid GraphId { get; }
+    public Guid GraphId { get; }
 
     /// <summary>Human-readable strategy name.</summary>
-    string Name { get; }
+    public string Name { get; }
 
     /// <summary>
     /// Schema version. MUST be incremented on every structural change.
     /// Minor changes (parameter rename): +1. Breaking changes (socket removal, type change): +10.
     /// </summary>
-    int SchemaVersion { get; }
+    public int SchemaVersion { get; }
 
     /// <summary>All block instances registered in this graph.</summary>
-    IReadOnlyList<IBlockElement> Blocks { get; }
+    public IReadOnlyList<IBlockElement> Blocks { get; }
 
     /// <summary>All directed edges (connections) in this graph.</summary>
-    IReadOnlyList<BlockConnection> Connections { get; }
+    public IReadOnlyList<BlockConnection> Connections { get; }
 
     /// <summary>
     /// Returns all inner sockets that have no connection within this graph.
     /// These are exposed as the outer-facing ports of a composite block.
     /// </summary>
-    IReadOnlyList<IBlockSocket> GetExposedPorts();
+    public IReadOnlyList<IBlockSocket> GetExposedPorts();
 
     /// <summary>Add a block instance to the graph.</summary>
-    Task AddBlockAsync(IBlockElement block, CancellationToken ct);
+    public Task AddBlockAsync(IBlockElement block, CancellationToken ct);
 
     /// <summary>Remove a block and all its connections from the graph.</summary>
-    Task RemoveBlockAsync(Guid blockId, CancellationToken ct);
+    public Task RemoveBlockAsync(Guid blockId, CancellationToken ct);
 
     /// <summary>
     /// Connect an output socket to an input socket.
@@ -43,17 +43,17 @@ public interface ICompositionGraph
     /// <exception cref="InvalidBlockConnectionException">
     /// Thrown when socket types do not match.
     /// </exception>
-    Task ConnectAsync(Guid fromSocketId, Guid toSocketId, CancellationToken ct);
+    public Task ConnectAsync(Guid fromSocketId, Guid toSocketId, CancellationToken ct);
 
     /// <summary>Remove a connection by its identifier.</summary>
-    Task DisconnectAsync(Guid connectionId, CancellationToken ct);
+    public Task DisconnectAsync(Guid connectionId, CancellationToken ct);
 
     /// <summary>Emit a <c>STRATEGY_DEPLOY</c> envelope via Block Controller.</summary>
-    Task DeployAsync(CancellationToken ct);
+    public Task DeployAsync(CancellationToken ct);
 
     /// <summary>Emit a <c>STRATEGY_STATE_CHANGE(Stopped)</c> envelope.</summary>
-    Task StopAsync(CancellationToken ct);
+    public Task StopAsync(CancellationToken ct);
 
     /// <summary>Run the graph against historical data between <paramref name="from"/> and <paramref name="to"/>.</summary>
-    Task BacktestAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct);
+    public Task BacktestAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct);
 }

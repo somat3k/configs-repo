@@ -1,4 +1,4 @@
-namespace MLS.Core.Designer;
+﻿namespace MLS.Core.Designer;
 
 /// <summary>
 /// Represents a typed connection point on a <see cref="IBlockElement"/>.
@@ -15,27 +15,27 @@ namespace MLS.Core.Designer;
 public interface IBlockSocket
 {
     /// <summary>Unique identifier of this socket instance.</summary>
-    Guid SocketId { get; }
+    public Guid SocketId { get; }
 
     /// <summary>
     /// Programmatic name, e.g. <c>candle_input</c> or <c>indicator_output</c>.
     /// Convention: <c>{type}_input[_{n}]</c> / <c>{type}_output[_{n}]</c>.
     /// </summary>
-    string Name { get; }
+    public string Name { get; }
 
     /// <summary>Data type flowing through this socket.</summary>
-    BlockSocketType DataType { get; }
+    public BlockSocketType DataType { get; }
 
     /// <summary>Whether this socket receives or emits data.</summary>
-    SocketDirection Direction { get; }
+    public SocketDirection Direction { get; }
 
     /// <summary><see langword="true"/> when this socket has at least one peer connection.</summary>
-    bool IsConnected { get; }
+    public bool IsConnected { get; }
 
     /// <summary>
     /// The <see cref="SocketId"/> values of all peer sockets currently connected to this one.
     /// Empty when disconnected. Output sockets may have multiple entries (fan-out).
     /// Input sockets typically have one entry but may have more (fan-in blocks).
     /// </summary>
-    IReadOnlyList<Guid> ConnectedSocketIds { get; }
+    public IReadOnlyList<Guid> ConnectedSocketIds { get; }
 }

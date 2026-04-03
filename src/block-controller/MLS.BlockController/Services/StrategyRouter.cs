@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MLS.BlockController.Constants;
 using MLS.Core.Constants;
 using MLS.Core.Contracts;
@@ -42,10 +42,10 @@ public sealed class StrategyRouter(
 
         // 3. Broadcast STRATEGY_STATE_CHANGE(Running)
         var stateChange = new StrategyStateChangePayload(
-            StrategyId:    graph.GraphId,
+            StrategyId: graph.GraphId,
             PreviousState: StrategyState.Stopped,
-            CurrentState:  StrategyState.Running,
-            Timestamp:     DateTimeOffset.UtcNow);
+            CurrentState: StrategyState.Running,
+            Timestamp: DateTimeOffset.UtcNow);
 
         var envelope = EnvelopePayload.Create(
             MessageTypes.StrategyStateChange, ModuleId, stateChange);
@@ -63,10 +63,10 @@ public sealed class StrategyRouter(
         await _subscriptions.ClearStrategyAsync(strategyId, ct).ConfigureAwait(false);
 
         var stateChange = new StrategyStateChangePayload(
-            StrategyId:    strategyId,
+            StrategyId: strategyId,
             PreviousState: StrategyState.Running,
-            CurrentState:  StrategyState.Stopped,
-            Timestamp:     DateTimeOffset.UtcNow);
+            CurrentState: StrategyState.Stopped,
+            Timestamp: DateTimeOffset.UtcNow);
 
         var envelope = EnvelopePayload.Create(
             MessageTypes.StrategyStateChange, ModuleId, stateChange);
@@ -81,10 +81,10 @@ public sealed class StrategyRouter(
             strategyId, from, to);
 
         var stateChange = new StrategyStateChangePayload(
-            StrategyId:    strategyId,
+            StrategyId: strategyId,
             PreviousState: StrategyState.Stopped,
-            CurrentState:  StrategyState.Backtesting,
-            Timestamp:     DateTimeOffset.UtcNow);
+            CurrentState: StrategyState.Backtesting,
+            Timestamp: DateTimeOffset.UtcNow);
 
         var envelope = EnvelopePayload.Create(
             MessageTypes.StrategyStateChange, ModuleId, stateChange);
@@ -101,17 +101,23 @@ public sealed class StrategyRouter(
     private static void ValidateGraph(StrategyGraphPayload graph)
     {
         if (graph.SchemaVersion < 1)
+        {
             throw new ArgumentException($"Graph {graph.GraphId}: SchemaVersion must be >= 1.", nameof(graph));
+        }
 
         if (graph.Blocks.Count == 0)
+        {
             throw new ArgumentException($"Graph {graph.GraphId}: must contain at least one block.", nameof(graph));
+        }
 
         // Detect direct self-loops (block → itself on same socket)
         foreach (var conn in graph.Connections)
         {
             if (conn.FromBlockId == conn.ToBlockId)
+            {
                 throw new ArgumentException(
                     $"Graph {graph.GraphId}: self-loop detected on block {conn.FromBlockId}.", nameof(graph));
+            }
         }
 
         // Detect cycles using DFS over the connection graph
@@ -120,13 +126,15 @@ public sealed class StrategyRouter(
             .ToDictionary(g => g.Key, g => g.Select(c => c.ToBlockId).ToHashSet());
 
         var blockIds = graph.Blocks.Select(b => b.BlockId).ToHashSet();
-        var visited  = new HashSet<Guid>(blockIds.Count);
-        var inStack  = new HashSet<Guid>(blockIds.Count);
+        var visited = new HashSet<Guid>(blockIds.Count);
+        var inStack = new HashSet<Guid>(blockIds.Count);
 
         foreach (var blockId in blockIds)
         {
             if (!visited.Contains(blockId))
+            {
                 DetectCycle(blockId, adjacency, visited, inStack, graph.GraphId);
+            }
         }
     }
 
@@ -145,11 +153,16 @@ public sealed class StrategyRouter(
             foreach (var neighbour in neighbours)
             {
                 if (inStack.Contains(neighbour))
+                {
                     throw new ArgumentException(
-                        $"Graph {graphId}: cycle detected involving block {neighbour}.");
+                        $"Graph {graphId}: cycle detected involving block {neighbour}.",
+                        "graph");
+                }
 
                 if (!visited.Contains(neighbour))
+                {
                     DetectCycle(neighbour, adjacency, visited, inStack, graphId);
+                }
             }
         }
 

@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -11,6 +11,6 @@ namespace MLS.Core.Contracts.Designer;
 public sealed record StrategyConnectionSpec(
     [property: JsonPropertyName("connection_id")] string ConnectionId,
     [property: JsonPropertyName("from_block_id")] Guid FromBlockId,
-    [property: JsonPropertyName("from_socket")]   string FromSocket,
-    [property: JsonPropertyName("to_block_id")]   Guid ToBlockId,
-    [property: JsonPropertyName("to_socket")]     string ToSocket);
+    [property: JsonPropertyName("from_socket")] string FromSocket,
+    [property: JsonPropertyName("to_block_id")] Guid ToBlockId,
+    [property: JsonPropertyName("to_socket")] string ToSocket);
