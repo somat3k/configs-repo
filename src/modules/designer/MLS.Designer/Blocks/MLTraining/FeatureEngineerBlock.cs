@@ -117,14 +117,26 @@ public sealed class FeatureEngineerBlock : BlockBase
         var result = new List<float[]>(n);
         for (int i = 0; i < n; i++)
         {
-            if (float.IsNaN(rsi[i]) || float.IsNaN(macdHist[i]) || float.IsNaN(bbPos[i]))
+            var featureRow = new float[]
+            {
+                rsi[i], macdHist[i], bbPos[i], volDelta[i],
+                momentum20[i], atr[i], spreadBps[i], vwapDist[i],
+            };
+
+            if (!AllFinite(featureRow))
                 continue;
 
-            result.Add([rsi[i], macdHist[i], bbPos[i], volDelta[i],
-                        momentum20[i], atr[i], spreadBps[i], vwapDist[i]]);
+            result.Add(featureRow);
         }
 
         return [.. result];
+    }
+
+    private static bool AllFinite(float[] values)
+    {
+        for (int i = 0; i < values.Length; i++)
+            if (!float.IsFinite(values[i])) return false;
+        return true;
     }
 
     // ── Indicator implementations ─────────────────────────────────────────────────

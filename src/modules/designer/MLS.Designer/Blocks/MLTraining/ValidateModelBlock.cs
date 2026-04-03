@@ -124,15 +124,40 @@ public sealed class ValidateModelBlock : BlockBase
         if (!value.TryGetProperty("state", out var stEl)) return false;
         state = stEl.GetString() ?? string.Empty;
 
-        if (value.TryGetProperty("accuracy",  out var acc)) acc.TryGetSingle(out accuracy);
-        if (value.TryGetProperty("val_loss",  out var vl))  vl.TryGetSingle(out valLoss);
+        bool hasAccuracy = value.TryGetProperty("accuracy", out var acc) && acc.TryGetSingle(out accuracy);
+        bool hasValLoss  = value.TryGetProperty("val_loss",  out var vl)  && vl.TryGetSingle(out valLoss);
+        bool hasF1       = false;
 
-        // f1_macro may appear inside a nested "metrics" object
+        // Also check top-level f1_macro
+        if (value.TryGetProperty("f1_macro", out var f1TopEl)) hasF1 = f1TopEl.TryGetSingle(out f1);
+
+        // Fallback: read from nested "metrics" object for any value not found at top level
         if (value.TryGetProperty("metrics", out var metricsEl) &&
-            metricsEl.ValueKind == JsonValueKind.Object &&
-            metricsEl.TryGetProperty("f1_macro", out var f1El))
+            metricsEl.ValueKind == JsonValueKind.Object)
         {
-            f1El.TryGetSingle(out f1);
+            if (!hasAccuracy &&
+                metricsEl.TryGetProperty("accuracy", out var mAcc) &&
+                mAcc.TryGetSingle(out var mAccVal))
+            {
+                accuracy    = mAccVal;
+                hasAccuracy = true;
+            }
+
+            if (!hasValLoss &&
+                metricsEl.TryGetProperty("val_loss", out var mVl) &&
+                mVl.TryGetSingle(out var mVlVal))
+            {
+                valLoss    = mVlVal;
+                hasValLoss = true;
+            }
+
+            if (!hasF1 &&
+                metricsEl.TryGetProperty("f1_macro", out var mF1) &&
+                mF1.TryGetSingle(out var mF1Val))
+            {
+                f1    = mF1Val;
+                hasF1 = true;
+            }
         }
 
         return true;

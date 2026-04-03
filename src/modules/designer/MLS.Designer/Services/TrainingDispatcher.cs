@@ -129,14 +129,14 @@ public sealed class TrainingDispatcher(
         {
             case MessageTypes.TrainingJobProgress:
             {
-                var progress = Deserialise<TrainingJobProgressPayload>(envelope.Payload);
+                var progress = Deserialise<TrainingJobProgressPayload>(envelope.Payload, envelope.Type);
                 if (progress is not null && ProgressReceived is not null)
                     await ProgressReceived(progress, CancellationToken.None).ConfigureAwait(false);
                 break;
             }
             case MessageTypes.TrainingJobComplete:
             {
-                var complete = Deserialise<TrainingJobCompletePayload>(envelope.Payload);
+                var complete = Deserialise<TrainingJobCompletePayload>(envelope.Payload, envelope.Type);
                 if (complete is not null && JobCompleted is not null)
                     await JobCompleted(complete, CancellationToken.None).ConfigureAwait(false);
                 break;
@@ -144,13 +144,14 @@ public sealed class TrainingDispatcher(
         }
     }
 
-    private static T? Deserialise<T>(JsonElement element) where T : class
+    private T? Deserialise<T>(JsonElement element, string envelopeType) where T : class
     {
         try { return element.Deserialize<T>(); }
         catch (JsonException ex)
         {
-            // Log would go here in production; silently return null to avoid crashing the hub callback
-            _ = ex;
+            _logger.LogWarning(ex,
+                "TrainingDispatcher: failed to deserialise {EnvelopeType} payload; envelope will be ignored",
+                envelopeType);
             return null;
         }
     }

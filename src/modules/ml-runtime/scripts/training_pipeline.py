@@ -128,15 +128,21 @@ class TrainingConfig:
             warmup_steps=int(hp.get("warmup_steps", 500)),
             patience=int(hp.get("early_stopping_patience", 20)),
             hidden_dims=hidden,
-            n_classes=int(hp.get("n_classes", 3)),
+            # model-a uses binary classification (BCE); force n_classes=2 regardless of payload
+            n_classes=2 if payload["model_type"] == "model-a" else int(hp.get("n_classes", 3)),
             data_from=dr.get("from", ""),
             data_to=dr.get("to", ""),
         )
 
     @property
     def input_dim(self) -> int:
-        """Feature vector dimension derived from model type and schema version."""
-        return {"model-t": 8, "model-a": 10, "model-d": 12}.get(self.model_type, 8)
+        """Feature vector dimension derived from model type and schema version.
+
+        - model-t: 8 features (RSI/MACD/BB/Volume/Momentum/ATR/Spread/VWAP)
+        - model-a: 10 features (spread/liquidity/fees/lag/volatility/venue encoding)
+        - model-d: 307 = 60 × 5 sequence features + 7 static features (flattened)
+        """
+        return {"model-t": 8, "model-a": 10, "model-d": 307}.get(self.model_type, 8)
 
 
 class _MLPBlock(nn.Module):
@@ -248,21 +254,47 @@ def _load_features_from_pg(cfg: TrainingConfig) -> tuple[np.ndarray, np.ndarray]
 
 
 def _generate_synthetic_features(cfg: TrainingConfig) -> tuple[np.ndarray, np.ndarray]:
-    """Generate synthetic training data for offline / development use."""
-    rng  = np.random.default_rng(42)
-    n    = 2048
-    X    = rng.standard_normal((n, cfg.input_dim)).astype(np.float32)
-    y    = rng.integers(0, cfg.n_classes, n).astype(np.int64)
+    """Generate synthetic training data for offline / development use.
+
+    Labels are drawn from [0, n_classes) so they are always compatible with
+    the model's loss function (binary labels for model-a, 3-class for others).
+    """
+    rng = np.random.default_rng(42)
+    n   = 2048
+    X   = rng.standard_normal((n, cfg.input_dim)).astype(np.float32)
+    y   = rng.integers(0, cfg.n_classes, n).astype(np.int64)
     return X, y
 
 
+def _should_fallback_to_synthetic(exc: Exception) -> bool:
+    """Return True only for expected import/dependency/connectivity failures."""
+    if isinstance(exc, (ImportError, ModuleNotFoundError, ConnectionError, TimeoutError, OSError)):
+        return True
+    if isinstance(exc, RuntimeError) and "psycopg2 not available" in str(exc):
+        return True
+    exc_module = type(exc).__module__
+    exc_name   = type(exc).__name__
+    # Allow fallback for psycopg2 connectivity/interface errors but NOT for ValueError
+    # (which signals a successful query that returned no rows — this is a data problem)
+    return exc_module.startswith("psycopg2") and exc_name in {"OperationalError", "InterfaceError"}
+
+
 def load_dataset(cfg: TrainingConfig) -> tuple[np.ndarray, np.ndarray]:
-    """Load features from PostgreSQL; fall back to synthetic data if unavailable."""
+    """Load features from PostgreSQL; fall back to synthetic data only on connectivity failures.
+
+    Raises ValueError (propagates to the caller) when the feature query succeeds but returns
+    no rows, rather than silently training on random data.
+    """
     try:
         return _load_features_from_pg(cfg)
+    except ValueError:
+        # No rows found — re-raise so the caller emits TRAINING_JOB_ERROR
+        raise
     except Exception as exc:
-        _emit_info(cfg.job_id, f"PostgreSQL unavailable ({exc!s}); using synthetic data")
-        return _generate_synthetic_features(cfg)
+        if _should_fallback_to_synthetic(exc):
+            _emit_info(cfg.job_id, f"PostgreSQL unavailable ({exc!s}); using synthetic data")
+            return _generate_synthetic_features(cfg)
+        raise
 
 
 def train_val_test_split(
@@ -272,7 +304,7 @@ def train_val_test_split(
     val_ratio:   float = 0.10,
     seed: int = 42,
 ) -> tuple[np.ndarray, ...]:
-    """Stratified 80/10/10 split."""
+    """Random shuffled train/validation/test split using the provided ratios."""
     rng = np.random.default_rng(seed)
     idx = rng.permutation(len(X))
     n_tr  = int(len(X) * train_ratio)

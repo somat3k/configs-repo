@@ -16,21 +16,23 @@ namespace MLS.Designer.Blocks.MLTraining;
 /// </para>
 /// </summary>
 /// <remarks>
-/// Expected candle signal payload: <c>{ open, high, low, close, volume }</c>
+/// Expected candle signal payload: <c>{ symbol?, exchange?, open, high, low, close, volume }</c>.
+/// When <c>symbol</c> or <c>exchange</c> are present in the payload they are matched against
+/// the block parameters; non-matching candles are silently dropped.
 /// </remarks>
 public sealed class DataLoaderBlock : BlockBase
 {
     private readonly List<float[]> _buffer = [];
 
     private readonly BlockParameter<string> _symbolParam =
-        new("Symbol", "Symbol", "Trading symbol to filter (e.g. BTC-PERP)", "BTC-PERP");
+        new("Symbol",    "Symbol",    "Trading symbol to accept (e.g. BTC-PERP). Leave empty to accept all.", "BTC-PERP");
     private readonly BlockParameter<string> _exchangeParam =
-        new("Exchange", "Exchange", "Source exchange identifier (e.g. hyperliquid)", "hyperliquid");
+        new("Exchange",  "Exchange",  "Source exchange to accept (e.g. hyperliquid). Leave empty to accept all.", "hyperliquid");
     private readonly BlockParameter<int> _windowSizeParam =
-        new("WindowSize", "Window Size", "Number of candles to accumulate before emitting a batch",
+        new("WindowSize","Window Size","Number of candles to accumulate before emitting a batch",
             512, MinValue: 64, MaxValue: 4096);
     private readonly BlockParameter<string> _modelTypeParam =
-        new("ModelType", "Model Type", "Target model registry key: model-t, model-a, or model-d", "model-t");
+        new("ModelType", "Model Type","Target model registry key: model-t, model-a, or model-d", "model-t");
 
     /// <inheritdoc/>
     public override string BlockType   => "DataLoaderBlock";
@@ -42,7 +44,7 @@ public sealed class DataLoaderBlock : BlockBase
 
     /// <summary>Initialises a new <see cref="DataLoaderBlock"/>.</summary>
     public DataLoaderBlock() : base(
-        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Input("candle_input",  BlockSocketType.CandleStream)],
         [BlockSocket.Output("feature_output", BlockSocketType.FeatureVector)]) { }
 
     /// <inheritdoc/>
@@ -54,7 +56,21 @@ public sealed class DataLoaderBlock : BlockBase
         if (signal.SocketType != BlockSocketType.CandleStream)
             return new ValueTask<BlockSignal?>(result: null);
 
-        if (!TryExtractOhlcv(signal.Value, out var ohlcv))
+        if (!TryExtractOhlcv(signal.Value, out var ohlcv, out var symbolInPayload, out var exchangeInPayload))
+            return new ValueTask<BlockSignal?>(result: null);
+
+        // Filter by symbol if both the parameter and the payload carry a non-empty value
+        var filterSymbol   = _symbolParam.DefaultValue;
+        var filterExchange = _exchangeParam.DefaultValue;
+
+        if (!string.IsNullOrEmpty(filterSymbol) &&
+            !string.IsNullOrEmpty(symbolInPayload) &&
+            !symbolInPayload.Equals(filterSymbol, StringComparison.OrdinalIgnoreCase))
+            return new ValueTask<BlockSignal?>(result: null);
+
+        if (!string.IsNullOrEmpty(filterExchange) &&
+            !string.IsNullOrEmpty(exchangeInPayload) &&
+            !exchangeInPayload.Equals(filterExchange, StringComparison.OrdinalIgnoreCase))
             return new ValueTask<BlockSignal?>(result: null);
 
         _buffer.Add(ohlcv);
@@ -66,11 +82,11 @@ public sealed class DataLoaderBlock : BlockBase
         _buffer.Clear();
 
         var featureBatch = new FeatureBatch(
-            ModelType: _modelTypeParam.DefaultValue,
-            Symbol:    _symbolParam.DefaultValue,
-            Exchange:  _exchangeParam.DefaultValue,
+            ModelType:  _modelTypeParam.DefaultValue,
+            Symbol:     filterSymbol,
+            Exchange:   filterExchange,
             WindowSize: batch.Length,
-            Samples:   batch);
+            Samples:    batch);
 
         return new ValueTask<BlockSignal?>(
             EmitObject(BlockId, "feature_output", BlockSocketType.FeatureVector, featureBatch));
@@ -78,9 +94,16 @@ public sealed class DataLoaderBlock : BlockBase
 
     // ── Helpers ───────────────────────────────────────────────────────────────────
 
-    private static bool TryExtractOhlcv(JsonElement value, out float[] ohlcv)
+    private static bool TryExtractOhlcv(
+        JsonElement value,
+        out float[] ohlcv,
+        out string  symbol,
+        out string  exchange)
     {
-        ohlcv = [];
+        ohlcv    = [];
+        symbol   = string.Empty;
+        exchange = string.Empty;
+
         if (value.ValueKind != JsonValueKind.Object) return false;
 
         if (!value.TryGetProperty("open",   out var o) ||
@@ -90,6 +113,9 @@ public sealed class DataLoaderBlock : BlockBase
             !value.TryGetProperty("volume", out var v))
             return false;
 
+        if (value.TryGetProperty("symbol",   out var sym)) symbol   = sym.GetString() ?? string.Empty;
+        if (value.TryGetProperty("exchange", out var ex))  exchange = ex.GetString()  ?? string.Empty;
+
         ohlcv = [o.GetSingle(), h.GetSingle(), l.GetSingle(), c.GetSingle(), v.GetSingle()];
         return true;
     }
@@ -97,9 +123,9 @@ public sealed class DataLoaderBlock : BlockBase
     // ── Wire types ────────────────────────────────────────────────────────────────
 
     internal sealed record FeatureBatch(
-        [property: JsonPropertyName("model_type")]  string   ModelType,
-        [property: JsonPropertyName("symbol")]      string   Symbol,
-        [property: JsonPropertyName("exchange")]    string   Exchange,
-        [property: JsonPropertyName("window_size")] int      WindowSize,
+        [property: JsonPropertyName("model_type")]  string    ModelType,
+        [property: JsonPropertyName("symbol")]      string    Symbol,
+        [property: JsonPropertyName("exchange")]    string    Exchange,
+        [property: JsonPropertyName("window_size")] int       WindowSize,
         [property: JsonPropertyName("samples")]     float[][] Samples);
 }

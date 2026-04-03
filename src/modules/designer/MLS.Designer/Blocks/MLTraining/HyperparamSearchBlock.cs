@@ -293,13 +293,25 @@ public sealed class HyperparamSearchBlock : BlockBase
 
     private bool IsEarlyStop()
     {
-        // Stop if the last 5 trials show no improvement
-        if (_trialResults.Count < 5) return false;
-        bool minimize   = _minimizeParam.DefaultValue;
-        var  recent     = _trialResults.TakeLast(5).Select(r => r.Metric).ToArray();
-        float bestSoFar = minimize ? _trialResults.Select(r => r.Metric).Min() : _trialResults.Select(r => r.Metric).Max();
-        float bestRecent = minimize ? recent.Min() : recent.Max();
-        return minimize ? bestRecent >= bestSoFar : bestRecent <= bestSoFar;
+        // Stop if the last 5 trials show no improvement compared with the best result
+        // achieved before that recent window.
+        const int earlyStopWindowSize = 5;
+        if (_trialResults.Count <= earlyStopWindowSize) return false;
+
+        bool minimize = _minimizeParam.DefaultValue;
+
+        var priorTrials  = _trialResults.Take(_trialResults.Count - earlyStopWindowSize).ToArray();
+        var recentTrials = _trialResults.TakeLast(earlyStopWindowSize).ToArray();
+
+        float bestBeforeRecent = minimize
+            ? priorTrials.Min(r => r.Metric)
+            : priorTrials.Max(r => r.Metric);
+
+        float bestRecent = minimize
+            ? recentTrials.Min(r => r.Metric)
+            : recentTrials.Max(r => r.Metric);
+
+        return minimize ? bestRecent >= bestBeforeRecent : bestRecent <= bestBeforeRecent;
     }
 
     private (JsonElement Hyperparams, float Metric) GetBestTrial()

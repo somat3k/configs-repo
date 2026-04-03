@@ -29,6 +29,9 @@ public sealed class TrainModelBlock : BlockBase
 {
     private readonly ITrainingDispatcher _dispatcher;
 
+    // Track the model type used for each dispatched job so progress events use the correct value
+    private readonly Dictionary<Guid, string> _activeJobModels = new();
+
     private readonly BlockParameter<string> _modelTypeParam =
         new("ModelType",           "Model Type",              "model-t, model-a, or model-d",      "model-t");
     private readonly BlockParameter<int>    _epochsParam =
@@ -62,7 +65,10 @@ public sealed class TrainModelBlock : BlockBase
     public TrainModelBlock() : this(new NullTrainingDispatcher()) { }
 
     /// <inheritdoc/>
-    public override void Reset() { }
+    public override void Reset()
+    {
+        _activeJobModels.Clear();
+    }
 
     /// <inheritdoc/>
     public override async ValueTask DisposeAsync()
@@ -104,6 +110,9 @@ public sealed class TrainModelBlock : BlockBase
 
         await _dispatcher.DispatchJobAsync(jobStart, ct).ConfigureAwait(false);
 
+        // Record the effective model type for this job so async event handlers can reference it correctly
+        _activeJobModels[jobId] = effectiveModel;
+
         // Emit PENDING status immediately so downstream blocks see the job
         var pending = new TrainingStatusValue(
             JobId:       jobId.ToString("N"),
@@ -124,9 +133,11 @@ public sealed class TrainModelBlock : BlockBase
 
     private ValueTask OnProgressReceivedAsync(TrainingJobProgressPayload progress, CancellationToken ct)
     {
+        // Use the model type recorded at dispatch time; fall back to the block parameter
+        _activeJobModels.TryGetValue(progress.JobId, out var modelType);
         var status = new TrainingStatusValue(
             JobId:       progress.JobId.ToString("N"),
-            ModelType:   _modelTypeParam.DefaultValue,
+            ModelType:   modelType ?? _modelTypeParam.DefaultValue,
             State:       "TRAINING",
             Epoch:       progress.Epoch,
             TotalEpochs: progress.TotalEpochs,
@@ -142,6 +153,17 @@ public sealed class TrainModelBlock : BlockBase
 
     private ValueTask OnJobCompletedAsync(TrainingJobCompletePayload complete, CancellationToken ct)
     {
+        // Remove the job tracking entry; no longer needed after completion
+        _activeJobModels.Remove(complete.JobId);
+
+        // Extract top-level metrics so ValidateModelBlock can read them directly
+        float accuracy = 0f, valLoss = 0f;
+        if (complete.Metrics.ValueKind == JsonValueKind.Object)
+        {
+            if (complete.Metrics.TryGetProperty("accuracy",  out var accEl)) accEl.TryGetSingle(out accuracy);
+            if (complete.Metrics.TryGetProperty("val_loss",  out var vlEl))  vlEl.TryGetSingle(out valLoss);
+        }
+
         var status = new TrainingStatusValue(
             JobId:       complete.JobId.ToString("N"),
             ModelType:   complete.ModelType,
@@ -149,8 +171,8 @@ public sealed class TrainModelBlock : BlockBase
             Epoch:       0,
             TotalEpochs: 0,
             TrainLoss:   0f,
-            ValLoss:     0f,
-            Accuracy:    0f,
+            ValLoss:     valLoss,
+            Accuracy:    accuracy,
             ElapsedMs:   complete.DurationMs,
             EtaMs:       0L,
             ModelId:     complete.ModelId,

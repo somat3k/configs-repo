@@ -7,16 +7,18 @@ namespace MLS.Designer.Blocks.MLTraining;
 
 /// <summary>
 /// Train-split block — accumulates engineered <see cref="BlockSocketType.FeatureVector"/>
-/// samples and, once the minimum sample count is reached, performs a stratified 80/10/10
-/// train / validation / test split.
+/// samples and, once the minimum sample count is reached, performs a train / validation /
+/// test split using the configured ratios.
 /// <para>
+/// When shuffling is enabled, samples are randomly shuffled before the split is produced.
 /// Each split is emitted as a separate <see cref="BlockSocketType.FeatureVector"/> signal
 /// with a <c>split</c> field set to <c>"train"</c>, <c>"val"</c>, or <c>"test"</c>.
 /// </para>
 /// </summary>
 /// <remarks>
 /// Labels are derived from the <c>labels</c> array embedded in the incoming batch. If no
-/// labels are present, a zero vector is used (unsupervised mode).
+/// labels are present, a sentinel <c>-1</c> is used (unsupervised mode). The split behaviour
+/// does not guarantee label-stratified partitions.
 /// </remarks>
 public sealed class TrainSplitBlock : BlockBase
 {
@@ -78,17 +80,18 @@ public sealed class TrainSplitBlock : BlockBase
             Shuffle(allSamples, allLabels);
 
         int n    = allSamples.Length;
-        int nTr  = (int)(n * _trainRatioParam.DefaultValue);
-        int nVal = (int)(n * _valRatioParam.DefaultValue);
-        int nTst = n - nTr - nVal;
+        int nTr  = Math.Clamp((int)(n * _trainRatioParam.DefaultValue), 0, n);
+        int nVal = Math.Clamp((int)(n * _valRatioParam.DefaultValue),   0, n - nTr);
+        int splitBoundary = nTr + nVal;
+        int nTst = Math.Max(0, n - splitBoundary);
 
         var trainSamples = allSamples[..nTr];
-        var valSamples   = allSamples[nTr..(nTr + nVal)];
-        var testSamples  = allSamples[(nTr + nVal)..];
+        var valSamples   = allSamples[nTr..splitBoundary];
+        var testSamples  = allSamples[splitBoundary..];
 
         var trainLabels  = allLabels[..nTr];
-        var valLabels    = allLabels[nTr..(nTr + nVal)];
-        var testLabels   = allLabels[(nTr + nVal)..];
+        var valLabels    = allLabels[nTr..splitBoundary];
+        var testLabels   = allLabels[splitBoundary..];
 
         // Emit the complete split bundle as a single FeatureVector signal
         var splitBundle = new SplitBundle(
