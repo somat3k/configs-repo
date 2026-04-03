@@ -47,6 +47,23 @@ public sealed class ModulesController(
         var modules = await _registry.GetAllAsync(ct).ConfigureAwait(false);
         return Ok(modules);
     }
+
+    /// <summary>Update the last-heartbeat timestamp for a registered module.</summary>
+    /// <response code="204">Heartbeat recorded.</response>
+    /// <response code="404">Module not found.</response>
+    [HttpPatch("{moduleId:guid}/heartbeat")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> HeartbeatAsync(Guid moduleId, CancellationToken ct)
+    {
+        var existing = await _registry.GetByIdAsync(moduleId, ct).ConfigureAwait(false);
+        if (existing is null)
+            return NotFound(new { error = $"Module {moduleId} is not registered." });
+
+        await _registry.UpdateHeartbeatAsync(moduleId, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+        _logger.LogDebug("Heartbeat from module {Id}", moduleId);
+        return NoContent();
+    }
 }
 
 /// <summary>Health check controller.</summary>

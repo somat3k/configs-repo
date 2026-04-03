@@ -1,0 +1,20 @@
+namespace MLS.Designer.Configuration;
+
+/// <summary>
+/// Configuration options for the Designer module, bound from <c>appsettings.json</c>
+/// under the <c>"Designer"</c> section.
+/// </summary>
+public sealed class DesignerOptions
+{
+    /// <summary>HTTP endpoint of this module, e.g. <c>http://designer:5250</c>.</summary>
+    public string HttpEndpoint { get; set; } = "http://designer:5250";
+
+    /// <summary>WebSocket endpoint of this module, e.g. <c>ws://designer:6250</c>.</summary>
+    public string WsEndpoint { get; set; } = "ws://designer:6250";
+
+    /// <summary>Block Controller HTTP base URL, e.g. <c>http://block-controller:5100</c>.</summary>
+    public string BlockControllerUrl { get; set; } = "http://block-controller:5100";
+
+    /// <summary>ML Runtime HTTP base URL for inference calls, e.g. <c>http://ml-runtime:5600</c>.</summary>
+    public string MlRuntimeUrl { get; set; } = "http://ml-runtime:5600";
+}

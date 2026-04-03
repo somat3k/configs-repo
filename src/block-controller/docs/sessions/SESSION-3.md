@@ -183,3 +183,46 @@ to those groups are silently dropped (no exceptions).
 - `.skills/networking.md` — standalone node, connection URL format
 - `.skills/beast-development.md` — bounded Channel, DropOldest, lock-free groups
 - `.skills/designer.md` — strategy routing, socket topic keys
+
+---
+
+## Session 03 Skills & Rules Assessment
+
+> Session 03 (Core Skills + Copilot Rules) was delivered alongside the Session 3 Block Controller
+> standalone node work. This section records the skills and rules produced in that session.
+
+### New Skill Files Delivered
+
+| File | Description |
+|------|-------------|
+| `.skills/designer.md` | IBlockElement lifecycle, BlockSocketType, CompositeBlock nesting, schema versioning |
+| `.skills/ai-hub.md` | SK KernelFunction rules, provider routing, canvas action dispatch, streaming |
+| `.skills/pwa-chrome.md` | PWA manifest, Workbox strategies, Chrome MV3, responsive Blazor layout |
+| `.skills/exchange-adapters.md` | IExchangeAdapter, Nethereum, Camelot/DFYN/Balancer/Hyperliquid, nHOP graph |
+| `.skills/hydra-collector.md` | FeedCollector base, gap detection, backfill pipeline, feature SIMD engineering |
+
+### New Copilot Rule Delivered
+
+| File | Coverage |
+|------|----------|
+| `.github/copilot-rules/rule-designer-blocks.md` | IBlockElement required, socket type enforcement, SchemaVersion rules, CompositeBlock nesting |
+
+### Copilot Instructions Updated
+
+`.github/copilot-instructions.md` additions:
+- Designer Module Rules section
+- AI Hub Rules section
+- Performance Rules section
+- Block Controller Standalone Node Rules section
+- Updated Module Port Allocation table (designer 5250/6250, ai-hub 5750/6750)
+
+### Phase 0 Test Results (all sessions 01–03)
+
+Run: `dotnet test MLS.sln -c Release --no-build`
+
+```
+MLS.Core.Tests           14 / 14 passed  ✅
+MLS.BlockController.Tests  20 / 20 passed  ✅
+Total: 34 / 34 passed
+```
+

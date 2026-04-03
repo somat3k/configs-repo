@@ -108,10 +108,10 @@ CANVAS_LAYOUT_SAVE       web-app → block-controller (MDI layout persistence)
 - `.skills/designer.md` ← new skill (created in Session 01)
 
 **Acceptance Criteria**
-- [ ] All interfaces compile with `net9.0`, nullable enabled, C# 13
-- [ ] All new `MessageTypes.*.cs` constants referenced in updated `docs/payload-schemas.md`
-- [ ] `BlockSocketType` enum covers all flow directions from architecture diagram
-- [ ] xUnit unit test: `BlockConnectionValidatorTests` — verify type-safe socket connections reject mismatched types
+- [x] All interfaces compile with `net9.0`, nullable enabled, C# 13
+- [x] All new `MessageTypes.*.cs` constants referenced in updated `docs/payload-schemas.md`
+- [x] `BlockSocketType` enum covers all flow directions from architecture diagram
+- [x] xUnit unit test: `BlockConnectionValidatorTests` — verify type-safe socket connections reject mismatched types
 
 ---
 
@@ -164,9 +164,9 @@ public sealed class StrategyRouter(
 - `.skills/dotnet-devs.md`
 
 **Acceptance Criteria**
-- [ ] `STRATEGY_DEPLOY` envelope processed in < 5ms
-- [ ] Subscription table correctly routes `BLOCK_SIGNAL` to connected module
-- [ ] Unit test: `StrategyRouterTests.DeployAsync_RoutesEnvelopesToSubscribedModules`
+- [x] `STRATEGY_DEPLOY` envelope processed in < 5ms
+- [x] Subscription table correctly routes `BLOCK_SIGNAL` to connected module
+- [x] Unit test: `StrategyRouterTests.DeployAsync_RoutesEnvelopesToSubscribedModules`
 - [ ] Integration test: round-trip deploy → signal → confirmation using `Aspire.Hosting.Testing`
 
 ---
@@ -188,9 +188,9 @@ public sealed class StrategyRouter(
 | MODIFY | `.github/copilot-instructions.md` | Add Designer, AI Hub, Performance rules sections |
 
 **Acceptance Criteria**
-- [ ] Each skill file follows the same frontmatter + section structure as existing skills
-- [ ] `rule-designer-blocks.md` covers: IBlockElement required, socket types, SchemaVersion increment, CompositeBlock nesting
-- [ ] copilot-instructions.md additions do not break existing sections
+- [x] Each skill file follows the same frontmatter + section structure as existing skills
+- [x] `rule-designer-blocks.md` covers: IBlockElement required, socket types, SchemaVersion increment, CompositeBlock nesting
+- [x] copilot-instructions.md additions do not break existing sections
 
 ---
 
@@ -275,13 +275,13 @@ Blocks/Trading/
 - `.skills/dotnet-devs.md`
 
 **Acceptance Criteria**
-- [ ] Module registers with Block Controller on startup (MODULE_REGISTER)
-- [ ] Heartbeat every 5 seconds (MODULE_HEARTBEAT)
-- [ ] `BlockRegistry.GetAll()` returns all Trading domain blocks with metadata
-- [ ] `RSIBlock.ProcessAsync` produces correct RSI for known OHLCV fixture data
-- [ ] `ModelTInferenceBlock.ProcessAsync` calls ML Runtime HTTP inference in < 15ms
-- [ ] xUnit: `TradingBlockTests` — all indicator blocks with known inputs
-- [ ] Docker: `mls-designer` container starts on ports 5250/6250
+- [x] Module registers with Block Controller on startup (MODULE_REGISTER)
+- [x] Heartbeat every 5 seconds (MODULE_HEARTBEAT)
+- [x] `BlockRegistry.GetAll()` returns all Trading domain blocks with metadata
+- [x] `RSIBlock.ProcessAsync` produces correct RSI for known OHLCV fixture data
+- [x] `ModelTInferenceBlock.ProcessAsync` calls ML Runtime HTTP inference in < 15ms
+- [x] xUnit: `TradingBlockTests` — all indicator blocks with known inputs
+- [x] Docker: `mls-designer` container starts on ports 5250/6250
 
 ---
 

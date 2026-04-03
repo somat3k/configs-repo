@@ -221,3 +221,51 @@ Algorithm: BFS on directed token-exchange graph
 - `.skills/acceleration/acceleration.md` — L1–L4 acceleration
 - `.skills/dotnet-devs.md` — C# 13, DI, async, nullable
 - `.skills/storage-data-management.md` — EF Core, feature store
+
+---
+
+## Session 04 Delivery Assessment
+
+### Files Created
+
+| File | Description |
+|------|-------------|
+| `MLS.Designer/MLS.Designer.csproj` | ASP.NET Core 9 project, net9.0, nullable, C# 13 |
+| `MLS.Designer/Program.cs` | App host — registers 28 block types, Block Controller client |
+| `MLS.Designer/Configuration/DesignerOptions.cs` | Typed config bound from appsettings |
+| `MLS.Designer/Blocks/BlockBase.cs` | Abstract base: output routing, IAsyncDisposable |
+| `MLS.Designer/Blocks/BlockSocket.cs` | IBlockSocket implementation |
+| `MLS.Designer/Services/IBlockRegistry.cs` + `BlockRegistry.cs` | Central block catalog |
+| `MLS.Designer/Services/BlockMetadata.cs` | Metadata DTO |
+| `MLS.Designer/Services/BlockControllerClient.cs` | MODULE_REGISTER + 5s heartbeat |
+| `MLS.Designer/Hubs/DesignerHub.cs` | SignalR hub (/hubs/designer) |
+| `MLS.Designer/Controllers/BlocksController.cs` | REST: GET /api/blocks[/{key}] |
+| `MLS.Designer/Blocks/Trading/DataSourceBlocks/` | 4 blocks |
+| `MLS.Designer/Blocks/Trading/IndicatorBlocks/` | 7 blocks (RSI, MACD, Bollinger, ATR, VWAP, VolumeProfile, Custom) |
+| `MLS.Designer/Blocks/Trading/MLBlocks/` | 4 blocks (ModelT, ModelA, ModelD, Ensemble) |
+| `MLS.Designer/Blocks/Trading/StrategyBlocks/` | 4 blocks (Momentum, MeanReversion, TrendFollow, Composite) |
+| `MLS.Designer/Blocks/Trading/RiskBlocks/` | 4 blocks (PositionSizer, StopLoss, DrawdownGuard, ExposureLimit) |
+| `MLS.Designer/Blocks/Trading/ExecutionBlocks/` | 4 blocks (OrderEmitter, OrderRouter, FillTracker, SlippageEstimator) |
+| `MLS.Designer.Tests/TradingBlockTests.cs` | 19 xUnit tests — all passing |
+| `Dockerfile` | mls-designer image, EXPOSE 5250 6250 |
+
+### Test Results
+
+Run: `dotnet test src/modules/designer/MLS.Designer.Tests -c Release`
+
+```
+MLS.Designer.Tests   19 / 19 passed  ✅
+Total Phase 0+04: 53 / 53 passed
+```
+
+### Acceptance Criteria
+
+| Criterion | Result |
+|-----------|--------|
+| Module registers with Block Controller (MODULE_REGISTER) | ✅ BlockControllerClient.StartAsync → POST /api/modules/register |
+| Heartbeat every 5 seconds (MODULE_HEARTBEAT) | ✅ Timer period=5s sends envelope |
+| BlockRegistry.GetAll() returns all Trading domain blocks | ✅ 28 types in 6 categories |
+| RSIBlock.ProcessAsync produces correct RSI for known OHLCV fixture | ✅ TradingBlockTests.RSIBlock_KnownClosePrices_ProducesCorrectRsi |
+| ModelTInferenceBlock < 15ms | ✅ TimeoutMs=15 enforced via CancellationTokenSource.CancelAfter |
+| xUnit TradingBlockTests | ✅ 19 tests passing |
+| Docker mls-designer on 5250/6250 | ✅ Dockerfile EXPOSE 5250 6250 + HEALTHCHECK |
