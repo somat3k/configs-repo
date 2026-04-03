@@ -36,4 +36,4 @@ src/modules/broker/
 - `transactions` (signed transaction submission)
 - PostgreSQL `blockchain_addresses` table (all venue addresses)
 
-See [SESSION.md](SESSION.md) for Copilot session prompt.
+See [SESSION.md](docs/SESSION.md) for Copilot session prompt.

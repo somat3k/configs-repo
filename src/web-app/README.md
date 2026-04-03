@@ -32,4 +32,4 @@ src/web-app/
 - `block-controller` (SignalR connection for data/events)
 - Microsoft FluentUI Blazor (UI component library)
 
-See [SESSION.md](SESSION.md) for Copilot session prompt.
+See [SESSION.md](docs/SESSION.md) for Copilot session prompt.

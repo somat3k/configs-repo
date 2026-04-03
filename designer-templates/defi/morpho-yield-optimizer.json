@@ -1,0 +1,46 @@
+{
+  "graph_id": "00000000-0003-0000-0000-000000000001",
+  "name": "Morpho Yield Optimizer",
+  "description": "DeFi lending yield optimization: supply to Morpho, monitor health factor, auto-rebalance to maximize yield while maintaining HF > 1.5",
+  "domain": "DeFi",
+  "schema_version": 1,
+  "blocks": [
+    {
+      "block_id": "c0000001-0000-0000-0000-000000000001",
+      "block_type": "MorphoSupplyBlock",
+      "position": { "x": 50, "y": 200 },
+      "parameters": { "asset": "WETH", "market": "WETH/USDC", "target_utilization": 0.85 }
+    },
+    {
+      "block_id": "c0000002-0000-0000-0000-000000000001",
+      "block_type": "CollateralHealthBlock",
+      "position": { "x": 280, "y": 200 },
+      "parameters": { "warning_threshold": 1.5, "critical_threshold": 1.2, "poll_interval_seconds": 30 }
+    },
+    {
+      "block_id": "c0000003-0000-0000-0000-000000000001",
+      "block_type": "ModelDInferenceBlock",
+      "position": { "x": 510, "y": 100 },
+      "parameters": { "model_id": "model-d", "confidence_threshold": 0.70 }
+    },
+    {
+      "block_id": "c0000004-0000-0000-0000-000000000001",
+      "block_type": "YieldOptimizerBlock",
+      "position": { "x": 510, "y": 300 },
+      "parameters": { "min_rebalance_improvement_bps": 25, "rebalance_cooldown_minutes": 60 }
+    },
+    {
+      "block_id": "c0000005-0000-0000-0000-000000000001",
+      "block_type": "LiquidationGuardBlock",
+      "position": { "x": 740, "y": 200 },
+      "parameters": { "emergency_close_hf_threshold": 1.15, "auto_repay": true }
+    }
+  ],
+  "connections": [
+    { "connection_id": "c001", "from_block_id": "c0000001-0000-0000-0000-000000000001", "from_socket": "defi_output", "to_block_id": "c0000002-0000-0000-0000-000000000001", "to_socket": "position_input" },
+    { "connection_id": "c002", "from_block_id": "c0000002-0000-0000-0000-000000000001", "from_socket": "health_output", "to_block_id": "c0000003-0000-0000-0000-000000000001", "to_socket": "feature_input" },
+    { "connection_id": "c003", "from_block_id": "c0000002-0000-0000-0000-000000000001", "from_socket": "health_output", "to_block_id": "c0000004-0000-0000-0000-000000000001", "to_socket": "health_input" },
+    { "connection_id": "c004", "from_block_id": "c0000003-0000-0000-0000-000000000001", "from_socket": "ml_output", "to_block_id": "c0000004-0000-0000-0000-000000000001", "to_socket": "signal_input" },
+    { "connection_id": "c005", "from_block_id": "c0000004-0000-0000-0000-000000000001", "from_socket": "defi_output", "to_block_id": "c0000005-0000-0000-0000-000000000001", "to_socket": "defi_input" }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "graph_id": "00000000-0002-0000-0000-000000000001",
+  "name": "Camelot-DFYN Spread Capture",
+  "description": "2-exchange spread arbitrage: monitor WETH/USDC price on Camelot vs DFYN, execute when spread > gas + min profit",
+  "domain": "Arbitrage",
+  "schema_version": 1,
+  "blocks": [
+    {
+      "block_id": "b0000001-0000-0000-0000-000000000001",
+      "block_type": "FeedSourceBlock",
+      "position": { "x": 50, "y": 100 },
+      "parameters": { "exchange": "camelot", "symbol": "WETH/USDC", "datatype": "price" }
+    },
+    {
+      "block_id": "b0000002-0000-0000-0000-000000000001",
+      "block_type": "FeedSourceBlock",
+      "position": { "x": 50, "y": 300 },
+      "parameters": { "exchange": "dfyn", "symbol": "WETH/USDC", "datatype": "price" }
+    },
+    {
+      "block_id": "b0000003-0000-0000-0000-000000000001",
+      "block_type": "SpreadCalculatorBlock",
+      "position": { "x": 280, "y": 200 },
+      "parameters": { "normalise_to_bps": true }
+    },
+    {
+      "block_id": "b0000004-0000-0000-0000-000000000001",
+      "block_type": "ModelAInferenceBlock",
+      "position": { "x": 510, "y": 200 },
+      "parameters": { "model_id": "model-a", "confidence_threshold": 0.80 }
+    },
+    {
+      "block_id": "b0000005-0000-0000-0000-000000000001",
+      "block_type": "ProfitGateBlock",
+      "position": { "x": 740, "y": 200 },
+      "parameters": { "min_profit_usd": 15.0, "include_gas_estimate": true }
+    },
+    {
+      "block_id": "b0000006-0000-0000-0000-000000000001",
+      "block_type": "OrderEmitterBlock",
+      "position": { "x": 970, "y": 200 },
+      "parameters": { "order_type": "market", "execute_both_legs": true }
+    }
+  ],
+  "connections": [
+    { "connection_id": "c001", "from_block_id": "b0000001-0000-0000-0000-000000000001", "from_socket": "price_output", "to_block_id": "b0000003-0000-0000-0000-000000000001", "to_socket": "price_input_a" },
+    { "connection_id": "c002", "from_block_id": "b0000002-0000-0000-0000-000000000001", "from_socket": "price_output", "to_block_id": "b0000003-0000-0000-0000-000000000001", "to_socket": "price_input_b" },
+    { "connection_id": "c003", "from_block_id": "b0000003-0000-0000-0000-000000000001", "from_socket": "spread_output", "to_block_id": "b0000004-0000-0000-0000-000000000001", "to_socket": "feature_input" },
+    { "connection_id": "c004", "from_block_id": "b0000004-0000-0000-0000-000000000001", "from_socket": "ml_output", "to_block_id": "b0000005-0000-0000-0000-000000000001", "to_socket": "signal_input" },
+    { "connection_id": "c005", "from_block_id": "b0000005-0000-0000-0000-000000000001", "from_socket": "risk_output", "to_block_id": "b0000006-0000-0000-0000-000000000001", "to_socket": "risk_input" }
+  ]
+}

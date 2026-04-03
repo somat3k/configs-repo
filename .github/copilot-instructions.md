@@ -21,8 +21,9 @@ Machine Learning Studio (MLS) for Trading, Arbitrage, and DeFi — a production-
 6. Use named enums and constants in `MLS.Core.Constants` for all magic values
 7. Each module runs in its own Docker container on the `mls-network` bridge network
 8. All external data pre-defined in typed extension classes before storage
-9. Extensive presence Invoker in framework-based architecture
-10. Modules code-structures writen in modularized compact architecture
+9. Extensive presence of Invokers in framework-based architecture
+10. Modules code-structures writen in compact architecture
+11. Modules must run online at sesssion end with clear documentation and all ports data-driven online
 
 ## Coding Standards
 - Target framework: `net9.0`
@@ -47,6 +48,7 @@ Machine Learning Studio (MLS) for Trading, Arbitrage, and DeFi — a production-
 | data-layer       | 5700 |    6700   |
 | broker           | 5800 |    6800   |  
 | transactions     | 5900 |    6900   |
+| shell-vm         | 5950 |    6950   |
 
 ## Namespace Conventions
 - Core shared: `MLS.Core.{Feature}`
@@ -89,3 +91,56 @@ When generating code, apply the relevant skill from `.skills/`:
 | `ModelType.Trading` | `ModelT` | `model_t_` | `model-t` | `trader` |
 | `ModelType.Arbitrage` | `ModelA` | `model_a_` | `model-a` | `arbitrager` |
 | `ModelType.DeFi` | `ModelD` | `model_d_` | `model-d` | `defi` |
+
+## Module Port Allocation (Updated — includes Designer and AI Hub)
+
+|      Module      | HTTP | WebSocket | Status |
+|------------------|------|-----------|--------|
+| block-controller | 5100 |    6100   | Existing |
+| web-app          | 5200 |    6200   | Existing |
+| **designer**     | **5250** | **6250** | **New** |
+| trader           | 5300 |    6300   | Existing |
+| arbitrager       | 5400 |    6400   | Existing |
+| defi             | 5500 |    6500   | Existing |
+| ml-runtime       | 5600 |    6600   | Existing |
+| data-layer       | 5700 |    6700   | Existing |
+| **ai-hub**       | **5750** | **6750** | **New** |
+| broker           | 5800 |    6800   | Existing |
+| transactions     | 5900 |    6900   | Existing |
+| shell-vm         | 5950 |    6950   | Existing |
+
+## Designer Module Rules
+
+> Reference: `.skills/designer.md` · `docs/architecture/designer-block-graph.md` · `.github/copilot-rules/rule-designer-blocks.md`
+
+- Every new block type MUST implement `IBlockElement` and register with `BlockRegistry` on startup
+- Block sockets MUST be typed using `BlockSocketType` enum — no untyped object connections
+- `ICompositionGraph.ConnectAsync` MUST throw `InvalidBlockConnectionException` on socket type mismatch
+- Composition blocks MUST expose disconnected inner sockets as outer ports via `GetExposedPorts()` (fractal nesting)
+- `SchemaVersion` MUST be incremented on every structural strategy change
+- All blockchain addresses via `IBlockchainAddressBook` enum — zero hardcoded strings anywhere in adapters
+- `TrainModelBlock` emits `TRAINING_JOB_START` — it NEVER calls Python directly
+- Exchange adapters: NO Uniswap — only Camelot, DFYN, Balancer, Morpho, Hyperliquid (Arbitrum)
+
+## AI Hub Rules
+
+> Reference: `.skills/ai-hub.md` · `docs/architecture/ai-hub-providers.md`
+
+- All LLM providers MUST implement `ILLMProvider` (wraps `IChatCompletionService`)
+- Every `[KernelFunction]` MUST have `[Description("...")]` and every parameter MUST have `[Description("...")]`
+- Canvas actions MUST go through `CanvasActionDispatcher` — NEVER directly mutate UI state
+- Context assembly MUST complete in < 200ms (parallel queries, individual timeouts)
+- Canvas-producing plugin functions MUST dispatch `CanvasAction` BEFORE returning their string result
+- State-modifying functions (PlaceOrder) MUST require `confirmed: bool` parameter
+- Streaming responses use `kernel.InvokeStreamingAsync` — NEVER buffer complete response
+
+## Performance Rules
+
+> Reference: `.skills/acceleration/acceleration.md` · `.skills/beast-development.md` · `docs/architecture/performance-semantics.md`
+
+- Envelope routing hot path: ZERO allocation — use `ArrayPool<byte>`, `Span<byte>`, pre-allocated `OrtValue`
+- `MessagePack` for ALL wire serialization in production (JSON only for human-readable config files)
+- All `Channel<T>` consumers MUST use `BoundedChannelOptions` with explicit `FullMode` policy
+- `BenchmarkDotNet` test REQUIRED for any method on the envelope routing or indicator computation hot path
+- GC mode: Server GC for all backend services (`"System.GC.Server": true` in runtimeconfig)
+- Python training: `torch.compile(mode="max-autotune")` + AMP bf16 + `DataLoader(num_workers=4, pin_memory=True)`
