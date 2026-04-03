@@ -62,7 +62,8 @@ public sealed class TrainSplitBlock : BlockBase
             return new ValueTask<BlockSignal?>(result: null);
 
         _samples.AddRange(samples);
-        _labels.AddRange(labels.Length == samples.Length ? labels : Enumerable.Repeat(0, samples.Length));
+        // Use -1 as a sentinel for absent labels (makes missing-label samples explicit downstream)
+        _labels.AddRange(labels.Length == samples.Length ? labels : Enumerable.Repeat(-1, samples.Length));
 
         if (_samples.Count < _minSamplesParam.DefaultValue)
             return new ValueTask<BlockSignal?>(result: null);

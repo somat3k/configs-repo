@@ -313,7 +313,7 @@ def train_loop(
     is_classification: bool = True,
 ) -> nn.Module:
     """Generic training loop that streams progress to stdout."""
-    torch.set_num_threads(1)  # L1 acceleration: single-thread vectorised
+    torch.set_num_threads(1)  # L1 acceleration: MLS single-thread vectorised inference target (<10ms)
 
     device = torch.device("cpu")
     model  = model.to(device)
@@ -361,7 +361,7 @@ def train_loop(
                     loss   = F.cross_entropy(logits, y_batch)
                 else:
                     logits = model(X_batch)
-                    loss   = F.cross_entropy(logits.squeeze(-1).unsqueeze(-1), y_batch.float())
+                    loss   = F.cross_entropy(logits, y_batch)
             else:
                 out  = model(X_batch).squeeze(-1)
                 loss = F.mse_loss(out, y_batch.float())

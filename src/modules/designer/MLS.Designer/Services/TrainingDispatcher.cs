@@ -147,6 +147,11 @@ public sealed class TrainingDispatcher(
     private static T? Deserialise<T>(JsonElement element) where T : class
     {
         try { return element.Deserialize<T>(); }
-        catch { return null; }
+        catch (JsonException ex)
+        {
+            // Log would go here in production; silently return null to avoid crashing the hub callback
+            _ = ex;
+            return null;
+        }
     }
 }

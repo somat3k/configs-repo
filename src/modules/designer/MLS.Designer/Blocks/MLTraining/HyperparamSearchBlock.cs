@@ -40,7 +40,10 @@ public sealed class HyperparamSearchBlock : BlockBase
     private int          _trialIndex  = 0;
     private Guid?        _activeTrial = null;
 
-    // Results: (jobId → (hyperparams, metric))
+    // Track dispatched hyperparams so they can be paired with the trial result
+    private readonly Dictionary<Guid, JsonElement> _pendingHyperparams = new();
+
+    // Results: (hyperparams, metric)
     private readonly List<(JsonElement Hyperparams, float Metric)> _trialResults = [];
 
     private readonly BlockParameter<string> _searchStrategyParam =
@@ -84,6 +87,7 @@ public sealed class HyperparamSearchBlock : BlockBase
         _modelType     = "model-t";
         _trialIndex    = 0;
         _activeTrial   = null;
+        _pendingHyperparams.Clear();
         _trialResults.Clear();
     }
 
@@ -132,10 +136,15 @@ public sealed class HyperparamSearchBlock : BlockBase
 
         _activeTrial = null;
 
-        float metric = ExtractMetric(complete.Metrics, _optimizeMetricParam.DefaultValue);
-        var   hp     = complete.Metrics; // reuse; the hyperparams are embedded by the Shell VM
+        // Retrieve hyperparams that were dispatched for this trial
+        _pendingHyperparams.Remove(complete.JobId, out var hp);
+        var trialHp = hp.ValueKind == JsonValueKind.Undefined
+            ? JsonSerializer.SerializeToElement(new { })
+            : hp;
 
-        _trialResults.Add((hp, metric));
+        float metric = ExtractMetric(complete.Metrics, _optimizeMetricParam.DefaultValue);
+
+        _trialResults.Add((trialHp, metric));
 
         _trialIndex++;
 
@@ -170,6 +179,9 @@ public sealed class HyperparamSearchBlock : BlockBase
         var hyperparams = GenerateHyperparams(_trialIndex);
         var jobId       = Guid.NewGuid();
         _activeTrial    = jobId;
+
+        // Record hyperparams so they can be paired with the trial result on completion
+        _pendingHyperparams[jobId] = hyperparams;
 
         var payload = new TrainingJobStartPayload(
             JobId:                jobId,
