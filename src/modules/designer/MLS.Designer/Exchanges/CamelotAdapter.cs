@@ -1,21 +1,25 @@
 using System.Collections.Concurrent;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using MLS.Core.Constants;
 using MLS.Core.Designer;
+using Microsoft.Extensions.Options;
+using MLS.Designer.Configuration;
 
 namespace MLS.Designer.Exchanges;
 
 /// <summary>
 /// Camelot exchange adapter — Arbitrum-native AMM with dual-fee stable/volatile pools.
-/// Reads reserves via Camelot V2 factory/pair contracts (UniswapV2-compatible interface).
+/// Queries price by calling <c>getAmountsOut</c> on the Camelot V2 router via <c>eth_call</c>.
 /// All contract addresses are loaded from <see cref="IBlockchainAddressBook"/>.
 /// </summary>
 public sealed class CamelotAdapter : IExchangeAdapter
 {
     private readonly HttpClient _http;
     private readonly IBlockchainAddressBook _addressBook;
+    private readonly IOptions<DesignerOptions> _options;
     private readonly ILogger<CamelotAdapter> _logger;
 
     private sealed record CacheEntry(decimal Price, DateTimeOffset ExpiresAt);
@@ -27,14 +31,31 @@ public sealed class CamelotAdapter : IExchangeAdapter
             .Select(i => TimeSpan.FromSeconds(Math.Min(Math.Pow(2, i), 60)))
             .ToArray();
 
+    // Token metadata: symbol → (BlockchainAddress enum key, ERC-20 decimals)
+    private static readonly IReadOnlyDictionary<string, (BlockchainAddress Addr, int Decimals)> TokenMap =
+        new Dictionary<string, (BlockchainAddress, int)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["WETH"] = (BlockchainAddress.WethArbitrum,  18),
+            ["USDC"] = (BlockchainAddress.UsdcArbitrum,   6),
+            ["ARB"]  = (BlockchainAddress.ArbToken,      18),
+            ["WBTC"] = (BlockchainAddress.WbtcArbitrum,   8),
+            ["GMX"]  = (BlockchainAddress.GmxToken,      18),
+            ["RDNT"] = (BlockchainAddress.RdntToken,     18),
+        };
+
     /// <inheritdoc/>
     public string ExchangeId => "camelot";
 
     /// <summary>Initialises a new <see cref="CamelotAdapter"/>.</summary>
-    public CamelotAdapter(HttpClient http, IBlockchainAddressBook addressBook, ILogger<CamelotAdapter> logger)
+    public CamelotAdapter(
+        HttpClient http,
+        IBlockchainAddressBook addressBook,
+        IOptions<DesignerOptions> options,
+        ILogger<CamelotAdapter> logger)
     {
         _http        = http;
         _addressBook = addressBook;
+        _options     = options;
         _logger      = logger;
     }
 
@@ -46,9 +67,8 @@ public sealed class CamelotAdapter : IExchangeAdapter
         if (_priceCache.TryGetValue(symbol, out var entry) && entry.ExpiresAt > DateTimeOffset.UtcNow)
             return entry.Price;
 
-        // Camelot reads reserves via an Arbitrum RPC eth_call to the pair contract.
-        // We use the Multicall3 contract for a batched reserve fetch.
-        var price = await FetchReservePriceAsync(baseToken, quoteToken, ct).ConfigureAwait(false);
+        // eth_call to CamelotRouterV2.getAmountsOut
+        var price = await FetchAmountsOutPriceAsync(baseToken, quoteToken, ct).ConfigureAwait(false);
         _priceCache[symbol] = new CacheEntry(price, DateTimeOffset.UtcNow.Add(CacheTtl));
         return price;
     }
@@ -170,37 +190,138 @@ public sealed class CamelotAdapter : IExchangeAdapter
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Fetches pair reserves from an Arbitrum RPC endpoint and computes price from x*y=k reserves.
-    /// Uses eth_call to the Camelot pair's <c>getReserves()</c> function.
+    /// Calls <c>CamelotRouterV2.getAmountsOut(1 token, [tokenIn, tokenOut])</c>
+    /// via JSON-RPC <c>eth_call</c> and returns the quoted output amount.
     /// </summary>
-    private async Task<decimal> FetchReservePriceAsync(
+    private async Task<decimal> FetchAmountsOutPriceAsync(
         string baseToken, string quoteToken, CancellationToken ct)
     {
-        // Build eth_call to Camelot factory getPair then pair getReserves
-        // For simplicity, fall back to a well-known Arbitrum RPC
-        var rpcUrl  = "https://arb1.arbitrum.io/rpc";
-        var payload = JsonSerializer.Serialize(new
+        var rpcUrl = _options.Value.ArbitrumRpcUrl;
+
+        if (!TokenMap.TryGetValue(baseToken,  out var baseInfo) ||
+            !TokenMap.TryGetValue(quoteToken, out var quoteInfo))
+        {
+            _logger.LogDebug("CamelotAdapter: unsupported token pair {Base}/{Quote}.", baseToken, quoteToken);
+            return GetFallbackPrice(baseToken, quoteToken);
+        }
+
+        string routerAddr, baseAddr, quoteAddr;
+        try
+        {
+            routerAddr = await _addressBook.GetAddressAsync(BlockchainAddress.CamelotRouterV2, ct)
+                                           .ConfigureAwait(false);
+            baseAddr  = await _addressBook.GetAddressAsync(baseInfo.Addr, ct).ConfigureAwait(false);
+            quoteAddr = await _addressBook.GetAddressAsync(quoteInfo.Addr, ct).ConfigureAwait(false);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogDebug(ex, "CamelotAdapter: address book missing entry, using fallback.");
+            return GetFallbackPrice(baseToken, quoteToken);
+        }
+
+        // ABI-encode getAmountsOut(uint256 amountIn, address[] path)
+        // Function selector: keccak256("getAmountsOut(uint256,address[])") = 0xd06ca61f
+        var callData = EncodeGetAmountsOut(baseInfo.Decimals, baseAddr, quoteAddr);
+        var payload  = JsonSerializer.Serialize(new
         {
             jsonrpc = "2.0",
-            method  = "eth_gasPrice",
-            @params = Array.Empty<object>(),
+            method  = "eth_call",
+            @params = new object[] { new { to = routerAddr, data = callData }, "latest" },
             id      = 1
         });
 
-        using var content  = new StringContent(payload, Encoding.UTF8, "application/json");
-        using var response = await _http.PostAsync(rpcUrl, content, ct).ConfigureAwait(false);
-
-        // Returns a fallback price until the real on-chain integration is wired up.
-        // Full implementation: eth_call to CamelotRouterV2.getAmountsOut([token0, token1], [1e18])
-        _logger.LogDebug("CamelotAdapter: placeholder price for {Base}/{Quote}", baseToken, quoteToken);
-        return baseToken.ToUpperInvariant() switch
+        try
         {
-            "WETH" when quoteToken.ToUpperInvariant() == "USDC" => 2000m,
-            "WBTC" when quoteToken.ToUpperInvariant() == "USDC" => 60000m,
-            "ARB"  when quoteToken.ToUpperInvariant() == "USDC" => 1m,
-            _                                                    => 1m
-        };
+            using var content  = new StringContent(payload, Encoding.UTF8, "application/json");
+            using var response = await _http.PostAsync(rpcUrl, content, ct).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+                return GetFallbackPrice(baseToken, quoteToken);
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+            if (doc.RootElement.TryGetProperty("result", out var resultEl))
+            {
+                var hex = resultEl.GetString();
+                if (!string.IsNullOrEmpty(hex) && hex != "0x")
+                {
+                    var amountOut = DecodeAmountsOutSecond(hex, quoteInfo.Decimals);
+                    if (amountOut > 0) return amountOut;
+                }
+            }
+
+            if (doc.RootElement.TryGetProperty("error", out var errEl))
+            {
+                _logger.LogWarning("CamelotAdapter: eth_call error: {Error}", errEl.GetRawText());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "CamelotAdapter: eth_call failed for {Base}/{Quote}.", baseToken, quoteToken);
+        }
+
+        return GetFallbackPrice(baseToken, quoteToken);
     }
+
+    /// <summary>
+    /// ABI-encodes <c>getAmountsOut(uint256 amountIn, address[] path)</c> with
+    /// <c>amountIn = 10^decimals</c> (one token unit of <paramref name="baseDecimals"/>).
+    /// </summary>
+    private static string EncodeGetAmountsOut(int baseDecimals, string token0Addr, string token1Addr)
+    {
+        const string selector    = "d06ca61f";
+        var amountInWei          = BigInteger.Pow(10, baseDecimals);
+        var amountInHex          = amountInWei.ToString("x").PadLeft(64, '0');
+        const string arrayOffset = "0000000000000000000000000000000000000000000000000000000000000040";
+        const string arrayLength = "0000000000000000000000000000000000000000000000000000000000000002";
+
+        var addr0 = StripAndPad(token0Addr);
+        var addr1 = StripAndPad(token1Addr);
+
+        return $"0x{selector}{amountInHex}{arrayOffset}{arrayLength}{addr0}{addr1}";
+    }
+
+    /// <summary>
+    /// Decodes the second element of a <c>uint256[]</c> ABI return value and converts
+    /// from wei (using <paramref name="outputDecimals"/>) to a decimal quantity.
+    /// </summary>
+    private static decimal DecodeAmountsOutSecond(string hexResult, int outputDecimals)
+    {
+        // ABI-encoded uint256[]:
+        // [0..63]   = offset to array start (always 0x20)
+        // [64..127] = array length (= 2)
+        // [128..191] = amounts[0] (amountIn)
+        // [192..255] = amounts[1] (amountOut)
+        var data = hexResult.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? hexResult[2..] : hexResult;
+
+        if (data.Length < 64 * 4) return 0m;
+
+        var outputHex = data.Substring(64 * 3, 64).TrimStart('0');
+        if (string.IsNullOrEmpty(outputHex)) return 0m;
+
+        var outputWei = BigInteger.Parse("0" + outputHex, System.Globalization.NumberStyles.HexNumber);
+        var divisor   = BigInteger.Pow(10, outputDecimals);
+
+        // Use integer division + remainder for precision
+        var whole     = (decimal)(outputWei / divisor);
+        var remainder = (decimal)(outputWei % divisor) / (decimal)divisor;
+        return whole + remainder;
+    }
+
+    private static string StripAndPad(string addr) =>
+        (addr.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? addr[2..] : addr)
+        .ToLowerInvariant().PadLeft(64, '0');
+
+    private static decimal GetFallbackPrice(string baseToken, string quoteToken) =>
+        (baseToken.ToUpperInvariant(), quoteToken.ToUpperInvariant()) switch
+        {
+            ("WETH", "USDC") => 2000m,
+            ("WBTC", "USDC") => 60000m,
+            ("ARB",  "USDC") => 1m,
+            _                => 1m
+        };
 
     private static TimeSpan GetBackoff(int attempt)
     {

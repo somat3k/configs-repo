@@ -19,10 +19,17 @@ public sealed class ArbitrageAndDeFiBlockTests
     public async Task nHOPPathFinder_ThreeHopArbitrage_FindsProfitablePath()
     {
         // Arrange: build a 3-hop circuit WETH → USDC → ARB → WETH with deliberate profit.
-        // 1 WETH → 1000 USDC @ price=1000 (fee=0, gas=$0)
-        // 1000 USDC → 2000 ARB @ price=2.0 (fee=0, gas=$0)
-        // 2000 ARB → 1.4 WETH @ price=0.0007 (fee=0, gas=$0)
-        // Net: 1 WETH in → 1.4 WETH out = $400 profit at $1000/WETH
+        // Default InputAmount = 1.0 WETH (token units, not USD).
+        //
+        // Computation (fee=0 on each hop):
+        //   Hop 1: 1.0 WETH * 1000 (WETH→USDC price) = 1000 USDC
+        //   Hop 2: 1000 USDC * 2.0 (USDC→ARB price)  = 2000 ARB
+        //   Hop 3: 2000 ARB  * 0.0007 (ARB→WETH price) = 1.4 WETH  ← back to start token
+        //
+        // Net profit = 1.4 WETH − 1.0 WETH − 0.30 (3 × $0.10 gas) ≈ 0.4 WETH before gas deduction
+        // Gas is in USD units so it only reduces USD-denominated gas_usd, not the WETH profit directly.
+        // net_profit = output_amount − input_amount − gas = 1.4 − 1.0 − 0.30 = 0.10
+        // (Gas deducted as-is since units are mixed; the block uses gas_usd as a token-unit proxy.)
         var block = new nHOPPathFinderBlock();
         block.Parameters.Should().NotBeEmpty("nHOPPathFinderBlock must declare parameters");
 
@@ -40,7 +47,7 @@ public sealed class ArbitrageAndDeFiBlockTests
             CancellationToken.None);
 
         // Feed hop 3: ARB → WETH on balancer (closes the cycle)
-        // 2000 ARB * 0.0007 = 1.4 WETH → net profit = 0.4 WETH * $1000 = $400
+        // 2000 ARB * 0.0007 = 1.4 WETH
         await block.ProcessAsync(
             MakeEdge("balancer", "ARB", "WETH", price: 0.0007m, fee: 0m, gasUsd: 0.10m),
             CancellationToken.None);
@@ -58,6 +65,12 @@ public sealed class ArbitrageAndDeFiBlockTests
         firstPath.TryGetProperty("net_profit", out var profitEl).Should().BeTrue();
         profitEl.TryGetDecimal(out var profit).Should().BeTrue();
         profit.Should().BeGreaterThan(0, "net profit must be positive for a valid arbitrage");
+
+        // Verify output_amount is the correct end amount in WETH (1.4 WETH rounded)
+        firstPath.TryGetProperty("output_amount", out var outEl).Should().BeTrue();
+        outEl.TryGetDecimal(out var outAmount).Should().BeTrue();
+        outAmount.Should().BeApproximately(1.4m, 0.001m,
+            "with prices 1000 / 2.0 / 0.0007 from 1.0 WETH input the output should be ~1.4 WETH");
     }
 
     [Fact]

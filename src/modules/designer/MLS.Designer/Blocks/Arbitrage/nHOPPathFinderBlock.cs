@@ -45,11 +45,11 @@ public sealed class nHOPPathFinderBlock : BlockBase
         new("MaxHops", "Max Hops", "Maximum swap hops in a single path (2–4)", 3,
             MinValue: 2, MaxValue: 4, IsOptimizable: false);
     private readonly BlockParameter<decimal> _inputAmountParam =
-        new("InputAmount", "Input Amount (USD)", "Notional input amount in USD for profit calculation", 10_000m,
-            MinValue: 100m, MaxValue: 1_000_000m, IsOptimizable: false);
-    private readonly BlockParameter<decimal> _minProfitUsdParam =
-        new("MinProfitUsd", "Min Profit (USD)", "Minimum net profit in USD after gas to emit a path", 10m,
-            MinValue: 0.01m, MaxValue: 10_000m, IsOptimizable: true);
+        new("InputAmount", "Input Amount (tokens)", "Amount of start token to simulate in token units (e.g. 1.0 for 1 WETH)", 1m,
+            MinValue: 0.001m, MaxValue: 1_000_000m, IsOptimizable: false);
+    private readonly BlockParameter<decimal> _minProfitParam =
+        new("MinProfit", "Min Profit (tokens)", "Minimum net profit in start-token units after gas fees to emit a path", 0.001m,
+            MinValue: 0.000001m, MaxValue: 1_000m, IsOptimizable: true);
 
     /// <inheritdoc/>
     public override string BlockType   => "nHOPPathFinderBlock";
@@ -57,7 +57,7 @@ public sealed class nHOPPathFinderBlock : BlockBase
     public override string DisplayName => "nHOP Path Finder";
     /// <inheritdoc/>
     public override IReadOnlyList<BlockParameter> Parameters =>
-        [_startTokenParam, _maxHopsParam, _inputAmountParam, _minProfitUsdParam];
+        [_startTokenParam, _maxHopsParam, _inputAmountParam, _minProfitParam];
 
     /// <summary>Initialises a new <see cref="nHOPPathFinderBlock"/>.</summary>
     public nHOPPathFinderBlock() : base(
@@ -89,22 +89,22 @@ public sealed class nHOPPathFinderBlock : BlockBase
             _startTokenParam.DefaultValue,
             _inputAmountParam.DefaultValue,
             _maxHopsParam.DefaultValue,
-            _minProfitUsdParam.DefaultValue);
+            _minProfitParam.DefaultValue);
 
         if (paths.Count == 0)
             return new ValueTask<BlockSignal?>(result: null);
 
         var output = new
         {
-            start_token   = _startTokenParam.DefaultValue,
-            input_usd     = _inputAmountParam.DefaultValue,
-            paths         = paths.Select(p => new
+            start_token    = _startTokenParam.DefaultValue,
+            input_amount   = _inputAmountParam.DefaultValue,
+            paths          = paths.Select(p => new
             {
-                hops          = p.Hops,
-                output_usd    = p.OutputUsd,
-                gas_usd       = p.TotalGasUsd,
-                net_profit    = p.NetProfit,
-                profit_ratio  = p.ProfitRatio,
+                hops           = p.Hops,
+                output_amount  = p.OutputAmount,
+                gas_usd        = p.TotalGasUsd,
+                net_profit     = p.NetProfit,
+                profit_ratio   = p.ProfitRatio,
             }).ToArray()
         };
 
@@ -132,20 +132,20 @@ public sealed class nHOPPathFinderBlock : BlockBase
 
     private sealed record ArbPath(
         IReadOnlyList<HopStep> Hops,
-        decimal OutputUsd,
+        decimal OutputAmount,
         decimal TotalGasUsd,
         decimal NetProfit,
         decimal ProfitRatio);
 
     private sealed record HopStep(string TokenIn, string TokenOut, string Exchange, decimal Price);
 
-    private List<ArbPath> FindTopPaths(string startToken, decimal inputUsd, int maxHops, decimal minProfitUsd)
+    private List<ArbPath> FindTopPaths(string startToken, decimal inputAmount, int maxHops, decimal minProfit)
     {
         var candidates = new List<ArbPath>();
 
         // BFS queue: (currentToken, hopsPath, currentAmount, totalGas)
         var queue = new Queue<(string Token, List<HopStep> Hops, decimal Amount, decimal Gas)>();
-        queue.Enqueue((startToken, [], inputUsd, 0m));
+        queue.Enqueue((startToken, [], inputAmount, 0m));
 
         List<GraphEdge>? edges;
         while (queue.Count > 0)
@@ -154,18 +154,18 @@ public sealed class nHOPPathFinderBlock : BlockBase
 
             if (hops.Count > 0 && string.Equals(token, startToken, StringComparison.OrdinalIgnoreCase))
             {
-                // Completed a cycle back to start — evaluate profit
-                var netProfit   = amount - inputUsd - gas;
-                var profitRatio = inputUsd > 0 ? netProfit / inputUsd : 0m;
+                // Completed a cycle back to start — evaluate profit in token units
+                var netProfit   = amount - inputAmount - gas;
+                var profitRatio = inputAmount > 0 ? netProfit / inputAmount : 0m;
 
-                if (netProfit >= minProfitUsd)
+                if (netProfit >= minProfit)
                 {
                     candidates.Add(new ArbPath(
-                        Hops:        hops.AsReadOnly(),
-                        OutputUsd:   amount,
-                        TotalGasUsd: gas,
-                        NetProfit:   netProfit,
-                        ProfitRatio: profitRatio));
+                        Hops:         hops.AsReadOnly(),
+                        OutputAmount: amount,
+                        TotalGasUsd:  gas,
+                        NetProfit:    netProfit,
+                        ProfitRatio:  profitRatio));
                 }
                 continue;
             }

@@ -27,6 +27,18 @@ public sealed class BalancerAdapter : IExchangeAdapter
             .Select(i => TimeSpan.FromSeconds(Math.Min(Math.Pow(2, i), 60)))
             .ToArray();
 
+    // Token symbol → BlockchainAddress enum key for address book lookup
+    private static readonly IReadOnlyDictionary<string, BlockchainAddress> TokenAddressMap =
+        new Dictionary<string, BlockchainAddress>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["WETH"] = BlockchainAddress.WethArbitrum,
+            ["USDC"] = BlockchainAddress.UsdcArbitrum,
+            ["ARB"]  = BlockchainAddress.ArbToken,
+            ["WBTC"] = BlockchainAddress.WbtcArbitrum,
+            ["GMX"]  = BlockchainAddress.GmxToken,
+            ["RDNT"] = BlockchainAddress.RdntToken,
+        };
+
     /// <inheritdoc/>
     public string ExchangeId => "balancer";
 
@@ -165,13 +177,32 @@ public sealed class BalancerAdapter : IExchangeAdapter
 
     private async Task<decimal> FetchBalancerPriceAsync(string baseToken, string quoteToken, CancellationToken ct)
     {
-        // Sanitize token symbols: allow only alphanumeric characters to prevent GraphQL injection
-        var safeBase  = SanitizeTokenSymbol(baseToken);
-        var safeQuote = SanitizeTokenSymbol(quoteToken);
+        // Resolve token addresses from the address book
+        // Balancer subgraph tokensList_contains requires EVM addresses (lowercase), not symbols
+        string baseAddr, quoteAddr;
+        try
+        {
+            if (!TokenAddressMap.TryGetValue(baseToken, out var baseKey) ||
+                !TokenAddressMap.TryGetValue(quoteToken, out var quoteKey))
+                return GetFallbackPrice(baseToken, quoteToken);
+
+            baseAddr  = (await _addressBook.GetAddressAsync(baseKey,  ct).ConfigureAwait(false)).ToLowerInvariant();
+            quoteAddr = (await _addressBook.GetAddressAsync(quoteKey, ct).ConfigureAwait(false)).ToLowerInvariant();
+        }
+        catch (KeyNotFoundException)
+        {
+            _logger.LogDebug("BalancerAdapter: token address not in address book for {Base}/{Quote}, using fallback.",
+                baseToken, quoteToken);
+            return GetFallbackPrice(baseToken, quoteToken);
+        }
+
+        // Sanitize addresses (defensive)
+        var safeBase  = SanitizeAddress(baseAddr);
+        var safeQuote = SanitizeAddress(quoteAddr);
         if (safeBase is null || safeQuote is null)
             return GetFallbackPrice(baseToken, quoteToken);
 
-        // Balancer subgraph on Arbitrum — queries poolTokens for the relevant weighted pool
+        // Balancer subgraph on Arbitrum — tokensList contains lowercase EVM addresses
         var query = $$"""
             { "query": "{ pools(where: { tokensList_contains: [\"{{safeBase}}\", \"{{safeQuote}}\"], poolType: \"Weighted\" }, first: 1, orderBy: totalLiquidity, orderDirection: desc) { tokens { symbol balance weight } } }" }
             """;
@@ -236,16 +267,17 @@ public sealed class BalancerAdapter : IExchangeAdapter
         };
 
     /// <summary>
-    /// Sanitizes a token symbol for safe inclusion in a GraphQL query string.
-    /// Returns <c>null</c> if the symbol contains any non-alphanumeric characters.
+    /// Sanitizes an EVM address for safe inclusion in a GraphQL query string.
+    /// Returns <c>null</c> if the address contains characters outside [0-9a-fx].
     /// </summary>
-    private static string? SanitizeTokenSymbol(string symbol)
+    private static string? SanitizeAddress(string address)
     {
-        if (string.IsNullOrWhiteSpace(symbol)) return null;
-        var clean = symbol.ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(address)) return null;
+        var clean = address.ToLowerInvariant();
+        if (clean.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) clean = clean[2..];
         foreach (var c in clean)
-            if (!char.IsLetterOrDigit(c)) return null;
-        return clean;
+            if (!(c is >= '0' and <= '9' or >= 'a' and <= 'f')) return null;
+        return "0x" + clean;
     }
 
     private static TimeSpan GetBackoff(int attempt)

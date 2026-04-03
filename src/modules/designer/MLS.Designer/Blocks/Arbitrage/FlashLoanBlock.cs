@@ -55,20 +55,22 @@ public sealed class FlashLoanBlock : BlockBase
         if (signal.SocketType != BlockSocketType.ArbitrageOpportunity)
             return new ValueTask<BlockSignal?>(result: null);
 
-        // Extract net profit from the opportunity to validate flash loan is worth it
-        decimal netProfit = 0m;
-        if (signal.Value.ValueKind == JsonValueKind.Object
-            && signal.Value.TryGetProperty("net_profit", out var np)
-            && np.TryGetDecimal(out var nDec))
-        {
-            netProfit = nDec;
-        }
+        // net_profit is expressed in start-token units (e.g. WETH).
+        // flashFee is also in loan-asset token units.
+        // To compare them on a level playing field we require asset_price_usd from the signal
+        // so both can be expressed in USD before gating.
+        if (!TryGetDecimalProperty(signal.Value, "net_profit", out var netProfit))
+            return new ValueTask<BlockSignal?>(result: null);
+
+        if (!TryGetAssetPriceUsd(signal.Value, out var assetPriceUsd) || assetPriceUsd <= 0m)
+            return new ValueTask<BlockSignal?>(result: null);
 
         var loanAmount  = _loanAmountParam.DefaultValue;
         var flashFee    = loanAmount * (_maxFeePctParam.DefaultValue / 100m);
+        var flashFeeUsd = flashFee * assetPriceUsd;
 
-        // Only initiate if net profit covers the flash loan fee
-        if (netProfit <= flashFee)
+        // Only initiate if net profit in USD covers the flash loan fee in USD
+        if (netProfit <= flashFeeUsd)
             return new ValueTask<BlockSignal?>(result: null);
 
         var flashLoanSignal = new
@@ -83,5 +85,21 @@ public sealed class FlashLoanBlock : BlockBase
 
         return new ValueTask<BlockSignal?>(
             EmitObject(BlockId, "flash_loan_signal", BlockSocketType.DeFiSignal, flashLoanSignal));
+    }
+
+    private static bool TryGetDecimalProperty(JsonElement element, string key, out decimal value)
+    {
+        value = 0m;
+        return element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(key, out var prop)
+            && prop.TryGetDecimal(out value);
+    }
+
+    private static bool TryGetAssetPriceUsd(JsonElement element, out decimal assetPriceUsd)
+    {
+        assetPriceUsd = 0m;
+        return TryGetDecimalProperty(element, "asset_price_usd",      out assetPriceUsd)
+            || TryGetDecimalProperty(element, "loan_asset_price_usd", out assetPriceUsd)
+            || TryGetDecimalProperty(element, "price_usd",            out assetPriceUsd);
     }
 }

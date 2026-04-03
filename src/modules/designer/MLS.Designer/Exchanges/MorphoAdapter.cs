@@ -174,9 +174,15 @@ public sealed class MorphoAdapter : IExchangeAdapter
     private async Task<decimal> FetchMorphoOraclePriceAsync(
         string baseToken, string quoteToken, CancellationToken ct)
     {
-        // Query Morpho Blue subgraph for oracle rate
+        // Sanitize token symbols
+        var safeBase  = new string(baseToken.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+        var safeQuote = new string(quoteToken.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+        if (string.IsNullOrEmpty(safeBase) || string.IsNullOrEmpty(safeQuote))
+            return GetFallbackPrice(baseToken, quoteToken);
+
+        // Query Morpho Blue API for oracle/market price data
         var query = $$"""
-            { "query": "{ markets(where: { loanAsset_: { symbol: \"{{quoteToken.ToUpperInvariant()}}\" }, collateralAsset_: { symbol: \"{{baseToken.ToUpperInvariant()}}\" } }, first: 1) { lltv currentSupplyApy currentBorrowApy } }" }
+            { "query": "{ markets(where: { loanAsset_: { symbol: \"{{safeQuote}}\" }, collateralAsset_: { symbol: \"{{safeBase}}\" } }, first: 1, orderBy: totalSupplyUsd, orderDirection: desc) { collateralPrice currentSupplyApy currentBorrowApy lltv } }" }
             """;
 
         using var content = new StringContent(query, Encoding.UTF8, "application/json");
@@ -186,13 +192,39 @@ public sealed class MorphoAdapter : IExchangeAdapter
                 "https://blue-api.morpho.org/graphql",
                 content, ct).ConfigureAwait(false);
 
-            // If subgraph is unavailable, fall back to static prices
             if (!response.IsSuccessStatusCode)
                 return GetFallbackPrice(baseToken, quoteToken);
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+            if (doc.RootElement.TryGetProperty("data", out var data)
+                && data.TryGetProperty("markets", out var markets)
+                && markets.GetArrayLength() > 0)
+            {
+                var market = markets[0];
+
+                // collateralPrice: price of collateral in loan-asset units (scaled 1e36 oracle format)
+                if (market.TryGetProperty("collateralPrice", out var cpEl))
+                {
+                    if (cpEl.TryGetDecimal(out var cp) && cp > 0)
+                    {
+                        // Morpho oracle price is 1e36-scaled.
+                        // decimal max ≈ 7.9e28, so divide in two steps to avoid overflow.
+                        return cp / 1_000_000_000_000_000_000m  // ÷ 1e18
+                                  / 1_000_000_000_000_000_000m; // ÷ 1e18  → total ÷ 1e36
+                    }
+
+                    // Some API versions return collateralPrice as a human-readable string
+                    var cpStr = cpEl.GetString();
+                    if (!string.IsNullOrEmpty(cpStr) && decimal.TryParse(cpStr, out var cpParsed) && cpParsed > 0)
+                        return cpParsed;
+                }
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "MorphoAdapter: subgraph query failed, using fallback.");
+            _logger.LogDebug(ex, "MorphoAdapter: API query failed for {Base}/{Quote}, using fallback.", baseToken, quoteToken);
         }
 
         return GetFallbackPrice(baseToken, quoteToken);

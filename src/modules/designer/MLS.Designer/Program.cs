@@ -7,8 +7,11 @@ using MLS.Designer.Blocks.Trading.MLBlocks;
 using MLS.Designer.Blocks.Trading.RiskBlocks;
 using MLS.Designer.Blocks.Trading.StrategyBlocks;
 using MLS.Designer.Configuration;
+using MLS.Designer.Exchanges;
 using MLS.Designer.Hubs;
 using MLS.Designer.Services;
+using MLS.Core.Designer;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +28,37 @@ builder.Services
         client.BaseAddress = new Uri(designerOpts.BlockControllerUrl);
         client.Timeout     = TimeSpan.FromSeconds(10);
     });
+
+// ── Exchange adapter HTTP clients ─────────────────────────────────────────────
+builder.Services.AddHttpClient<HyperliquidAdapter>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(15));
+
+builder.Services.AddHttpClient<CamelotAdapter>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
+
+builder.Services.AddHttpClient<DFYNAdapter>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
+
+builder.Services.AddHttpClient<BalancerAdapter>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
+
+builder.Services.AddHttpClient<MorphoAdapter>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
+
+// ── PostgreSQL data source (owned by DI — adapters/registry must NOT dispose it) ──
+var pgConnStr = designerOpts.PostgresConnectionString;
+builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(pgConnStr));
+
+// ── Blockchain address book ───────────────────────────────────────────────────
+builder.Services.AddSingleton<IBlockchainAddressBook, ExchangeRegistry>();
+builder.Services.AddHostedService<ExchangeRegistryStartupService>();
+
+// ── Exchange adapters (singleton — share the HTTP client factory cache) ───────
+builder.Services.AddSingleton<HyperliquidAdapter>();
+builder.Services.AddSingleton<CamelotAdapter>();
+builder.Services.AddSingleton<DFYNAdapter>();
+builder.Services.AddSingleton<BalancerAdapter>();
+builder.Services.AddSingleton<MorphoAdapter>();
 
 // ── Services ──────────────────────────────────────────────────────────────────
 builder.Services.AddControllers()

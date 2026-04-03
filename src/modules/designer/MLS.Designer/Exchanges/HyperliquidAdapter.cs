@@ -146,7 +146,9 @@ public sealed class HyperliquidAdapter : IExchangeAdapter
             await ws.SendAsync(sub, WebSocketMessageType.Text, endOfMessage: true, ct)
                     .ConfigureAwait(false);
 
+            // Use a MemoryStream to accumulate fragmented frames before parsing
             var buffer = new byte[65536];
+            using var frameBuffer = new MemoryStream(65536);
 
             while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
@@ -163,7 +165,16 @@ public sealed class HyperliquidAdapter : IExchangeAdapter
 
                 if (result.MessageType == WebSocketMessageType.Close) break;
 
-                var update = ParseL2Update(buffer.AsMemory(0, result.Count), symbol);
+                // Accumulate frame data
+                frameBuffer.Write(buffer, 0, result.Count);
+
+                if (!result.EndOfMessage) continue;
+
+                // Full message received — parse and reset buffer
+                var update = ParseL2Update(frameBuffer.GetBuffer().AsMemory(0, (int)frameBuffer.Position), symbol);
+                frameBuffer.SetLength(0);
+                frameBuffer.Position = 0;
+
                 if (update is not null)
                     yield return update;
             }
