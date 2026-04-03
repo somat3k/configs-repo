@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using MLS.BlockController.Hubs;
@@ -20,9 +20,9 @@ public sealed class InMemoryMessageRouter : IMessageRouter, IAsyncDisposable
     private readonly Channel<EnvelopePayload> _broadcastChannel =
         Channel.CreateBounded<EnvelopePayload>(new BoundedChannelOptions(1024)
         {
-            FullMode        = BoundedChannelFullMode.DropOldest,
-            SingleReader    = true,
-            SingleWriter    = false,
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = true,
+            SingleWriter = false,
             AllowSynchronousContinuations = false,
         });
 
@@ -36,8 +36,8 @@ public sealed class InMemoryMessageRouter : IMessageRouter, IAsyncDisposable
         ILogger<InMemoryMessageRouter> logger)
     {
         _subscriptions = subscriptions;
-        _hub           = hub;
-        _logger        = logger;
+        _hub = hub;
+        _logger = logger;
         _broadcastWorker = Task.Run(BroadcastWorkerAsync);
     }
 
@@ -84,7 +84,9 @@ public sealed class InMemoryMessageRouter : IMessageRouter, IAsyncDisposable
     public Task BroadcastAsync(EnvelopePayload envelope, CancellationToken ct = default)
     {
         if (!_broadcastChannel.Writer.TryWrite(envelope))
+        {
             _logger.LogWarning("Broadcast channel full — oldest envelope dropped");
+        }
 
         return Task.CompletedTask;
     }

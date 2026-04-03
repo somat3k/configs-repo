@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using MLS.Core.Designer;
 using Xunit;
 
@@ -46,7 +46,7 @@ public sealed class BlockConnectionValidatorTests
     public void Validate_MatchingTypes_DoesNotThrow(BlockSocketType type)
     {
         var from = Output(type);
-        var to   = Input(type);
+        var to = Input(type);
 
         var act = () => BlockConnectionValidator.Validate(from, to);
 
@@ -59,7 +59,7 @@ public sealed class BlockConnectionValidatorTests
     public void Validate_CandleStreamToIndicatorValueInput_ThrowsInvalidBlockConnectionException()
     {
         var from = Output(BlockSocketType.CandleStream);
-        var to   = Input(BlockSocketType.IndicatorValue);
+        var to = Input(BlockSocketType.IndicatorValue);
 
         var act = () => BlockConnectionValidator.Validate(from, to);
 
@@ -72,7 +72,7 @@ public sealed class BlockConnectionValidatorTests
     public void Validate_MLSignalToTradeOrderInput_ThrowsInvalidBlockConnectionException()
     {
         var from = Output(BlockSocketType.MLSignal);
-        var to   = Input(BlockSocketType.TradeOrder);
+        var to = Input(BlockSocketType.TradeOrder);
 
         var act = () => BlockConnectionValidator.Validate(from, to);
 
@@ -85,7 +85,7 @@ public sealed class BlockConnectionValidatorTests
     public void Validate_Exception_ExposesFromAndToTypes()
     {
         var from = Output(BlockSocketType.IndicatorValue);
-        var to   = Input(BlockSocketType.CandleStream);
+        var to = Input(BlockSocketType.CandleStream);
 
         var act = () => BlockConnectionValidator.Validate(from, to);
 
@@ -104,7 +104,7 @@ public sealed class BlockConnectionValidatorTests
     public void Validate_InputToInput_ThrowsInvalidBlockConnectionException()
     {
         var from = Input(BlockSocketType.CandleStream);
-        var to   = Input(BlockSocketType.CandleStream);
+        var to = Input(BlockSocketType.CandleStream);
 
         var act = () => BlockConnectionValidator.Validate(from, to);
 
@@ -117,7 +117,7 @@ public sealed class BlockConnectionValidatorTests
     public void Validate_OutputToOutput_ThrowsInvalidBlockConnectionException()
     {
         var from = Output(BlockSocketType.CandleStream);
-        var to   = Output(BlockSocketType.CandleStream);
+        var to = Output(BlockSocketType.CandleStream);
 
         var act = () => BlockConnectionValidator.Validate(from, to);
 
@@ -136,7 +136,7 @@ public sealed class BlockConnectionValidatorTests
         foreach (var type in allTypes)
         {
             var from = Output(type);
-            var to   = Input(type);
+            var to = Input(type);
 
             var act = () => BlockConnectionValidator.Validate(from, to);
 

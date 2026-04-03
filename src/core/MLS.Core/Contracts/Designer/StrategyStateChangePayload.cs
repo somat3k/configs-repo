@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -11,7 +11,7 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="CurrentState">State after the transition.</param>
 /// <param name="Timestamp">UTC time of the state change.</param>
 public sealed record StrategyStateChangePayload(
-    [property: JsonPropertyName("strategy_id")]    Guid StrategyId,
+    [property: JsonPropertyName("strategy_id")] Guid StrategyId,
     [property: JsonPropertyName("previous_state")] string PreviousState,
-    [property: JsonPropertyName("current_state")]  string CurrentState,
-    [property: JsonPropertyName("timestamp")]      DateTimeOffset Timestamp);
+    [property: JsonPropertyName("current_state")] string CurrentState,
+    [property: JsonPropertyName("timestamp")] DateTimeOffset Timestamp);

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
@@ -13,8 +13,8 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="IncludeCanvasContext">When <see langword="true"/>, current MDI layout is included in context.</param>
 /// <param name="ConversationHistory">Prior turns for multi-turn conversations.</param>
 public sealed record AiQueryPayload(
-    [property: JsonPropertyName("query")]                  string Query,
-    [property: JsonPropertyName("provider_override")]      string? ProviderOverride,
-    [property: JsonPropertyName("model_override")]         string? ModelOverride,
+    [property: JsonPropertyName("query")] string Query,
+    [property: JsonPropertyName("provider_override")] string? ProviderOverride,
+    [property: JsonPropertyName("model_override")] string? ModelOverride,
     [property: JsonPropertyName("include_canvas_context")] bool IncludeCanvasContext,
-    [property: JsonPropertyName("conversation_history")]   IReadOnlyList<JsonElement> ConversationHistory);
+    [property: JsonPropertyName("conversation_history")] IReadOnlyList<JsonElement> ConversationHistory);

@@ -1,4 +1,4 @@
-using MLS.Core.Contracts.Designer;
+﻿using MLS.Core.Contracts.Designer;
 
 namespace MLS.BlockController.Services;
 
@@ -13,17 +13,17 @@ public interface IStrategyRouter
     /// Deploy a strategy graph: validate, clear previous subscriptions, register
     /// new topic routes, and broadcast <c>STRATEGY_STATE_CHANGE(Running)</c>.
     /// </summary>
-    Task DeployAsync(StrategyGraphPayload graph, CancellationToken ct = default);
+    public Task DeployAsync(StrategyGraphPayload graph, CancellationToken ct = default);
 
     /// <summary>
     /// Stop a running strategy: clear its subscriptions and broadcast
     /// <c>STRATEGY_STATE_CHANGE(Stopped)</c>.
     /// </summary>
-    Task StopAsync(Guid strategyId, CancellationToken ct = default);
+    public Task StopAsync(Guid strategyId, CancellationToken ct = default);
 
     /// <summary>
     /// Begin backtest mode for a strategy: broadcast
     /// <c>STRATEGY_STATE_CHANGE(Backtesting)</c>.
     /// </summary>
-    Task BacktestAsync(Guid strategyId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default);
+    public Task BacktestAsync(Guid strategyId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default);
 }

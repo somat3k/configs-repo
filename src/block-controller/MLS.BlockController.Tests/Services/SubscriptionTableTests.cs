@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using MLS.BlockController.Services;
 using Xunit;
 
@@ -17,7 +17,7 @@ public sealed class SubscriptionTableTests
     [Fact]
     public async Task Add_ThenGet_ReturnsSubscriber()
     {
-        var topic    = "BLOCK_SIGNAL";
+        var topic = "BLOCK_SIGNAL";
         var moduleId = Guid.NewGuid();
 
         await _table.AddAsync(topic, moduleId);
@@ -29,8 +29,8 @@ public sealed class SubscriptionTableTests
     public async Task Add_MultipleModules_AllReturned()
     {
         var topic = "TRADE_SIGNAL";
-        var m1    = Guid.NewGuid();
-        var m2    = Guid.NewGuid();
+        var m1 = Guid.NewGuid();
+        var m2 = Guid.NewGuid();
 
         await _table.AddAsync(topic, m1);
         await _table.AddAsync(topic, m2);
@@ -41,7 +41,7 @@ public sealed class SubscriptionTableTests
     [Fact]
     public async Task Add_SameModuleTwice_NoDuplicates()
     {
-        var topic    = "BLOCK_SIGNAL";
+        var topic = "BLOCK_SIGNAL";
         var moduleId = Guid.NewGuid();
 
         await _table.AddAsync(topic, moduleId);
@@ -55,7 +55,7 @@ public sealed class SubscriptionTableTests
     [Fact]
     public async Task Remove_ExistingSubscriber_RemovesIt()
     {
-        var topic    = "TRADE_SIGNAL";
+        var topic = "TRADE_SIGNAL";
         var moduleId = Guid.NewGuid();
 
         await _table.AddAsync(topic, moduleId);
@@ -100,14 +100,14 @@ public sealed class SubscriptionTableTests
     public async Task ClearStrategy_RemovesOnlyStrategyTopics()
     {
         var strategyId = Guid.NewGuid();
-        var otherId    = Guid.NewGuid();
-        var moduleId   = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var moduleId = Guid.NewGuid();
 
         var strategyTopic = StrategyRouter.BuildTopic(strategyId, Guid.NewGuid(), "candle_output");
-        var otherTopic    = StrategyRouter.BuildTopic(otherId,    Guid.NewGuid(), "candle_output");
+        var otherTopic = StrategyRouter.BuildTopic(otherId, Guid.NewGuid(), "candle_output");
 
         await _table.AddAsync(strategyTopic, moduleId);
-        await _table.AddAsync(otherTopic,    moduleId);
+        await _table.AddAsync(otherTopic, moduleId);
 
         await _table.ClearStrategyAsync(strategyId);
 
@@ -120,7 +120,7 @@ public sealed class SubscriptionTableTests
     [Fact]
     public async Task GetSnapshot_ReflectsCurrentState()
     {
-        var topic    = "SNAP_TEST";
+        var topic = "SNAP_TEST";
         var moduleId = Guid.NewGuid();
 
         await _table.AddAsync(topic, moduleId);
@@ -136,7 +136,7 @@ public sealed class SubscriptionTableTests
     [Fact]
     public async Task ConcurrentAdds_NoDuplicatesOrExceptions()
     {
-        var topic   = "CONCURRENT";
+        var topic = "CONCURRENT";
         var modules = Enumerable.Range(0, 100).Select(_ => Guid.NewGuid()).ToList();
 
         await Task.WhenAll(modules.Select(m => _table.AddAsync(topic, m).AsTask()));

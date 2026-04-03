@@ -1,4 +1,4 @@
-namespace MLS.BlockController.Services;
+﻿namespace MLS.BlockController.Services;
 
 /// <summary>
 /// Thread-safe, O(1) topic-to-subscriber mapping used by the message router
@@ -12,26 +12,26 @@ namespace MLS.BlockController.Services;
 public interface ISubscriptionTable
 {
     /// <summary>Register <paramref name="moduleId"/> as a subscriber to <paramref name="topic"/>.</summary>
-    ValueTask AddAsync(string topic, Guid moduleId, CancellationToken ct = default);
+    public ValueTask AddAsync(string topic, Guid moduleId, CancellationToken ct = default);
 
     /// <summary>Remove <paramref name="moduleId"/> from <paramref name="topic"/>.</summary>
-    ValueTask RemoveAsync(string topic, Guid moduleId, CancellationToken ct = default);
+    public ValueTask RemoveAsync(string topic, Guid moduleId, CancellationToken ct = default);
 
     /// <summary>Remove all subscriptions for <paramref name="moduleId"/> across all topics.</summary>
-    ValueTask RemoveAllAsync(Guid moduleId, CancellationToken ct = default);
+    public ValueTask RemoveAllAsync(Guid moduleId, CancellationToken ct = default);
 
     /// <summary>
     /// Remove all subscriptions associated with <paramref name="strategyId"/>
     /// (topics prefixed with the strategy ID).
     /// </summary>
-    ValueTask ClearStrategyAsync(Guid strategyId, CancellationToken ct = default);
+    public ValueTask ClearStrategyAsync(Guid strategyId, CancellationToken ct = default);
 
     /// <summary>
     /// Return the set of module IDs subscribed to <paramref name="topic"/>.
     /// Returns an empty set when no subscribers exist. Never throws.
     /// </summary>
-    IReadOnlySet<Guid> GetSubscribers(string topic);
+    public IReadOnlySet<Guid> GetSubscribers(string topic);
 
     /// <summary>Return a snapshot of all current subscriptions (topic → subscriber IDs).</summary>
-    IReadOnlyDictionary<string, IReadOnlySet<Guid>> GetSnapshot();
+    public IReadOnlyDictionary<string, IReadOnlySet<Guid>> GetSnapshot();
 }

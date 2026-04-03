@@ -1,4 +1,4 @@
-namespace MLS.Core.Designer;
+﻿namespace MLS.Core.Designer;
 
 /// <summary>Direction of a block socket — input receives data, output emits data.</summary>
 public enum SocketDirection

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 
@@ -29,7 +29,10 @@ public sealed class SubscriptionTable : ISubscriptionTable
     public ValueTask RemoveAsync(string topic, Guid moduleId, CancellationToken ct = default)
     {
         if (_table.TryGetValue(topic, out var box))
+        {
             ImmutableInterlocked.Update(ref box.Value!, static (existing, id) => existing.Remove(id), moduleId);
+        }
+
         return ValueTask.CompletedTask;
     }
 
@@ -37,7 +40,10 @@ public sealed class SubscriptionTable : ISubscriptionTable
     public ValueTask RemoveAllAsync(Guid moduleId, CancellationToken ct = default)
     {
         foreach (var box in _table.Values)
+        {
             ImmutableInterlocked.Update(ref box.Value!, static (existing, id) => existing.Remove(id), moduleId);
+        }
+
         return ValueTask.CompletedTask;
     }
 
@@ -48,7 +54,9 @@ public sealed class SubscriptionTable : ISubscriptionTable
         foreach (var key in _table.Keys)
         {
             if (key.StartsWith(prefix, StringComparison.Ordinal))
+            {
                 _table.TryRemove(key, out _);
+            }
         }
         return ValueTask.CompletedTask;
     }

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
@@ -14,9 +14,9 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="Value">The serialised signal value.</param>
 /// <param name="Timestamp">UTC signal creation time.</param>
 public sealed record BlockSignalPayload(
-    [property: JsonPropertyName("block_id")]     Guid BlockId,
-    [property: JsonPropertyName("strategy_id")]  Guid StrategyId,
-    [property: JsonPropertyName("socket_name")]  string SocketName,
-    [property: JsonPropertyName("socket_type")]  string SocketType,
-    [property: JsonPropertyName("value")]        JsonElement Value,
-    [property: JsonPropertyName("timestamp")]    DateTimeOffset Timestamp);
+    [property: JsonPropertyName("block_id")] Guid BlockId,
+    [property: JsonPropertyName("strategy_id")] Guid StrategyId,
+    [property: JsonPropertyName("socket_name")] string SocketName,
+    [property: JsonPropertyName("socket_type")] string SocketType,
+    [property: JsonPropertyName("value")] JsonElement Value,
+    [property: JsonPropertyName("timestamp")] DateTimeOffset Timestamp);

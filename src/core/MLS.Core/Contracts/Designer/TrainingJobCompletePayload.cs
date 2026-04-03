@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
@@ -16,11 +16,11 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="Metrics">Final training metrics (JSON object: f1_macro, accuracy, val_sharpe, …).</param>
 /// <param name="DurationMs">Total training wall-clock duration in milliseconds.</param>
 public sealed record TrainingJobCompletePayload(
-    [property: JsonPropertyName("job_id")]      Guid JobId,
-    [property: JsonPropertyName("model_type")]  string ModelType,
-    [property: JsonPropertyName("model_id")]    string ModelId,
-    [property: JsonPropertyName("onnx_path")]   string OnnxPath,
+    [property: JsonPropertyName("job_id")] Guid JobId,
+    [property: JsonPropertyName("model_type")] string ModelType,
+    [property: JsonPropertyName("model_id")] string ModelId,
+    [property: JsonPropertyName("onnx_path")] string OnnxPath,
     [property: JsonPropertyName("joblib_path")] string JoblibPath,
-    [property: JsonPropertyName("ipfs_cid")]    string IpfsCid,
-    [property: JsonPropertyName("metrics")]     JsonElement Metrics,
+    [property: JsonPropertyName("ipfs_cid")] string IpfsCid,
+    [property: JsonPropertyName("metrics")] JsonElement Metrics,
     [property: JsonPropertyName("duration_ms")] long DurationMs);
