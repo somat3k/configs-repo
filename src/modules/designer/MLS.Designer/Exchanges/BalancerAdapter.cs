@@ -165,9 +165,15 @@ public sealed class BalancerAdapter : IExchangeAdapter
 
     private async Task<decimal> FetchBalancerPriceAsync(string baseToken, string quoteToken, CancellationToken ct)
     {
+        // Sanitize token symbols: allow only alphanumeric characters to prevent GraphQL injection
+        var safeBase  = SanitizeTokenSymbol(baseToken);
+        var safeQuote = SanitizeTokenSymbol(quoteToken);
+        if (safeBase is null || safeQuote is null)
+            return GetFallbackPrice(baseToken, quoteToken);
+
         // Balancer subgraph on Arbitrum — queries poolTokens for the relevant weighted pool
         var query = $$"""
-            { "query": "{ pools(where: { tokensList_contains: [\"{{baseToken.ToLowerInvariant()}}\", \"{{quoteToken.ToLowerInvariant()}}\"], poolType: \"Weighted\" }, first: 1, orderBy: totalLiquidity, orderDirection: desc) { tokens { symbol balance weight } } }" }
+            { "query": "{ pools(where: { tokensList_contains: [\"{{safeBase}}\", \"{{safeQuote}}\"], poolType: \"Weighted\" }, first: 1, orderBy: totalLiquidity, orderDirection: desc) { tokens { symbol balance weight } } }" }
             """;
 
         using var content = new StringContent(query, Encoding.UTF8, "application/json");
@@ -228,6 +234,19 @@ public sealed class BalancerAdapter : IExchangeAdapter
             ("WBTC", "USDC") => 60050m,
             _                => 1m
         };
+
+    /// <summary>
+    /// Sanitizes a token symbol for safe inclusion in a GraphQL query string.
+    /// Returns <c>null</c> if the symbol contains any non-alphanumeric characters.
+    /// </summary>
+    private static string? SanitizeTokenSymbol(string symbol)
+    {
+        if (string.IsNullOrWhiteSpace(symbol)) return null;
+        var clean = symbol.ToLowerInvariant();
+        foreach (var c in clean)
+            if (!char.IsLetterOrDigit(c)) return null;
+        return clean;
+    }
 
     private static TimeSpan GetBackoff(int attempt)
     {

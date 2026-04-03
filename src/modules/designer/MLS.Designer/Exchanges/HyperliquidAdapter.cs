@@ -68,7 +68,9 @@ public sealed class HyperliquidAdapter : IExchangeAdapter
         using var doc  = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
 
         // Hyperliquid allMids returns: { "COIN": "65000.0", ... }
-        var coin  = baseToken.Replace("W", "", StringComparison.OrdinalIgnoreCase).ToUpperInvariant();
+        // Strip only the leading 'W' prefix (e.g. WETH → ETH, WBTC → BTC)
+        var upper = baseToken.ToUpperInvariant();
+        var coin  = upper.Length > 1 && upper[0] == 'W' ? upper[1..] : upper;
         decimal price = 0m;
 
         if (doc.RootElement.TryGetProperty(coin, out var midProp)

@@ -59,6 +59,7 @@ public sealed class ExchangeRegistry : IBlockchainAddressBook, IAsyncDisposable
         await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = "SELECT address_key, address FROM blockchain_addresses WHERE chain_id = 42161";
+        // chain_id 42161 = Arbitrum One — the only chain supported by this platform instance
 
         await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))

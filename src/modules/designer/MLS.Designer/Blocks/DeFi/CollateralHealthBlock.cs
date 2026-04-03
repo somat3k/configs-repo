@@ -34,9 +34,13 @@ public sealed class CollateralHealthBlock : BlockBase
     public override string BlockType   => "CollateralHealthBlock";
     /// <inheritdoc/>
     public override string DisplayName => "Collateral Health";
+    private readonly BlockParameter<decimal> _lltvParam =
+        new("Lltv", "LLTV", "Morpho market liquidation loan-to-value ratio (e.g. 0.86 for WETH/USDC)", 0.86m,
+            MinValue: 0.50m, MaxValue: 0.99m, IsOptimizable: false);
+
     /// <inheritdoc/>
     public override IReadOnlyList<BlockParameter> Parameters =>
-        [_alertThresholdParam, _criticalThresholdParam, _protocolParam, _collateralAssetParam, _borrowAssetParam];
+        [_alertThresholdParam, _criticalThresholdParam, _protocolParam, _collateralAssetParam, _borrowAssetParam, _lltvParam];
 
     /// <summary>Initialises a new <see cref="CollateralHealthBlock"/>.</summary>
     public CollateralHealthBlock() : base(
@@ -77,7 +81,7 @@ public sealed class CollateralHealthBlock : BlockBase
             EmitObject(BlockId, "health_update", BlockSocketType.HealthFactorUpdate, healthUpdate));
     }
 
-    private static bool TryExtractHealthFactor(JsonElement value, out decimal hf)
+    private bool TryExtractHealthFactor(JsonElement value, out decimal hf)
     {
         hf = 0m;
         if (value.ValueKind != JsonValueKind.Object) return false;
@@ -95,7 +99,7 @@ public sealed class CollateralHealthBlock : BlockBase
             && debtEl.TryGetDecimal(out var debt)
             && debt > 0)
         {
-            var lltvFactor = 0.86m; // typical Morpho LLTV for WETH/USDC
+            var lltvFactor = _lltvParam.DefaultValue; // configurable per market (e.g. 0.86 for WETH/USDC)
             hf = coll * lltvFactor / debt;
             return true;
         }

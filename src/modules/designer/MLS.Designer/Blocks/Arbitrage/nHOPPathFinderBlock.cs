@@ -205,7 +205,7 @@ public sealed class nHOPPathFinderBlock : BlockBase
 
     private static bool TryParseEdge(JsonElement value, out GraphEdge edge)
     {
-        edge = null!;
+        edge = default!;
         if (value.ValueKind != JsonValueKind.Object) return false;
 
         var exchange = GetString(value, "exchange");
