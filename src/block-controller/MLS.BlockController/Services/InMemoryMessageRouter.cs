@@ -96,7 +96,12 @@ public sealed class InMemoryMessageRouter : IMessageRouter, IAsyncDisposable
         {
             try
             {
-                await _hub.Clients.All.SendAsync("ReceiveEnvelope", envelope, _cts.Token)
+                // Route to the broadcast group — only clients that have joined the hub
+                // (via OnConnectedAsync) will receive this. Anonymous connections and all
+                // registered modules are automatically in this group.
+                await _hub.Clients
+                    .Group(BlockControllerHub.BroadcastGroup)
+                    .SendAsync("ReceiveEnvelope", envelope, _cts.Token)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) { break; }

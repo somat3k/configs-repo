@@ -144,3 +144,16 @@ When generating code, apply the relevant skill from `.skills/`:
 - `BenchmarkDotNet` test REQUIRED for any method on the envelope routing or indicator computation hot path
 - GC mode: Server GC for all backend services (`"System.GC.Server": true` in runtimeconfig)
 - Python training: `torch.compile(mode="max-autotune")` + AMP bf16 + `DataLoader(num_workers=4, pin_memory=True)`
+
+## Block Controller Standalone Node Rules
+
+> Reference: `.skills/websockets-inferences.md` · `.skills/networking.md` · `src/block-controller/docs/sessions/SESSION-3.md`
+
+- Block Controller hub endpoint: `ws://block-controller:6100/hubs/block-controller`
+- Module connections MUST use query param `?moduleId=<guid>` — joined to their own group on connect
+- External client connections use `?clientId=<guid>` — same bidirectional protocol
+- ALL connections automatically join the `broadcast` group (platform-wide events)
+- Dynamic topic subscription: `SubscribeToTopicAsync(topic)` / `UnsubscribeFromTopicAsync(topic)`
+- Hub methods: `SendEnvelope` (client → hub), `ReceiveEnvelope` (hub → client)
+- `IMessageRouter.BroadcastAsync` sends to `Group("broadcast")` — NOT `Clients.All`
+- Block Controller MUST start and accept connections with NO other modules running
