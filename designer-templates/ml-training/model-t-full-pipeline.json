@@ -1,0 +1,75 @@
+{
+  "graph_id": "00000000-0004-0000-0000-000000000001",
+  "name": "model-t Full Training Pipeline",
+  "description": "Complete model-t training pipeline: load features → engineer → split → train (50 epochs) → validate → export ONNX to IPFS + model registry",
+  "domain": "MLTraining",
+  "schema_version": 1,
+  "blocks": [
+    {
+      "block_id": "d0000001-0000-0000-0000-000000000001",
+      "block_type": "DataLoaderBlock",
+      "position": { "x": 50, "y": 200 },
+      "parameters": {
+        "exchange": "hyperliquid",
+        "symbol": "BTC-PERP",
+        "timeframe": "5m",
+        "model_type": "model-t",
+        "from_date": "2024-01-01",
+        "to_date": "2026-01-01"
+      }
+    },
+    {
+      "block_id": "d0000002-0000-0000-0000-000000000001",
+      "block_type": "FeatureEngineerBlock",
+      "position": { "x": 280, "y": 200 },
+      "parameters": {
+        "features": ["rsi_14", "macd_signal", "bb_position", "volume_delta", "momentum_20", "atr_14", "spread_bps", "vwap_distance"],
+        "normalise": "z_score"
+      }
+    },
+    {
+      "block_id": "d0000003-0000-0000-0000-000000000001",
+      "block_type": "TrainSplitBlock",
+      "position": { "x": 510, "y": 200 },
+      "parameters": { "train_ratio": 0.8, "val_ratio": 0.1, "test_ratio": 0.1, "stratified": true }
+    },
+    {
+      "block_id": "d0000004-0000-0000-0000-000000000001",
+      "block_type": "TrainModelBlock",
+      "position": { "x": 740, "y": 200 },
+      "parameters": {
+        "model_type": "model-t",
+        "epochs": 50,
+        "batch_size": 256,
+        "learning_rate": 0.001,
+        "hidden_dims": [128, 64, 32],
+        "dropout_rate": 0.2,
+        "use_amp": true,
+        "num_workers": 4
+      }
+    },
+    {
+      "block_id": "d0000005-0000-0000-0000-000000000001",
+      "block_type": "ValidateModelBlock",
+      "position": { "x": 970, "y": 200 },
+      "parameters": { "min_f1_macro": 0.80, "min_sharpe": 1.5 }
+    },
+    {
+      "block_id": "d0000006-0000-0000-0000-000000000001",
+      "block_type": "ExportONNXBlock",
+      "position": { "x": 1200, "y": 200 },
+      "parameters": {
+        "upload_to_ipfs": true,
+        "register_in_model_registry": true,
+        "promote_to_production": false
+      }
+    }
+  ],
+  "connections": [
+    { "connection_id": "c001", "from_block_id": "d0000001-0000-0000-0000-000000000001", "from_socket": "feature_output", "to_block_id": "d0000002-0000-0000-0000-000000000001", "to_socket": "feature_input" },
+    { "connection_id": "c002", "from_block_id": "d0000002-0000-0000-0000-000000000001", "from_socket": "feature_output", "to_block_id": "d0000003-0000-0000-0000-000000000001", "to_socket": "feature_input" },
+    { "connection_id": "c003", "from_block_id": "d0000003-0000-0000-0000-000000000001", "from_socket": "split_output", "to_block_id": "d0000004-0000-0000-0000-000000000001", "to_socket": "data_input" },
+    { "connection_id": "c004", "from_block_id": "d0000004-0000-0000-0000-000000000001", "from_socket": "training_output", "to_block_id": "d0000005-0000-0000-0000-000000000001", "to_socket": "metrics_input" },
+    { "connection_id": "c005", "from_block_id": "d0000005-0000-0000-0000-000000000001", "from_socket": "validated_output", "to_block_id": "d0000006-0000-0000-0000-000000000001", "to_socket": "model_input" }
+  ]
+}
