@@ -385,6 +385,10 @@ def train_loop(
                     correct   = (pred == y_batch).float().unsqueeze(-1)
                     conf_loss = F.binary_cross_entropy(conf, correct)
                     loss      = cls_loss + 0.1 * conf_loss
+                elif isinstance(model, ModelA):
+                    # ModelA returns a sigmoid scalar ∈ [0, 1]; labels must be binary {0, 1}
+                    out  = model(X_batch).squeeze(-1)
+                    loss = F.binary_cross_entropy(out, y_batch.float())
                 elif isinstance(model, ModelD):
                     # ModelD expects (seq, static) — for simplicity split features
                     seq    = X_batch[:, : ModelD._SEQ_LEN * ModelD._SEQ_DIM].reshape(-1, ModelD._SEQ_LEN, ModelD._SEQ_DIM)
@@ -655,6 +659,11 @@ def run(cfg: TrainingConfig) -> None:
 
     _emit_info(cfg.job_id, f"Loading dataset for {cfg.model_type!r}")
     X, y = load_dataset(cfg)
+
+    # model-a uses BCE which requires binary labels in {0, 1}.
+    # Clamp any out-of-range labels that may arrive from the database.
+    if cfg.model_type == "model-a":
+        y = np.clip(y, 0, 1).astype(np.int64)
 
     X_tr, y_tr, X_val, y_val, X_tst, y_tst = train_val_test_split(X, y)
     _emit_info(
