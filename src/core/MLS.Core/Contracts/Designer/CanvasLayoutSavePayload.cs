@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MLS.Core.Contracts.Designer;
 
 /// <summary>
@@ -7,8 +9,8 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="UserId">User whose layout is being saved.</param>
 /// <param name="Layout">Ordered list of MDI window states.</param>
 public sealed record CanvasLayoutSavePayload(
-    Guid UserId,
-    IReadOnlyList<MdiWindowState> Layout);
+    [property: JsonPropertyName("user_id")] Guid UserId,
+    [property: JsonPropertyName("layout")]  IReadOnlyList<MdiWindowState> Layout);
 
 /// <summary>State snapshot of a single MDI window on the canvas.</summary>
 /// <param name="WindowId">Unique window instance identifier.</param>
@@ -22,13 +24,13 @@ public sealed record CanvasLayoutSavePayload(
 /// <param name="IsMinimized">Whether the window is minimised to the taskbar.</param>
 /// <param name="IsMaximized">Whether the window fills the canvas.</param>
 public sealed record MdiWindowState(
-    Guid WindowId,
-    string PanelType,
-    string Title,
-    int X,
-    int Y,
-    int Width,
-    int Height,
-    int ZIndex,
-    bool IsMinimized,
-    bool IsMaximized);
+    [property: JsonPropertyName("window_id")]    Guid WindowId,
+    [property: JsonPropertyName("panel_type")]   string PanelType,
+    [property: JsonPropertyName("title")]        string Title,
+    [property: JsonPropertyName("x")]            int X,
+    [property: JsonPropertyName("y")]            int Y,
+    [property: JsonPropertyName("width")]        int Width,
+    [property: JsonPropertyName("height")]       int Height,
+    [property: JsonPropertyName("z_index")]      int ZIndex,
+    [property: JsonPropertyName("is_minimized")] bool IsMinimized,
+    [property: JsonPropertyName("is_maximized")] bool IsMaximized);

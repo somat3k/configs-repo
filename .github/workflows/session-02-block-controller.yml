@@ -1,4 +1,4 @@
-name: "Session 01 — Core Block Contracts"
+name: "Session 02 — Block Controller"
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ env:
 
 jobs:
   build-and-test:
-    name: "Build & Test — MLS.Core"
+    name: "Build & Test — MLS.BlockController"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,21 +29,21 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/MLS.Core/*.csproj', '**/MLS.Core.Tests/*.csproj') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/MLS.BlockController*/*.csproj') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      - name: Restore dependencies
+      - name: Restore
         run: dotnet restore MLS.sln
 
       - name: Build (Release)
         run: dotnet build MLS.sln --no-restore --configuration Release
 
-      - name: Run unit tests
+      - name: Test
         run: |
           dotnet test MLS.sln \
             --no-build \
             --configuration Release \
-            --logger "trx;LogFileName=session-01-results.trx" \
+            --logger "trx;LogFileName=session-02-results.trx" \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --verbosity normal
@@ -52,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: session-01-test-results-${{ github.run_number }}
+          name: session-02-test-results-${{ github.run_number }}
           path: TestResults/
           retention-days: 30
 
@@ -72,12 +72,22 @@ jobs:
           output: both
           thresholds: "70 80"
 
-      - name: Add coverage PR comment
-        uses: marocchino/sticky-pull-request-comment@v2
-        if: github.event_name == 'pull_request'
+  docker-build:
+    name: "Docker Build — block-controller"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
         with:
-          recreate: true
-          path: code-coverage-results.md
+          context: src
+          file: src/block-controller/Dockerfile
+          push: false
+          tags: mls-block-controller:ci
 
   lint:
     name: "Lint — dotnet format"

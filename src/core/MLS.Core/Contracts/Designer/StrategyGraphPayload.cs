@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MLS.Core.Contracts.Designer;
 
 /// <summary>
@@ -10,8 +12,8 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="Blocks">All block specifications in the graph.</param>
 /// <param name="Connections">All directed socket connections.</param>
 public sealed record StrategyGraphPayload(
-    Guid GraphId,
-    string Name,
-    int SchemaVersion,
-    IReadOnlyList<StrategyBlockSpec> Blocks,
-    IReadOnlyList<StrategyConnectionSpec> Connections);
+    [property: JsonPropertyName("graph_id")]       Guid GraphId,
+    [property: JsonPropertyName("name")]           string Name,
+    [property: JsonPropertyName("schema_version")] int SchemaVersion,
+    [property: JsonPropertyName("blocks")]         IReadOnlyList<StrategyBlockSpec> Blocks,
+    [property: JsonPropertyName("connections")]    IReadOnlyList<StrategyConnectionSpec> Connections);

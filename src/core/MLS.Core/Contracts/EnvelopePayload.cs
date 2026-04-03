@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MLS.Core.Constants;
 
 namespace MLS.Core.Contracts;
@@ -25,27 +26,48 @@ namespace MLS.Core.Contracts;
 /// <param name="Timestamp">UTC creation timestamp.</param>
 /// <param name="Payload">Strongly-typed payload serialised as a <see cref="JsonElement"/>.</param>
 public sealed record EnvelopePayload(
-    string Type,
-    int Version,
-    Guid SessionId,
-    string ModuleId,
-    DateTimeOffset Timestamp,
-    JsonElement Payload)
+    [property: JsonPropertyName("type")]       string Type,
+    [property: JsonPropertyName("version")]    int Version,
+    [property: JsonPropertyName("session_id")] Guid SessionId,
+    [property: JsonPropertyName("module_id")]  string ModuleId,
+    [property: JsonPropertyName("timestamp")]  DateTimeOffset Timestamp,
+    [property: JsonPropertyName("payload")]    JsonElement Payload)
 {
     /// <summary>
     /// Convenience factory — creates an envelope with a new session ID and the current UTC time.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="type"/> or <paramref name="moduleId"/> is null or whitespace,
+    /// or when the serialised <paramref name="payload"/> is not a JSON object.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="version"/> is less than 1.
+    /// </exception>
     public static EnvelopePayload Create<TPayload>(
         string type,
         string moduleId,
         TPayload payload,
         int version = 1)
-        where TPayload : notnull =>
-        new(
+        where TPayload : notnull
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(type);
+        ArgumentException.ThrowIfNullOrWhiteSpace(moduleId);
+
+        if (version < 1)
+            throw new ArgumentOutOfRangeException(nameof(version), version,
+                "Envelope version must be greater than or equal to 1.");
+
+        var serialisedPayload = JsonSerializer.SerializeToElement(payload);
+        if (serialisedPayload.ValueKind != JsonValueKind.Object)
+            throw new ArgumentException(
+                "Envelope payload must serialise to a non-null JSON object.", nameof(payload));
+
+        return new EnvelopePayload(
             Type:      type,
             Version:   version,
             SessionId: Guid.NewGuid(),
             ModuleId:  moduleId,
             Timestamp: DateTimeOffset.UtcNow,
-            Payload:   JsonSerializer.SerializeToElement(payload));
+            Payload:   serialisedPayload);
+    }
 }

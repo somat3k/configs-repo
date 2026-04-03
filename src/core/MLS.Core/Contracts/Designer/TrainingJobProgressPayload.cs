@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MLS.Core.Contracts.Designer;
 
 /// <summary>
@@ -12,11 +14,11 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="ElapsedMs">Wall-clock milliseconds elapsed since job start.</param>
 /// <param name="EtaMs">Estimated remaining milliseconds.</param>
 public sealed record TrainingJobProgressPayload(
-    Guid JobId,
-    int Epoch,
-    int TotalEpochs,
-    float TrainLoss,
-    float ValLoss,
-    float Accuracy,
-    long ElapsedMs,
-    long EtaMs);
+    [property: JsonPropertyName("job_id")]       Guid JobId,
+    [property: JsonPropertyName("epoch")]        int Epoch,
+    [property: JsonPropertyName("total_epochs")] int TotalEpochs,
+    [property: JsonPropertyName("train_loss")]   float TrainLoss,
+    [property: JsonPropertyName("val_loss")]     float ValLoss,
+    [property: JsonPropertyName("accuracy")]     float Accuracy,
+    [property: JsonPropertyName("elapsed_ms")]   long ElapsedMs,
+    [property: JsonPropertyName("eta_ms")]       long EtaMs);

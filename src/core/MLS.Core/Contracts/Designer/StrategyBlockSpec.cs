@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -7,6 +8,6 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="BlockType">Registry key, e.g. <c>"RSIBlock"</c>.</param>
 /// <param name="Parameters">Block-specific configuration key/value pairs.</param>
 public sealed record StrategyBlockSpec(
-    Guid BlockId,
-    string BlockType,
-    JsonElement Parameters);
+    [property: JsonPropertyName("block_id")]   Guid BlockId,
+    [property: JsonPropertyName("block_type")] string BlockType,
+    [property: JsonPropertyName("parameters")] JsonElement Parameters);

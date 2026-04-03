@@ -18,13 +18,19 @@ public sealed class BlockConnectionValidatorTests
     private static FakeSocket Input(BlockSocketType type) =>
         new(Guid.NewGuid(), type, SocketDirection.Input);
 
-    private sealed record FakeSocket(
-        Guid SocketId,
-        BlockSocketType DataType,
-        SocketDirection Direction,
-        string Name = "socket",
-        bool IsConnected = false,
-        Guid? ConnectedToSocketId = null) : IBlockSocket;
+    private sealed class FakeSocket(
+        Guid socketId,
+        BlockSocketType dataType,
+        SocketDirection direction,
+        string name = "socket") : IBlockSocket
+    {
+        public Guid SocketId { get; } = socketId;
+        public BlockSocketType DataType { get; } = dataType;
+        public SocketDirection Direction { get; } = direction;
+        public string Name { get; } = name;
+        public bool IsConnected => ConnectedSocketIds.Count > 0;
+        public IReadOnlyList<Guid> ConnectedSocketIds { get; } = [];
+    }
 
     // ── Valid connections ─────────────────────────────────────────────────────────
 
