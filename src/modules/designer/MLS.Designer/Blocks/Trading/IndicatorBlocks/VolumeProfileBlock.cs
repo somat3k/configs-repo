@@ -5,22 +5,12 @@ using MLS.Designer.Blocks;
 namespace MLS.Designer.Blocks.Trading.IndicatorBlocks;
 
 /// <summary>
-/// Volume Profile indicator block.
-/// Accumulates volume at price in a configurable number of bins.
-/// Emits the current bar's volume percentile (0 = low, 1 = high) on
-/// <see cref="BlockSocketType.IndicatorValue"/>.
+/// Volume Percentile indicator block.
+/// Maintains a rolling window of bar volumes and emits the current bar's volume
+/// as a percentile rank within that window (0 = lowest, 1 = highest volume).
 /// </summary>
 public sealed class VolumeProfileBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input", BlockSocketType.CandleStream),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue),
-    ];
-
     private readonly float[] _volumeHistory;
     private int   _head;
     private int   _count;
@@ -31,12 +21,14 @@ public sealed class VolumeProfileBlock : BlockBase
     /// <inheritdoc/>
     public override string BlockType   => "VolumeProfileBlock";
     /// <inheritdoc/>
-    public override string DisplayName => "Volume Profile";
+    public override string DisplayName => "Volume Percentile";
     /// <inheritdoc/>
     public override IReadOnlyList<BlockParameter> Parameters => [_lookbackParam];
 
     /// <summary>Initialises a new <see cref="VolumeProfileBlock"/>.</summary>
-    public VolumeProfileBlock() : base(_inputs, _outputs)
+    public VolumeProfileBlock() : base(
+        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)])
     {
         _volumeHistory = new float[_lookbackParam.DefaultValue];
     }

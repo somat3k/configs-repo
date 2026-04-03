@@ -6,20 +6,10 @@ namespace MLS.Designer.Blocks.Trading.StrategyBlocks;
 
 /// <summary>
 /// Momentum strategy block that emits a <see cref="BlockSocketType.MLSignal"/>
-/// based on price momentum and volume confirmation.
+/// based on the indicator value threshold, without candle-level momentum logic.
 /// </summary>
 public sealed class MomentumStrategyBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input",    BlockSocketType.CandleStream),
-        BlockSocket.Input("indicator_input", BlockSocketType.IndicatorValue),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("signal_output", BlockSocketType.MLSignal),
-    ];
-
     private float _lastIndicator = float.NaN;
 
     private readonly BlockParameter<float> _buyThresholdParam  = new("BuyThreshold",  "Buy Threshold",  "Indicator level to trigger BUY",  0.65f, MinValue: 0f, MaxValue: 1f, IsOptimizable: true);
@@ -33,7 +23,9 @@ public sealed class MomentumStrategyBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_buyThresholdParam, _sellThresholdParam];
 
     /// <summary>Initialises a new <see cref="MomentumStrategyBlock"/>.</summary>
-    public MomentumStrategyBlock() : base(_inputs, _outputs) { }
+    public MomentumStrategyBlock() : base(
+        [BlockSocket.Input("indicator_input", BlockSocketType.IndicatorValue)],
+        [BlockSocket.Output("signal_output", BlockSocketType.MLSignal)]) { }
 
     /// <inheritdoc/>
     public override void Reset() => _lastIndicator = float.NaN;

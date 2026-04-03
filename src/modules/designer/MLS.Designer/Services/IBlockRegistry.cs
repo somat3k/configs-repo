@@ -23,4 +23,13 @@ public interface IBlockRegistry
     /// <summary>Create a fresh instance of a registered block type.</summary>
     /// <returns><c>null</c> if the key is not registered.</returns>
     IBlockElement? CreateInstance(string key);
+
+    /// <summary>
+    /// Register a block type using an explicit factory delegate.
+    /// Use this for blocks that require constructor arguments (e.g. HttpClient).
+    /// The factory is called once to read metadata, then stored for subsequent <see cref="CreateInstance"/> calls.
+    /// </summary>
+    /// <param name="key">Registry key, must match <see cref="IBlockElement.BlockType"/>.</param>
+    /// <param name="factory">Factory that creates a fresh block instance.</param>
+    void Register(string key, Func<IBlockElement> factory);
 }

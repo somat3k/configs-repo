@@ -87,7 +87,7 @@ public sealed class TradingBlockTests
     [InlineData(21)]
     public async Task RSIBlock_AllUpCandles_ProducesHighRsi(int period)
     {
-        var block = new RSIBlock();
+        var block = new RSIBlock(period);
         BlockSignal? lastOutput = null;
         block.OutputProduced += (sig, _) => { lastOutput = sig; return ValueTask.CompletedTask; };
 
@@ -106,7 +106,7 @@ public sealed class TradingBlockTests
     [InlineData(21)]
     public async Task RSIBlock_AllDownCandles_ProducesLowRsi(int period)
     {
-        var block = new RSIBlock();
+        var block = new RSIBlock(period);
         BlockSignal? lastOutput = null;
         block.OutputProduced += (sig, _) => { lastOutput = sig; return ValueTask.CompletedTask; };
 

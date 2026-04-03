@@ -13,15 +13,6 @@ namespace MLS.Designer.Blocks.Trading.MLBlocks;
 /// </summary>
 public sealed class ModelAInferenceBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("feature_input", BlockSocketType.FeatureVector),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("ml_output", BlockSocketType.ArbitrageOpportunity),
-    ];
-
     private readonly HttpClient _http;
 
     private readonly BlockParameter<string> _modelIdParam =
@@ -39,10 +30,16 @@ public sealed class ModelAInferenceBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_modelIdParam, _confidenceParam, _timeoutMsParam];
 
     /// <summary>Initialises a new <see cref="ModelAInferenceBlock"/> with the injected HTTP client.</summary>
-    public ModelAInferenceBlock(HttpClient http) : base(_inputs, _outputs) => _http = http;
+    public ModelAInferenceBlock(HttpClient http) : base(
+        [BlockSocket.Input("feature_input", BlockSocketType.FeatureVector)],
+        [BlockSocket.Output("ml_output", BlockSocketType.ArbitrageOpportunity)])
+        => _http = http;
+
+    private static HttpClient CreateDefaultHttpClient() =>
+        new() { BaseAddress = new Uri("http://ml-runtime:5600", UriKind.Absolute) };
 
     /// <summary>Default constructor for <see cref="Services.BlockRegistry"/>.</summary>
-    public ModelAInferenceBlock() : this(new HttpClient()) { }
+    public ModelAInferenceBlock() : this(CreateDefaultHttpClient()) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

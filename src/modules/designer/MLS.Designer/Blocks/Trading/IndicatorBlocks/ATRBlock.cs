@@ -10,15 +10,6 @@ namespace MLS.Designer.Blocks.Trading.IndicatorBlocks;
 /// </summary>
 public sealed class ATRBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input", BlockSocketType.CandleStream),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue),
-    ];
-
     private float _atr      = float.NaN;
     private float _prevClose = float.NaN;
     private int   _count;
@@ -34,7 +25,9 @@ public sealed class ATRBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_periodParam];
 
     /// <summary>Initialises a new <see cref="ATRBlock"/>.</summary>
-    public ATRBlock() : base(_inputs, _outputs) { }
+    public ATRBlock() : base(
+        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)]) { }
 
     /// <inheritdoc/>
     public override void Reset()

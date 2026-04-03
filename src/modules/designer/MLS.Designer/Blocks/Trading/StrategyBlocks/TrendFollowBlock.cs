@@ -10,15 +10,6 @@ namespace MLS.Designer.Blocks.Trading.StrategyBlocks;
 /// </summary>
 public sealed class TrendFollowBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input", BlockSocketType.CandleStream),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("signal_output", BlockSocketType.MLSignal),
-    ];
-
     private float _fastEma = float.NaN;
     private float _slowEma = float.NaN;
     private bool  _prevFastAboveSlow;
@@ -39,7 +30,9 @@ public sealed class TrendFollowBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_fastParam, _slowParam];
 
     /// <summary>Initialises a new <see cref="TrendFollowBlock"/>.</summary>
-    public TrendFollowBlock() : base(_inputs, _outputs)
+    public TrendFollowBlock() : base(
+        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Output("signal_output", BlockSocketType.MLSignal)])
     {
         _fastK = 2f / (_fastParam.DefaultValue + 1);
         _slowK = 2f / (_slowParam.DefaultValue + 1);

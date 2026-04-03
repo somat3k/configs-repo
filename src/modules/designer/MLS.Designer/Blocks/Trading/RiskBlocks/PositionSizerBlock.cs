@@ -11,15 +11,6 @@ namespace MLS.Designer.Blocks.Trading.RiskBlocks;
 /// </summary>
 public sealed class PositionSizerBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("signal_input", BlockSocketType.MLSignal),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("risk_output", BlockSocketType.RiskDecision),
-    ];
-
     private readonly BlockParameter<float>  _riskFractionParam = new("RiskFraction",  "Risk Fraction", "Portfolio fraction per trade",  0.01f, MinValue: 0.001f, MaxValue: 0.25f, IsOptimizable: true);
     private readonly BlockParameter<float>  _maxPositionParam  = new("MaxPosition",   "Max Position",  "Maximum position size (USD)",    10000f, MinValue: 100f, MaxValue: 1_000_000f);
     private readonly BlockParameter<string> _methodParam       = new("Method",        "Method",        "Sizing: FixedFraction | Kelly",  "FixedFraction");
@@ -32,7 +23,9 @@ public sealed class PositionSizerBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_riskFractionParam, _maxPositionParam, _methodParam];
 
     /// <summary>Initialises a new <see cref="PositionSizerBlock"/>.</summary>
-    public PositionSizerBlock() : base(_inputs, _outputs) { }
+    public PositionSizerBlock() : base(
+        [BlockSocket.Input("signal_input", BlockSocketType.MLSignal)],
+        [BlockSocket.Output("risk_output", BlockSocketType.RiskDecision)]) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

@@ -10,15 +10,6 @@ namespace MLS.Designer.Blocks.Trading.StrategyBlocks;
 /// </summary>
 public sealed class MeanReversionBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("indicator_input", BlockSocketType.IndicatorValue),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("signal_output", BlockSocketType.MLSignal),
-    ];
-
     private float[]  _window;
     private int      _head;
     private int      _count;
@@ -36,7 +27,9 @@ public sealed class MeanReversionBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_lookbackParam, _thresholdParam];
 
     /// <summary>Initialises a new <see cref="MeanReversionBlock"/>.</summary>
-    public MeanReversionBlock() : base(_inputs, _outputs)
+    public MeanReversionBlock() : base(
+        [BlockSocket.Input("indicator_input", BlockSocketType.IndicatorValue)],
+        [BlockSocket.Output("signal_output", BlockSocketType.MLSignal)])
     {
         _window = new float[_lookbackParam.DefaultValue];
     }

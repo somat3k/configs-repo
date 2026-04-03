@@ -10,17 +10,6 @@ namespace MLS.Designer.Blocks.Trading.MLBlocks;
 /// </summary>
 public sealed class EnsembleBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("ml_input_a", BlockSocketType.MLSignal),
-        BlockSocket.Input("ml_input_b", BlockSocketType.MLSignal),
-        BlockSocket.Input("ml_input_c", BlockSocketType.MLSignal),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("ml_output", BlockSocketType.MLSignal),
-    ];
-
     // Accumulate votes in the current tick
     private float _buyWeight;
     private float _sellWeight;
@@ -40,7 +29,11 @@ public sealed class EnsembleBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_weightAParam, _weightBParam, _weightCParam, _minConfParam];
 
     /// <summary>Initialises a new <see cref="EnsembleBlock"/>.</summary>
-    public EnsembleBlock() : base(_inputs, _outputs) { }
+    public EnsembleBlock() : base(
+        [BlockSocket.Input("ml_input_a", BlockSocketType.MLSignal),
+         BlockSocket.Input("ml_input_b", BlockSocketType.MLSignal),
+         BlockSocket.Input("ml_input_c", BlockSocketType.MLSignal)],
+        [BlockSocket.Output("ml_output", BlockSocketType.MLSignal)]) { }
 
     /// <inheritdoc/>
     public override void Reset()

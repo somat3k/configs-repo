@@ -37,6 +37,28 @@ public sealed class BlockRegistry : IBlockRegistry
     }
 
     /// <inheritdoc/>
+    public void Register(string key, Func<IBlockElement> factory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(factory);
+
+        var prototype = factory();
+        var metadata  = new BlockMetadata(
+            Key:               key,
+            DisplayName:       prototype.DisplayName,
+            Category:          DeriveCategory(key),
+            Description:       $"{prototype.DisplayName} block",
+            InputSocketNames:  prototype.InputSockets.Select(s => s.Name).ToList(),
+            OutputSocketNames: prototype.OutputSockets.Select(s => s.Name).ToList());
+
+        var disposeTask = prototype.DisposeAsync();
+        if (!disposeTask.IsCompleted)
+            disposeTask.AsTask().GetAwaiter().GetResult();
+
+        _entries[key] = new BlockRegistration(metadata, factory);
+    }
+
+    /// <inheritdoc/>
     public IReadOnlyList<BlockMetadata> GetAll() =>
         _entries.Values.Select(r => r.Metadata).OrderBy(m => m.Category).ThenBy(m => m.Key).ToList();
 

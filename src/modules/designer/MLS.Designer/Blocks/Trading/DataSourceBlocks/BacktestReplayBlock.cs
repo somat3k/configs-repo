@@ -9,12 +9,6 @@ namespace MLS.Designer.Blocks.Trading.DataSourceBlocks;
 /// </summary>
 public sealed class BacktestReplayBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs  = [];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("candle_output", BlockSocketType.CandleStream),
-    ];
-
     private static readonly IReadOnlyList<BlockParameter> _parameters =
     [
         new BlockParameter<string>("Symbol",    "Symbol",     "Trading pair",            "BTC-PERP"),
@@ -33,7 +27,7 @@ public sealed class BacktestReplayBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => _parameters;
 
     /// <summary>Initialises a new <see cref="BacktestReplayBlock"/>.</summary>
-    public BacktestReplayBlock() : base(_inputs, _outputs) { }
+    public BacktestReplayBlock() : base([], [BlockSocket.Output("candle_output", BlockSocketType.CandleStream)]) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

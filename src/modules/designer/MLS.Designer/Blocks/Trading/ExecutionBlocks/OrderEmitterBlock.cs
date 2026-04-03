@@ -8,31 +8,24 @@ namespace MLS.Designer.Blocks.Trading.ExecutionBlocks;
 /// <summary>
 /// Order emitter block that converts a <see cref="BlockSocketType.RiskDecision"/> into
 /// a <see cref="BlockSocketType.TradeOrder"/> and emits it towards the Broker module.
+/// Emits MARKET or LIMIT orders at the current mid price.
 /// </summary>
 public sealed class OrderEmitterBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("risk_input", BlockSocketType.RiskDecision),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("order_output", BlockSocketType.TradeOrder),
-    ];
-
     private readonly BlockParameter<string> _symbolParam   = new("Symbol",   "Symbol",   "Trading symbol",      "BTC-PERP");
     private readonly BlockParameter<string> _orderTypeParam = new("OrderType","Order Type","MARKET or LIMIT",    "MARKET");
-    private readonly BlockParameter<float>  _limitOffsetParam = new("LimitOffset", "Limit Offset %", "Limit order offset from mid", 0.1f, MinValue: 0f, MaxValue: 5f);
 
     /// <inheritdoc/>
     public override string BlockType   => "OrderEmitterBlock";
     /// <inheritdoc/>
     public override string DisplayName => "Order Emitter";
     /// <inheritdoc/>
-    public override IReadOnlyList<BlockParameter> Parameters => [_symbolParam, _orderTypeParam, _limitOffsetParam];
+    public override IReadOnlyList<BlockParameter> Parameters => [_symbolParam, _orderTypeParam];
 
     /// <summary>Initialises a new <see cref="OrderEmitterBlock"/>.</summary>
-    public OrderEmitterBlock() : base(_inputs, _outputs) { }
+    public OrderEmitterBlock() : base(
+        [BlockSocket.Input("risk_input", BlockSocketType.RiskDecision)],
+        [BlockSocket.Output("order_output", BlockSocketType.TradeOrder)]) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

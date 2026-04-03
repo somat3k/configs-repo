@@ -14,15 +14,6 @@ namespace MLS.Designer.Blocks.Trading.MLBlocks;
 /// </summary>
 public sealed class ModelTInferenceBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("feature_input", BlockSocketType.FeatureVector),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("ml_output", BlockSocketType.MLSignal),
-    ];
-
     private readonly HttpClient _http;
 
     private readonly BlockParameter<string> _modelIdParam =
@@ -40,13 +31,16 @@ public sealed class ModelTInferenceBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_modelIdParam, _confidenceParam, _timeoutMsParam];
 
     /// <summary>Initialises a new <see cref="ModelTInferenceBlock"/> with the injected HTTP client.</summary>
-    public ModelTInferenceBlock(HttpClient http) : base(_inputs, _outputs) => _http = http;
+    public ModelTInferenceBlock(HttpClient http) : base(
+        [BlockSocket.Input("feature_input", BlockSocketType.FeatureVector)],
+        [BlockSocket.Output("ml_output", BlockSocketType.MLSignal)])
+        => _http = http;
 
-    /// <summary>
-    /// Default constructor for use by <see cref="Services.BlockRegistry"/>.
-    /// Creates an isolated <see cref="HttpClient"/> instance.
-    /// </summary>
-    public ModelTInferenceBlock() : this(new HttpClient()) { }
+    private static HttpClient CreateDefaultHttpClient() =>
+        new() { BaseAddress = new Uri("http://ml-runtime:5600", UriKind.Absolute) };
+
+    /// <summary>Default constructor used by <see cref="Services.BlockRegistry"/>.</summary>
+    public ModelTInferenceBlock() : this(CreateDefaultHttpClient()) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

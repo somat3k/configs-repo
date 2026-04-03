@@ -10,15 +10,6 @@ namespace MLS.Designer.Blocks.Trading.RiskBlocks;
 /// </summary>
 public sealed class DrawdownGuardBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("signal_input", BlockSocketType.MLSignal),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("risk_output", BlockSocketType.RiskDecision),
-    ];
-
     private float _peakEquity   = 1f;
     private float _equity       = 1f;
     private bool  _halted;
@@ -34,7 +25,10 @@ public sealed class DrawdownGuardBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_maxDrawdownPctParam, _recoveryPctParam];
 
     /// <summary>Initialises a new <see cref="DrawdownGuardBlock"/>.</summary>
-    public DrawdownGuardBlock() : base(_inputs, _outputs) { }
+    public DrawdownGuardBlock() : base(
+        [BlockSocket.Input("signal_input", BlockSocketType.MLSignal),
+         BlockSocket.Input("equity_input", BlockSocketType.OrderResult)],
+        [BlockSocket.Output("risk_output", BlockSocketType.RiskDecision)]) { }
 
     /// <inheritdoc/>
     public override void Reset()
@@ -47,6 +41,18 @@ public sealed class DrawdownGuardBlock : BlockBase
     /// <inheritdoc/>
     protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
     {
+        if (signal.SocketType == BlockSocketType.OrderResult)
+        {
+            if (signal.Value.ValueKind == JsonValueKind.Object
+                && signal.Value.TryGetProperty("pnl", out var pnlProp)
+                && pnlProp.TryGetSingle(out var pnl))
+            {
+                _equity += pnl;
+                if (_equity > _peakEquity) _peakEquity = _equity;
+            }
+            return new ValueTask<BlockSignal?>(result: null);
+        }
+
         if (signal.SocketType != BlockSocketType.MLSignal)
             return new ValueTask<BlockSignal?>(result: null);
 

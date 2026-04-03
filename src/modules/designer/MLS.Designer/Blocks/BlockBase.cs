@@ -56,12 +56,11 @@ public abstract class BlockBase : IBlockElement
     }
 
     /// <inheritdoc/>
-    public virtual Task PreloadAsync(IEnumerable<BlockSignal> historicalData, CancellationToken ct)
+    public virtual async Task PreloadAsync(IEnumerable<BlockSignal> historicalData, CancellationToken ct)
     {
         Reset();
         foreach (var signal in historicalData)
-            _ = ProcessCoreAsync(signal, ct);   // fire-and-forget for warm-up
-        return Task.CompletedTask;
+            await ProcessCoreAsync(signal, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -75,7 +74,10 @@ public abstract class BlockBase : IBlockElement
     /// <summary>
     /// Core processing logic. Return a signal to emit downstream, or <c>null</c>
     /// when the block needs more data before it can produce an output (e.g. warm-up).
-    /// MUST be allocation-free on the hot path.
+    /// Implementations should minimise per-signal allocations on the hot path.
+    /// Note: the <see cref="EmitFloat"/> and <see cref="EmitObject"/> helpers use
+    /// <see cref="System.Text.Json.JsonSerializer"/> internally; override emission if
+    /// zero-allocation is required.
     /// </summary>
     protected abstract ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct);
 

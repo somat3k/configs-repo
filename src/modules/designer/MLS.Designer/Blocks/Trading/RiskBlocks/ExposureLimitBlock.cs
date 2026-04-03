@@ -11,15 +11,6 @@ namespace MLS.Designer.Blocks.Trading.RiskBlocks;
 /// </summary>
 public sealed class ExposureLimitBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("signal_input", BlockSocketType.MLSignal),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("risk_output", BlockSocketType.RiskDecision),
-    ];
-
     private float _totalExposureUsd;
 
     private readonly BlockParameter<float> _maxExposureParam = new("MaxExposureUsd", "Max Exposure (USD)", "Total portfolio exposure cap", 100_000f, MinValue: 1000f, MaxValue: 10_000_000f);
@@ -32,7 +23,10 @@ public sealed class ExposureLimitBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_maxExposureParam];
 
     /// <summary>Initialises a new <see cref="ExposureLimitBlock"/>.</summary>
-    public ExposureLimitBlock() : base(_inputs, _outputs) { }
+    public ExposureLimitBlock() : base(
+        [BlockSocket.Input("signal_input", BlockSocketType.MLSignal),
+         BlockSocket.Input("fill_input",   BlockSocketType.OrderResult)],
+        [BlockSocket.Output("risk_output", BlockSocketType.RiskDecision)]) { }
 
     /// <inheritdoc/>
     public override void Reset() => _totalExposureUsd = 0f;
@@ -40,6 +34,18 @@ public sealed class ExposureLimitBlock : BlockBase
     /// <inheritdoc/>
     protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
     {
+        // Handle fill updates
+        if (signal.SocketType == BlockSocketType.OrderResult)
+        {
+            if (signal.Value.ValueKind == JsonValueKind.Object
+                && signal.Value.TryGetProperty("status", out var st) && st.GetString() == "filled"
+                && signal.Value.TryGetProperty("size_usd", out var sz) && sz.TryGetSingle(out var filledSize))
+            {
+                _totalExposureUsd += filledSize;
+            }
+            return new ValueTask<BlockSignal?>(result: null);
+        }
+
         if (signal.SocketType != BlockSocketType.MLSignal)
             return new ValueTask<BlockSignal?>(result: null);
 

@@ -11,17 +11,9 @@ namespace MLS.Designer.Blocks.Trading.IndicatorBlocks;
 /// </summary>
 public sealed class VWAPBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input", BlockSocketType.CandleStream),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue),
-    ];
-
     private double _cumulativePV;
     private double _cumulativeV;
+    private DateOnly _lastDate;
 
     private readonly BlockParameter<bool> _resetDailyParam =
         new("ResetDaily", "Reset Daily", "Reset VWAP at start of each day", true);
@@ -34,13 +26,16 @@ public sealed class VWAPBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_resetDailyParam];
 
     /// <summary>Initialises a new <see cref="VWAPBlock"/>.</summary>
-    public VWAPBlock() : base(_inputs, _outputs) { }
+    public VWAPBlock() : base(
+        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)]) { }
 
     /// <inheritdoc/>
     public override void Reset()
     {
         _cumulativePV = 0;
         _cumulativeV  = 0;
+        _lastDate     = default;
     }
 
     /// <inheritdoc/>
@@ -51,6 +46,21 @@ public sealed class VWAPBlock : BlockBase
 
         if (!TryExtractTypicalPriceAndVolume(signal.Value, out var typicalPrice, out var volume))
             return new ValueTask<BlockSignal?>(result: null);
+
+        // Daily reset
+        if (_resetDailyParam.DefaultValue)
+        {
+            var signalDate = DateOnly.FromDateTime(signal.Timestamp.UtcDateTime);
+            if (_lastDate != default && signalDate != _lastDate)
+            {
+                Reset();           // clears _cumulativePV, _cumulativeV, _lastDate
+                _lastDate = signalDate; // re-set date after reset so next tick doesn't re-trigger
+            }
+            else
+            {
+                _lastDate = signalDate;
+            }
+        }
 
         _cumulativePV += typicalPrice * volume;
         _cumulativeV  += volume;

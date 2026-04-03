@@ -9,12 +9,6 @@ namespace MLS.Designer.Blocks.Trading.DataSourceBlocks;
 /// </summary>
 public sealed class OrderBookFeedBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs  = [];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("orderbook_output", BlockSocketType.OrderBookUpdate),
-    ];
-
     private static readonly IReadOnlyList<BlockParameter> _parameters =
     [
         new BlockParameter<string>("Symbol",   "Symbol",   "Trading pair",    "BTC-PERP"),
@@ -30,7 +24,7 @@ public sealed class OrderBookFeedBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => _parameters;
 
     /// <summary>Initialises a new <see cref="OrderBookFeedBlock"/>.</summary>
-    public OrderBookFeedBlock() : base(_inputs, _outputs) { }
+    public OrderBookFeedBlock() : base([], [BlockSocket.Output("orderbook_output", BlockSocketType.OrderBookUpdate)]) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

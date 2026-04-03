@@ -16,17 +16,6 @@ namespace MLS.Designer.Blocks.Trading.IndicatorBlocks;
 /// </remarks>
 public sealed class RSIBlock : BlockBase
 {
-    // ── Sockets ───────────────────────────────────────────────────────────────────
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input", BlockSocketType.CandleStream),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue),
-    ];
-
-    // ── State (all rolling-window; cleared by Reset) ──────────────────────────────
     private float _prevClose = float.NaN;
     private float _avgGain;
     private float _avgLoss;
@@ -45,7 +34,17 @@ public sealed class RSIBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_periodParam];
 
     /// <summary>Initialises a new <see cref="RSIBlock"/> with default period 14.</summary>
-    public RSIBlock() : base(_inputs, _outputs) { }
+    public RSIBlock() : base(
+        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)]) { }
+
+    /// <summary>Initialises with a specific period (for testing).</summary>
+    internal RSIBlock(int period) : base(
+        [BlockSocket.Input("candle_input",    BlockSocketType.CandleStream)],
+        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)])
+    {
+        _periodParam = new BlockParameter<int>("Period", "Period", "RSI lookback period", period, MinValue: 2, MaxValue: 200, IsOptimizable: true);
+    }
 
     // ── IBlockElement ─────────────────────────────────────────────────────────────
 

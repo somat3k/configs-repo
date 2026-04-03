@@ -11,16 +11,6 @@ namespace MLS.Designer.Blocks.Trading.IndicatorBlocks;
 /// </summary>
 public sealed class MACDBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input", BlockSocketType.CandleStream),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue),
-    ];
-
-    // ── EMA state ─────────────────────────────────────────────────────────────────
     private float _fastEma  = float.NaN;
     private float _slowEma  = float.NaN;
     private float _signalEma = float.NaN;
@@ -41,7 +31,9 @@ public sealed class MACDBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_fastParam, _slowParam, _signalParam];
 
     /// <summary>Initialises a new <see cref="MACDBlock"/>.</summary>
-    public MACDBlock() : base(_inputs, _outputs) { }
+    public MACDBlock() : base(
+        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)]) { }
 
     /// <inheritdoc/>
     public override void Reset()

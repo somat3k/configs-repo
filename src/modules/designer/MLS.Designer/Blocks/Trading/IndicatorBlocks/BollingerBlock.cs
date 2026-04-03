@@ -12,16 +12,6 @@ namespace MLS.Designer.Blocks.Trading.IndicatorBlocks;
 /// </summary>
 public sealed class BollingerBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input", BlockSocketType.CandleStream),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue),
-    ];
-
-    // ── Rolling window state ──────────────────────────────────────────────────────
     private float[] _window;
     private int     _head;
     private int     _count;
@@ -40,7 +30,9 @@ public sealed class BollingerBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_periodParam, _multParam];
 
     /// <summary>Initialises a new <see cref="BollingerBlock"/>.</summary>
-    public BollingerBlock() : base(_inputs, _outputs)
+    public BollingerBlock() : base(
+        [BlockSocket.Input("candle_input", BlockSocketType.CandleStream)],
+        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)])
     {
         _window = new float[_periodParam.DefaultValue];
     }

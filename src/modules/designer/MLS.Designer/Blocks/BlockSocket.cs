@@ -32,6 +32,27 @@ internal sealed class BlockSocket(
     /// <inheritdoc/>
     public IReadOnlyList<Guid> ConnectedSocketIds => _connectedSocketIds;
 
+    /// <summary>Record a connection to the specified peer socket.</summary>
+    internal void ConnectTo(Guid connectedSocketId)
+    {
+        if (connectedSocketId == Guid.Empty)
+            throw new ArgumentException("Connected socket ID cannot be empty.", nameof(connectedSocketId));
+        if (!_connectedSocketIds.Contains(connectedSocketId))
+            _connectedSocketIds.Add(connectedSocketId);
+    }
+
+    /// <summary>Remove a connection to the specified peer socket.</summary>
+    /// <returns><see langword="true"/> if the connection was tracked and removed.</returns>
+    internal bool DisconnectFrom(Guid connectedSocketId)
+    {
+        if (connectedSocketId == Guid.Empty)
+            throw new ArgumentException("Connected socket ID cannot be empty.", nameof(connectedSocketId));
+        return _connectedSocketIds.Remove(connectedSocketId);
+    }
+
+    /// <summary>Removes all tracked peer socket connections.</summary>
+    internal void ClearConnections() => _connectedSocketIds.Clear();
+
     // ── Factory helpers ───────────────────────────────────────────────────────────
 
     /// <summary>Create an input socket with a generated ID.</summary>

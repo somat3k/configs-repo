@@ -11,15 +11,6 @@ namespace MLS.Designer.Blocks.Trading.ExecutionBlocks;
 /// </summary>
 public sealed class OrderRouterBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("order_input", BlockSocketType.TradeOrder),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("order_output", BlockSocketType.TradeOrder),
-    ];
-
     private readonly BlockParameter<float>  _camelotThresholdParam = new("CamelotThresholdUsd", "Camelot Threshold (USD)", "Route to Camelot AMM if size < this threshold", 5000f, MinValue: 100f, MaxValue: 500_000f);
     private readonly BlockParameter<string> _defaultExchangeParam  = new("DefaultExchange",      "Default Exchange",       "Default exchange for perp trades",               "hyperliquid");
 
@@ -31,7 +22,9 @@ public sealed class OrderRouterBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_camelotThresholdParam, _defaultExchangeParam];
 
     /// <summary>Initialises a new <see cref="OrderRouterBlock"/>.</summary>
-    public OrderRouterBlock() : base(_inputs, _outputs) { }
+    public OrderRouterBlock() : base(
+        [BlockSocket.Input("order_input", BlockSocketType.TradeOrder)],
+        [BlockSocket.Output("order_output", BlockSocketType.TradeOrder)]) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

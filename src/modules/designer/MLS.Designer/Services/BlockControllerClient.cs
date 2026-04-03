@@ -1,61 +1,56 @@
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using MLS.Core.Constants;
-using MLS.Core.Contracts;
 using MLS.Designer.Configuration;
 
 namespace MLS.Designer.Services;
 
 /// <summary>
-/// Handles MODULE_REGISTER on startup and MODULE_HEARTBEAT every 5 seconds
-/// via the Block Controller REST API.
+/// Hosted background service that registers the Designer module with Block Controller
+/// (MODULE_REGISTER) on startup and sends MODULE_HEARTBEAT every 5 seconds.
+/// Automatically retries registration if the first attempt fails.
 /// </summary>
 public sealed class BlockControllerClient(
     HttpClient _http,
     IOptions<DesignerOptions> _options,
-    ILogger<BlockControllerClient> _logger) : IHostedService, IDisposable
+    ILogger<BlockControllerClient> _logger) : BackgroundService
 {
-    private const string ModuleId   = "designer";
     private const string ModuleName = "designer";
 
-    private Timer? _heartbeatTimer;
-    private Guid   _registeredId;
+    private Guid _registeredId;
 
-    // ── IHostedService ────────────────────────────────────────────────────────────
+    // ── BackgroundService ─────────────────────────────────────────────────────────
 
     /// <inheritdoc/>
-    public async Task StartAsync(CancellationToken ct)
+    protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        // Initial registration attempt
         await RegisterAsync(ct).ConfigureAwait(false);
-        _heartbeatTimer = new Timer(
-            callback: _ =>
+
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+        {
+            if (_registeredId == Guid.Empty)
             {
-                try
-                {
-                    SendHeartbeatAsync(CancellationToken.None).GetAwaiter().GetResult();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Heartbeat timer callback failed");
-                }
-            },
-            state:    null,
-            dueTime:  TimeSpan.FromSeconds(5),
-            period:   TimeSpan.FromSeconds(5));
+                // Re-attempt registration if previous attempt failed
+                await RegisterAsync(ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await SendHeartbeatAsync(ct).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <inheritdoc/>
-    public async Task StopAsync(CancellationToken ct)
+    public override async Task StopAsync(CancellationToken ct)
     {
-        if (_heartbeatTimer is not null)
-            await _heartbeatTimer.DisposeAsync().ConfigureAwait(false);
-
-        await DeregisterAsync(ct).ConfigureAwait(false);
+        await base.StopAsync(ct).ConfigureAwait(false);
+        await DeregisterAsync(CancellationToken.None).ConfigureAwait(false);
     }
-
-    /// <inheritdoc/>
-    public void Dispose() => _heartbeatTimer?.Dispose();
 
     // ── Private helpers ───────────────────────────────────────────────────────────
 
@@ -78,35 +73,34 @@ public sealed class BlockControllerClient(
             response.EnsureSuccessStatusCode();
 
             var reg = await response.Content.ReadFromJsonAsync<RegistrationResponse>(ct)
-                                             .ConfigureAwait(false);
+                                            .ConfigureAwait(false);
             if (reg is not null)
             {
                 _registeredId = reg.ModuleId;
                 _logger.LogInformation("Designer registered with Block Controller as {Id}", _registeredId);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Could not register with Block Controller — will retry on next heartbeat");
+            _logger.LogWarning(ex, "Could not register with Block Controller — will retry on next tick");
         }
     }
 
     private async Task SendHeartbeatAsync(CancellationToken ct)
     {
-        var envelope = EnvelopePayload.Create(
-            MessageTypes.ModuleHeartbeat,
-            ModuleId,
-            new { status = "healthy", module = ModuleName, timestamp = DateTimeOffset.UtcNow });
-
         try
         {
-            var response = await _http.PostAsJsonAsync("/api/modules/heartbeat", envelope, ct)
-                                      .ConfigureAwait(false);
+            var response = await _http.PatchAsync(
+                    $"/api/modules/{_registeredId}/heartbeat", content: null, ct)
+                .ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
-                _logger.LogWarning("Heartbeat rejected: {Status}", response.StatusCode);
+            {
+                _logger.LogWarning("Heartbeat rejected: {Status} — will re-register on next tick", response.StatusCode);
+                _registeredId = Guid.Empty; // Force re-registration on next tick
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Heartbeat failed — Block Controller may be unavailable");
         }
@@ -130,5 +124,6 @@ public sealed class BlockControllerClient(
 
     // ── Nested types ──────────────────────────────────────────────────────────────
 
-    private sealed record RegistrationResponse(Guid ModuleId);
+    private sealed record RegistrationResponse(
+        [property: JsonPropertyName("module_id")] Guid ModuleId);
 }

@@ -9,22 +9,12 @@ namespace MLS.Designer.Blocks.Trading.DataSourceBlocks;
 /// </summary>
 public sealed class CandleFeedBlock : BlockBase
 {
-    // ── Sockets ───────────────────────────────────────────────────────────────────
-    private static readonly IReadOnlyList<IBlockSocket> _inputs  = [];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("candle_output", BlockSocketType.CandleStream),
-    ];
-
-    // ── Parameters ────────────────────────────────────────────────────────────────
     private static readonly IReadOnlyList<BlockParameter> _parameters =
     [
         new BlockParameter<string>("Symbol",    "Symbol",    "Trading pair, e.g. BTC-PERP",   "BTC-PERP"),
         new BlockParameter<string>("Timeframe", "Timeframe", "Candle interval: 1m 5m 15m 1h", "5m"),
         new BlockParameter<string>("Exchange",  "Exchange",  "Exchange source",                 "hyperliquid"),
     ];
-
-    // ── IBlockElement ─────────────────────────────────────────────────────────────
 
     /// <inheritdoc/>
     public override string BlockType    => "CandleFeedBlock";
@@ -34,7 +24,7 @@ public sealed class CandleFeedBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => _parameters;
 
     /// <summary>Initialises a new <see cref="CandleFeedBlock"/>.</summary>
-    public CandleFeedBlock() : base(_inputs, _outputs) { }
+    public CandleFeedBlock() : base([], [BlockSocket.Output("candle_output", BlockSocketType.CandleStream)]) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

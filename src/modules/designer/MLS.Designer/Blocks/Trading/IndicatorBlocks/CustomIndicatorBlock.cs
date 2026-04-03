@@ -9,16 +9,6 @@ namespace MLS.Designer.Blocks.Trading.IndicatorBlocks;
 /// </summary>
 public sealed class CustomIndicatorBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("candle_input",    BlockSocketType.CandleStream),
-        BlockSocket.Input("indicator_input", BlockSocketType.IndicatorValue),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue),
-    ];
-
     private readonly BlockParameter<string> _codeParam =
         new("Code", "C# Code", "Custom indicator C# expression (Phase 6)", "return indicatorValue;");
 
@@ -30,7 +20,10 @@ public sealed class CustomIndicatorBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_codeParam];
 
     /// <summary>Initialises a new <see cref="CustomIndicatorBlock"/>.</summary>
-    public CustomIndicatorBlock() : base(_inputs, _outputs) { }
+    public CustomIndicatorBlock() : base(
+        [BlockSocket.Input("candle_input",    BlockSocketType.CandleStream),
+         BlockSocket.Input("indicator_input", BlockSocketType.IndicatorValue)],
+        [BlockSocket.Output("indicator_output", BlockSocketType.IndicatorValue)]) { }
 
     /// <inheritdoc/>
     public override void Reset() { }

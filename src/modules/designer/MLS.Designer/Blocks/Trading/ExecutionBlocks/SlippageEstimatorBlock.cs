@@ -11,16 +11,6 @@ namespace MLS.Designer.Blocks.Trading.ExecutionBlocks;
 /// </summary>
 public sealed class SlippageEstimatorBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("order_input",     BlockSocketType.TradeOrder),
-        BlockSocket.Input("orderbook_input", BlockSocketType.OrderBookUpdate),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("slippage_output", BlockSocketType.IndicatorValue),
-    ];
-
     private float _lastBestAsk = float.NaN;
     private float _lastBestBid = float.NaN;
 
@@ -34,7 +24,10 @@ public sealed class SlippageEstimatorBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_baseBpsParam];
 
     /// <summary>Initialises a new <see cref="SlippageEstimatorBlock"/>.</summary>
-    public SlippageEstimatorBlock() : base(_inputs, _outputs) { }
+    public SlippageEstimatorBlock() : base(
+        [BlockSocket.Input("order_input",     BlockSocketType.TradeOrder),
+         BlockSocket.Input("orderbook_input", BlockSocketType.OrderBookUpdate)],
+        [BlockSocket.Output("slippage_output", BlockSocketType.IndicatorValue)]) { }
 
     /// <inheritdoc/>
     public override void Reset()

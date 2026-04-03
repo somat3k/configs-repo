@@ -6,20 +6,11 @@ namespace MLS.Designer.Blocks.Trading.ExecutionBlocks;
 
 /// <summary>
 /// Fill tracker block that awaits <see cref="BlockSocketType.OrderResult"/> confirmations
-/// and re-emits a <see cref="BlockSocketType.TradeOrder"/> retry if the fill is rejected.
+/// and re-emits the <see cref="BlockSocketType.OrderResult"/> for downstream retry handling
+/// when the fill is rejected.
 /// </summary>
 public sealed class FillTrackerBlock : BlockBase
 {
-    private static readonly IReadOnlyList<IBlockSocket> _inputs =
-    [
-        BlockSocket.Input("result_input", BlockSocketType.OrderResult),
-    ];
-    private static readonly IReadOnlyList<IBlockSocket> _outputs =
-    [
-        BlockSocket.Output("fill_output", BlockSocketType.OrderResult),
-        BlockSocket.Output("retry_output", BlockSocketType.TradeOrder),
-    ];
-
     private readonly BlockParameter<int> _maxRetriesParam = new("MaxRetries", "Max Retries", "Maximum fill retry attempts", 3, MinValue: 0, MaxValue: 10);
 
     private readonly Dictionary<string, int> _retryCount = [];
@@ -32,7 +23,10 @@ public sealed class FillTrackerBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters => [_maxRetriesParam];
 
     /// <summary>Initialises a new <see cref="FillTrackerBlock"/>.</summary>
-    public FillTrackerBlock() : base(_inputs, _outputs) { }
+    public FillTrackerBlock() : base(
+        [BlockSocket.Input("result_input", BlockSocketType.OrderResult)],
+        [BlockSocket.Output("fill_output",  BlockSocketType.OrderResult),
+         BlockSocket.Output("retry_output", BlockSocketType.OrderResult)]) { }
 
     /// <inheritdoc/>
     public override void Reset() => _retryCount.Clear();
@@ -64,7 +58,7 @@ public sealed class FillTrackerBlock : BlockBase
 
         _retryCount[orderId] = retries + 1;
         return new ValueTask<BlockSignal?>(
-            EmitObject(BlockId, "retry_output", BlockSocketType.TradeOrder, signal.Value));
+            EmitObject(BlockId, "retry_output", BlockSocketType.OrderResult, signal.Value));
     }
 
     private static (string orderId, string status, string reason) ExtractResult(JsonElement value)
