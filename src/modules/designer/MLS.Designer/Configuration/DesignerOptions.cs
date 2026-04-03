@@ -17,4 +17,10 @@ public sealed class DesignerOptions
 
     /// <summary>ML Runtime HTTP base URL for inference calls, e.g. <c>http://ml-runtime:5600</c>.</summary>
     public string MlRuntimeUrl { get; set; } = "http://ml-runtime:5600";
+
+    /// <summary>Arbitrum One JSON-RPC endpoint used for on-chain price reads.</summary>
+    public string ArbitrumRpcUrl { get; set; } = "https://arb1.arbitrum.io/rpc";
+
+    /// <summary>PostgreSQL connection string for the blockchain address book.</summary>
+    public string PostgresConnectionString { get; set; } = "Host=data-layer;Database=mls;Username=mls;Password=mls";
 }
