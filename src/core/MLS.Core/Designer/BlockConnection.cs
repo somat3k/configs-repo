@@ -1,4 +1,4 @@
-namespace MLS.Core.Designer;
+﻿namespace MLS.Core.Designer;
 
 /// <summary>
 /// Represents an immutable directed edge in a <see cref="ICompositionGraph"/>
@@ -24,7 +24,7 @@ public sealed record BlockConnection(
     /// <summary>Creates a new <see cref="BlockConnection"/> with a generated <see cref="ConnectionId"/>.</summary>
     public static BlockConnection Create(
         Guid fromBlockId, Guid fromSocketId,
-        Guid toBlockId,   Guid toSocketId,
+        Guid toBlockId, Guid toSocketId,
         BlockSocketType socketType) =>
         new(Guid.NewGuid(), fromBlockId, fromSocketId, toBlockId, toSocketId, socketType);
 }

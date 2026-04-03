@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.BlockController.Models;
 
@@ -12,11 +12,11 @@ namespace MLS.BlockController.Models;
 /// <param name="RegisteredAt">UTC time of first registration.</param>
 /// <param name="LastHeartbeat">UTC time of most recent heartbeat.</param>
 public sealed record ModuleRegistration(
-    [property: JsonPropertyName("module_id")]     Guid ModuleId,
-    [property: JsonPropertyName("module_name")]   string ModuleName,
+    [property: JsonPropertyName("module_id")] Guid ModuleId,
+    [property: JsonPropertyName("module_name")] string ModuleName,
     [property: JsonPropertyName("endpoint_http")] string EndpointHttp,
-    [property: JsonPropertyName("endpoint_ws")]   string EndpointWs,
-    [property: JsonPropertyName("capabilities")]  IReadOnlyList<string> Capabilities,
-    [property: JsonPropertyName("version")]       string Version,
+    [property: JsonPropertyName("endpoint_ws")] string EndpointWs,
+    [property: JsonPropertyName("capabilities")] IReadOnlyList<string> Capabilities,
+    [property: JsonPropertyName("version")] string Version,
     [property: JsonPropertyName("registered_at")] DateTimeOffset RegisteredAt,
     [property: JsonPropertyName("last_heartbeat")] DateTimeOffset LastHeartbeat);

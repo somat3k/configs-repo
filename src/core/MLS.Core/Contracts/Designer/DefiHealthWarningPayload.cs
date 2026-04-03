@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -15,11 +15,11 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="Severity">Severity level: <c>Warning</c>, <c>Critical</c>.</param>
 /// <param name="LiquidationPrice">Estimated price at which liquidation occurs.</param>
 public sealed record DefiHealthWarningPayload(
-    [property: JsonPropertyName("position_id")]       Guid PositionId,
-    [property: JsonPropertyName("protocol")]          string Protocol,
-    [property: JsonPropertyName("asset")]             string Asset,
-    [property: JsonPropertyName("collateral")]        string Collateral,
-    [property: JsonPropertyName("health_factor")]     double HealthFactor,
-    [property: JsonPropertyName("threshold")]         double Threshold,
-    [property: JsonPropertyName("severity")]          string Severity,
+    [property: JsonPropertyName("position_id")] Guid PositionId,
+    [property: JsonPropertyName("protocol")] string Protocol,
+    [property: JsonPropertyName("asset")] string Asset,
+    [property: JsonPropertyName("collateral")] string Collateral,
+    [property: JsonPropertyName("health_factor")] double HealthFactor,
+    [property: JsonPropertyName("threshold")] double Threshold,
+    [property: JsonPropertyName("severity")] string Severity,
     [property: JsonPropertyName("liquidation_price")] decimal LiquidationPrice);

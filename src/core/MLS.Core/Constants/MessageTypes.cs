@@ -1,4 +1,4 @@
-namespace MLS.Core.Constants;
+﻿namespace MLS.Core.Constants;
 
 /// <summary>
 /// Canonical string constants for all inter-module envelope message types.
@@ -10,37 +10,37 @@ public static partial class MessageTypes
 {
     // ── Module lifecycle ─────────────────────────────────────────────────────────
     /// <summary>Module registration on startup.</summary>
-    public const string ModuleRegister    = "MODULE_REGISTER";
+    public const string ModuleRegister = "MODULE_REGISTER";
     /// <summary>Periodic heartbeat to confirm liveness.</summary>
-    public const string ModuleHeartbeat   = "MODULE_HEARTBEAT";
+    public const string ModuleHeartbeat = "MODULE_HEARTBEAT";
     /// <summary>Graceful module deregistration.</summary>
-    public const string ModuleDeregister  = "MODULE_DEREGISTER";
+    public const string ModuleDeregister = "MODULE_DEREGISTER";
 
     // ── Trading domain ───────────────────────────────────────────────────────────
     /// <summary>ML-generated trade signal (BUY / SELL / HOLD).</summary>
-    public const string TradeSignal       = "TRADE_SIGNAL";
+    public const string TradeSignal = "TRADE_SIGNAL";
     /// <summary>Detected cross-exchange arbitrage opportunity.</summary>
     public const string ArbitrageOpportunity = "ARBITRAGE_OPPORTUNITY";
 
     // ── ML inference ─────────────────────────────────────────────────────────────
     /// <summary>Inference request sent to <c>ml-runtime</c>.</summary>
-    public const string InferenceRequest  = "INFERENCE_REQUEST";
+    public const string InferenceRequest = "INFERENCE_REQUEST";
     /// <summary>Inference result returned by <c>ml-runtime</c>.</summary>
-    public const string InferenceResult   = "INFERENCE_RESULT";
+    public const string InferenceResult = "INFERENCE_RESULT";
 
     // ── Shell VM ─────────────────────────────────────────────────────────────────
     /// <summary>Execute a command in the Shell VM.</summary>
-    public const string ShellExecRequest  = "SHELL_EXEC_REQUEST";
+    public const string ShellExecRequest = "SHELL_EXEC_REQUEST";
     /// <summary>Raw stdin input to a shell session.</summary>
-    public const string ShellInput        = "SHELL_INPUT";
+    public const string ShellInput = "SHELL_INPUT";
     /// <summary>Terminal resize event.</summary>
-    public const string ShellResize       = "SHELL_RESIZE";
+    public const string ShellResize = "SHELL_RESIZE";
     /// <summary>stdout / stderr output chunk from a shell session.</summary>
-    public const string ShellOutput       = "SHELL_OUTPUT";
+    public const string ShellOutput = "SHELL_OUTPUT";
     /// <summary>Shell session state transition notification.</summary>
     public const string ShellSessionState = "SHELL_SESSION_STATE";
     /// <summary>Shell session created confirmation.</summary>
-    public const string ShellSessionCreated    = "SHELL_SESSION_CREATED";
+    public const string ShellSessionCreated = "SHELL_SESSION_CREATED";
     /// <summary>Shell session terminated notification.</summary>
     public const string ShellSessionTerminated = "SHELL_SESSION_TERMINATED";
 }

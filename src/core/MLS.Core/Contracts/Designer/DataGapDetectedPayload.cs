@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -13,9 +13,9 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="GapEnd">End of the missing data window (UTC, exclusive).</param>
 /// <param name="MissingCandles">Number of missing candles.</param>
 public sealed record DataGapDetectedPayload(
-    [property: JsonPropertyName("exchange")]        string Exchange,
-    [property: JsonPropertyName("symbol")]          string Symbol,
-    [property: JsonPropertyName("timeframe")]       string Timeframe,
-    [property: JsonPropertyName("gap_start")]       DateTimeOffset GapStart,
-    [property: JsonPropertyName("gap_end")]         DateTimeOffset GapEnd,
+    [property: JsonPropertyName("exchange")] string Exchange,
+    [property: JsonPropertyName("symbol")] string Symbol,
+    [property: JsonPropertyName("timeframe")] string Timeframe,
+    [property: JsonPropertyName("gap_start")] DateTimeOffset GapStart,
+    [property: JsonPropertyName("gap_end")] DateTimeOffset GapEnd,
     [property: JsonPropertyName("missing_candles")] int MissingCandles);

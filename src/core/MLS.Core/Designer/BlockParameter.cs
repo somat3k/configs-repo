@@ -1,4 +1,4 @@
-namespace MLS.Core.Designer;
+﻿namespace MLS.Core.Designer;
 
 /// <summary>
 /// Non-generic base record for all block configuration parameters.

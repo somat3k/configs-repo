@@ -1,4 +1,4 @@
-namespace MLS.Core.Designer;
+﻿namespace MLS.Core.Designer;
 
 /// <summary>
 /// Thrown by <see cref="ICompositionGraph.ConnectAsync"/> when a connection attempt
@@ -34,7 +34,7 @@ public sealed class InvalidBlockConnectionException : Exception
             "socket types do not match.")
     {
         FromType = fromType;
-        ToType   = toType;
+        ToType = toType;
     }
 
     /// <summary>

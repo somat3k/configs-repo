@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace MLS.Core.Contracts.Designer;
 
@@ -11,7 +11,7 @@ namespace MLS.Core.Contracts.Designer;
 /// <param name="Timeframe">Candle timeframe, e.g. <c>"5m"</c>, <c>"1h"</c>.</param>
 /// <param name="From">Start of the historical collection range (UTC).</param>
 public sealed record DataCollectionStartPayload(
-    [property: JsonPropertyName("exchange")]  string Exchange,
-    [property: JsonPropertyName("symbol")]    string Symbol,
+    [property: JsonPropertyName("exchange")] string Exchange,
+    [property: JsonPropertyName("symbol")] string Symbol,
     [property: JsonPropertyName("timeframe")] string Timeframe,
-    [property: JsonPropertyName("from")]      DateTimeOffset From);
+    [property: JsonPropertyName("from")] DateTimeOffset From);

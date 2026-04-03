@@ -1,4 +1,4 @@
-namespace MLS.Core.Designer;
+﻿namespace MLS.Core.Designer;
 
 /// <summary>
 /// Strongly-typed socket data types for the MLS block graph.
