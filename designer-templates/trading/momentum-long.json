@@ -1,0 +1,67 @@
+{
+  "graph_id": "00000000-0001-0000-0000-000000000001",
+  "name": "BTC Momentum Long",
+  "description": "Long-only momentum strategy: CandleFeed → RSI → MACD → model-t inference → Risk → Order emission",
+  "domain": "Trading",
+  "schema_version": 1,
+  "blocks": [
+    {
+      "block_id": "a0000001-0000-0000-0000-000000000001",
+      "block_type": "CandleFeedBlock",
+      "position": { "x": 50, "y": 200 },
+      "parameters": { "symbol": "BTC-PERP", "timeframe": "5m", "exchange": "hyperliquid" }
+    },
+    {
+      "block_id": "a0000002-0000-0000-0000-000000000001",
+      "block_type": "RSIBlock",
+      "position": { "x": 280, "y": 120 },
+      "parameters": { "period": 14, "source": "ClosePrice" }
+    },
+    {
+      "block_id": "a0000003-0000-0000-0000-000000000001",
+      "block_type": "MACDBlock",
+      "position": { "x": 280, "y": 280 },
+      "parameters": { "fast_period": 12, "slow_period": 26, "signal_period": 9 }
+    },
+    {
+      "block_id": "a0000004-0000-0000-0000-000000000001",
+      "block_type": "ModelTInferenceBlock",
+      "position": { "x": 520, "y": 200 },
+      "parameters": { "model_id": "model-t", "confidence_threshold": 0.75 }
+    },
+    {
+      "block_id": "a0000005-0000-0000-0000-000000000001",
+      "block_type": "PositionSizerBlock",
+      "position": { "x": 750, "y": 200 },
+      "parameters": { "method": "kelly", "max_position_usd": 10000, "kelly_fraction": 0.25 }
+    },
+    {
+      "block_id": "a0000006-0000-0000-0000-000000000001",
+      "block_type": "StopLossBlock",
+      "position": { "x": 980, "y": 120 },
+      "parameters": { "type": "atr_trailing", "atr_multiplier": 2.0 }
+    },
+    {
+      "block_id": "a0000007-0000-0000-0000-000000000001",
+      "block_type": "OrderEmitterBlock",
+      "position": { "x": 1200, "y": 200 },
+      "parameters": { "order_type": "market", "long_only": true }
+    },
+    {
+      "block_id": "a0000008-0000-0000-0000-000000000001",
+      "block_type": "ChartExportBlock",
+      "position": { "x": 1200, "y": 350 },
+      "parameters": { "symbol": "BTC-PERP", "timeframe": "5m", "show_signals": true }
+    }
+  ],
+  "connections": [
+    { "connection_id": "c001", "from_block_id": "a0000001-0000-0000-0000-000000000001", "from_socket": "candle_output", "to_block_id": "a0000002-0000-0000-0000-000000000001", "to_socket": "candle_input" },
+    { "connection_id": "c002", "from_block_id": "a0000001-0000-0000-0000-000000000001", "from_socket": "candle_output", "to_block_id": "a0000003-0000-0000-0000-000000000001", "to_socket": "candle_input" },
+    { "connection_id": "c003", "from_block_id": "a0000002-0000-0000-0000-000000000001", "from_socket": "indicator_output", "to_block_id": "a0000004-0000-0000-0000-000000000001", "to_socket": "feature_input" },
+    { "connection_id": "c004", "from_block_id": "a0000003-0000-0000-0000-000000000001", "from_socket": "indicator_output", "to_block_id": "a0000004-0000-0000-0000-000000000001", "to_socket": "feature_input" },
+    { "connection_id": "c005", "from_block_id": "a0000004-0000-0000-0000-000000000001", "from_socket": "ml_output", "to_block_id": "a0000005-0000-0000-0000-000000000001", "to_socket": "signal_input" },
+    { "connection_id": "c006", "from_block_id": "a0000005-0000-0000-0000-000000000001", "from_socket": "risk_output", "to_block_id": "a0000006-0000-0000-0000-000000000001", "to_socket": "signal_input" },
+    { "connection_id": "c007", "from_block_id": "a0000006-0000-0000-0000-000000000001", "from_socket": "risk_output", "to_block_id": "a0000007-0000-0000-0000-000000000001", "to_socket": "risk_input" },
+    { "connection_id": "c008", "from_block_id": "a0000007-0000-0000-0000-000000000001", "from_socket": "order_output", "to_block_id": "a0000008-0000-0000-0000-000000000001", "to_socket": "order_input" }
+  ]
+}
