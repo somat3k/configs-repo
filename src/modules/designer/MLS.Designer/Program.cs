@@ -1,3 +1,5 @@
+using MLS.Designer.Blocks.Arbitrage;
+using MLS.Designer.Blocks.DeFi;
 using MLS.Designer.Blocks.Trading.DataSourceBlocks;
 using MLS.Designer.Blocks.Trading.ExecutionBlocks;
 using MLS.Designer.Blocks.Trading.IndicatorBlocks;
@@ -76,6 +78,20 @@ builder.Services.AddSingleton<IBlockRegistry>(sp =>
     registry.Register<OrderRouterBlock>("OrderRouterBlock");
     registry.Register<FillTrackerBlock>("FillTrackerBlock");
     registry.Register<SlippageEstimatorBlock>("SlippageEstimatorBlock");
+
+    // ── Arbitrage blocks ───────────────────────────────────────────────────────
+    registry.Register<SpreadCalculatorBlock>("SpreadCalculatorBlock");
+    registry.Register<nHOPPathFinderBlock>("nHOPPathFinderBlock");
+    registry.Register<FlashLoanBlock>("FlashLoanBlock");
+    registry.Register<ProfitGateBlock>("ProfitGateBlock");
+
+    // ── DeFi blocks ────────────────────────────────────────────────────────────
+    registry.Register<MorphoSupplyBlock>("MorphoSupplyBlock");
+    registry.Register<MorphoBorrowBlock>("MorphoBorrowBlock");
+    registry.Register<BalancerSwapBlock>("BalancerSwapBlock");
+    registry.Register<CollateralHealthBlock>("CollateralHealthBlock");
+    registry.Register<YieldOptimizerBlock>("YieldOptimizerBlock");
+    registry.Register<LiquidationGuardBlock>("LiquidationGuardBlock");
 
     return registry;
 });

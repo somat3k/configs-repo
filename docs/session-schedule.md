@@ -359,11 +359,13 @@ Step 4: Rank by profit/capital ratio
 - `.skills/exchange-adapters.md` ← new skill
 
 **Acceptance Criteria**
-- [ ] `nHOPPathFinderBlock` correctly finds 3-hop arbitrage in unit test with mock prices
-- [ ] `MorphoSupplyBlock` emits `DeFiSignal` payload with correct protocol + action
-- [ ] `HyperliquidAdapter` connects to HYPERLIQUID WS and streams prices
-- [ ] `ExchangeRegistry` loads all addresses from PostgreSQL at startup, never hardcoded
-- [ ] All blockchain addresses use `BlockchainAddress` enum from `MLS.Core.Constants`
+- [x] `nHOPPathFinderBlock` correctly finds 3-hop arbitrage in unit test with mock prices
+- [x] `MorphoSupplyBlock` emits `DeFiSignal` payload with correct protocol + action
+- [x] `HyperliquidAdapter` connects to HYPERLIQUID WS and streams prices
+- [x] `ExchangeRegistry` loads all addresses from PostgreSQL at startup, never hardcoded
+- [x] All blockchain addresses use `BlockchainAddress` enum from `MLS.Core.Constants`
+
+**Session Status: ✅ COMPLETE** — Implemented 2026-04-03
 
 ---
 
