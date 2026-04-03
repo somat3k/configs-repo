@@ -4,10 +4,12 @@ using MLS.BlockController.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Services ─────────────────────────────────────────────────────────────────
+// Note: all payload records carry explicit [JsonPropertyName] attributes for snake_case
+// wire names. The PropertyNamingPolicy is intentionally NOT set here; the attributes
+// are the authoritative, self-contained wire contract.
 builder.Services.AddControllers()
     .AddJsonOptions(opts =>
     {
-        opts.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower;
         opts.JsonSerializerOptions.WriteIndented = false;
     });
 

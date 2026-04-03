@@ -41,11 +41,12 @@ public sealed class BlockControllerHub(
         try
         {
             graph = envelope.Payload.Deserialize<StrategyGraphPayload>()
-                ?? throw new InvalidOperationException("Null STRATEGY_DEPLOY payload.");
+                ?? throw new InvalidOperationException(
+                    "STRATEGY_DEPLOY payload deserialized to null — the JSON object may be empty or missing required fields.");
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            _logger.LogError(ex, "Failed to deserialise STRATEGY_DEPLOY payload");
+            _logger.LogError(ex, "Failed to process STRATEGY_DEPLOY from {ModuleId}", envelope.ModuleId);
             return;
         }
 
@@ -58,11 +59,12 @@ public sealed class BlockControllerHub(
         try
         {
             layout = envelope.Payload.Deserialize<CanvasLayoutSavePayload>()
-                ?? throw new InvalidOperationException("Null CANVAS_LAYOUT_SAVE payload.");
+                ?? throw new InvalidOperationException(
+                    "CANVAS_LAYOUT_SAVE payload deserialized to null — the JSON object may be empty or missing required fields.");
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            _logger.LogError(ex, "Failed to deserialise CANVAS_LAYOUT_SAVE payload");
+            _logger.LogError(ex, "Failed to process CANVAS_LAYOUT_SAVE from {ModuleId}", envelope.ModuleId);
             return;
         }
 

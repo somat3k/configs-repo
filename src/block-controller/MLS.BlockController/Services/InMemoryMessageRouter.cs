@@ -59,21 +59,23 @@ public sealed class InMemoryMessageRouter : IMessageRouter, IAsyncDisposable
         IReadOnlySet<Guid> subscribers,
         CancellationToken ct)
     {
-        // TODO (Session 04): Replace User() lookup with Group-based delivery once modules
-        // join groups by their module ID on hub connect. SignalR User() requires an
-        // authenticated user claim; module-to-connection mapping is wired in Session 04.
+        // Delivery uses SignalR Groups. Modules join a group named after their own module ID
+        // when they connect to the hub (see BlockControllerHub.OnConnectedAsync, Session 04).
+        // Groups do not require authentication claims, making them suitable for machine-to-machine
+        // module delivery. Until Session 04 wires OnConnectedAsync, routed (non-broadcast)
+        // envelopes will be silently dropped because no connection has joined the group.
         foreach (var subscriberId in subscribers)
         {
             try
             {
                 await _hub.Clients
-                    .User(subscriberId.ToString())
+                    .Group(subscriberId.ToString())
                     .SendAsync("ReceiveEnvelope", envelope, ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to deliver envelope to {ModuleId}", subscriberId);
+                _logger.LogWarning(ex, "Failed to deliver envelope to group {ModuleId}", subscriberId);
             }
         }
     }
