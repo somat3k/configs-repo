@@ -1,5 +1,7 @@
 # ML Runtime Module — Session Prompt
 
+> Use this document as context when generating ML Runtime module code with GitHub Copilot.
+
 ---
 
 ## Sessions

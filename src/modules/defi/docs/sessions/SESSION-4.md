@@ -1,5 +1,7 @@
 # defi — Session 4: Skills to Apply
 
+> Use this document as context when generating DeFi module code with GitHub Copilot.
+
 ## Skills to Apply
 
 - `.skills/web3.md` — HYPERLIQUID, wallet, blockchain

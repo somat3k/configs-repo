@@ -1,5 +1,7 @@
 # defi — Session 2: Critical Rules
 
+> Use this document as context when generating DeFi module code with GitHub Copilot.
+
 ## Critical Rules
 
 1. **NEVER integrate Uniswap** — any mention should raise a build error

@@ -1,5 +1,7 @@
 # DeFi Module — Session Prompt
 
+> Use this document as context when generating DeFi module code with GitHub Copilot.
+
 ---
 
 ## Sessions

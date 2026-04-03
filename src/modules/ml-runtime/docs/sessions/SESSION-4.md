@@ -1,5 +1,7 @@
 # ml-runtime — Session 4: Skills to Apply
 
+> Use this document as context when generating ML Runtime module code with GitHub Copilot.
+
 ## Skills to Apply
 
 - `.skills/machine-learning.md` — ONNX, JOBLIB, Adam, FastForest

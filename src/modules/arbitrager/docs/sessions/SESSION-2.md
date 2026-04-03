@@ -1,5 +1,7 @@
 # arbitrager — Session 2: Key Constraints
 
+> Use this document as context when generating Arbitrager module code with GitHub Copilot.
+
 ## Key Constraints
 
 - **NO Uniswap** — use alternative DEX protocols only

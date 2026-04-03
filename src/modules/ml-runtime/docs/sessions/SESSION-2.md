@@ -1,5 +1,7 @@
 # ml-runtime — Session 2: Python Training Session
 
+> Use this document as context when generating ML Runtime module code with GitHub Copilot.
+
 ## Python Training Session
 
 When generating Python training code:

@@ -1,5 +1,7 @@
 # Arbitrager Module — Session Prompt
 
+> Use this document as context when generating Arbitrager module code with GitHub Copilot.
+
 ---
 
 ## Sessions

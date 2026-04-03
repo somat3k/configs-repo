@@ -1,5 +1,7 @@
 # ml-runtime — Session 3: C# Inference Session
 
+> Use this document as context when generating ML Runtime module code with GitHub Copilot.
+
 ## C# Inference Session
 
 When generating C# inference code:

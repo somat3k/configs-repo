@@ -1,5 +1,7 @@
 # Data Layer Module — Session Prompt
 
+> Use this document as context when generating Data Layer module code with GitHub Copilot.
+
 ---
 
 ## Sessions

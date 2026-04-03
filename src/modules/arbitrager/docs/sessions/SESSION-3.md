@@ -1,5 +1,7 @@
 # arbitrager — Session 3: Required Components
 
+> Use this document as context when generating Arbitrager module code with GitHub Copilot.
+
 ## Required Components
 
 - `IOpportunityScanner` — detect price discrepancies across exchanges
