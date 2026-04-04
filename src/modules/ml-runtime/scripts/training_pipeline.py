@@ -279,13 +279,48 @@ def _load_features_from_pg(cfg: TrainingConfig) -> tuple[np.ndarray, np.ndarray]
 def _generate_synthetic_features(cfg: TrainingConfig) -> tuple[np.ndarray, np.ndarray]:
     """Generate synthetic training data for offline / development use.
 
-    Labels are drawn from [0, n_classes) so they are always compatible with
-    the model's loss function (binary labels for model-a, 3-class for others).
+    For binary models (``n_classes == 2``, e.g. ``model-a``), labels are derived
+    from a single threshold on the feature-mean score so they lie in ``{0, 1}``
+    and are directly compatible with ``binary_cross_entropy``.
+
+    For 3-class models (``n_classes == 3``), labels are derived from **two
+    independent binary thresholds** applied to the feature scores, producing:
+
+    - **Class 0** — score below the lower threshold (both binary signals agree: "low").
+      Internally accounted as binary ``0``.
+    - **Class 1** — score above the upper threshold (both binary signals agree: "high").
+      Internally accounted as binary ``1``.
+    - **Class 2** — score falls between the thresholds (the "match" or consensus
+      transition zone where the two binary signals disagree).  Displayed as a
+      distinct class ``2``, but its binary probability is in ``[0, 1]``.
+
+    This scheme ensures that the 3-class output displayed as ``[0, 1, 2]`` is
+    grounded in binary ``[0, 1]`` comparisons, and that class 2 represents the
+    overlap / match region rather than an arbitrarily drawn label.
     """
     rng = np.random.default_rng(42)
     n   = 2048
     X   = rng.standard_normal((n, cfg.input_dim)).astype(np.float32)
-    y   = rng.integers(0, cfg.n_classes, n).astype(np.int64)
+
+    if cfg.n_classes == 2:
+        # Binary: single threshold on the feature-mean score
+        score = X.mean(axis=1)
+        y = (score > 0.0).astype(np.int64)
+        return X, y
+
+    # 3-class: two independent binary signals derived from different feature projections
+    # signal_a: comparison of the low-index feature mean against 0
+    # signal_b: comparison of the high-index feature mean against 0
+    half = max(cfg.input_dim // 2, 1)
+    score_a = X[:, :half].mean(axis=1)    # first-half feature mean
+    score_b = X[:, half:].mean(axis=1)    # second-half feature mean (or zeros if 1-D)
+
+    sig_a = (score_a > 0.0).astype(np.int64)  # binary signal A ∈ {0, 1}
+    sig_b = (score_b > 0.0).astype(np.int64)  # binary signal B ∈ {0, 1}
+
+    # Majority: both agree on 0 → class 0, both agree on 1 → class 1,
+    # signals disagree (one says 0, one says 1) → class 2 (match/boundary zone)
+    y = np.where(sig_a == sig_b, sig_a, np.int64(2)).astype(np.int64)
     return X, y
 
 
