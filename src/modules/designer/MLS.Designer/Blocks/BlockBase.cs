@@ -91,4 +91,13 @@ public abstract class BlockBase : IBlockElement
     protected static BlockSignal EmitObject<T>(Guid blockId, string socketName, BlockSocketType socketType, T value)
         where T : notnull =>
         new(blockId, socketName, socketType, JsonSerializer.SerializeToElement(value));
+
+    /// <summary>
+    /// Emits a pre-built signal to all downstream consumers.
+    /// Use this overload when a block must produce output asynchronously — for example,
+    /// in an event handler fired by an external service (e.g. <c>ITrainingDispatcher</c>)
+    /// rather than directly inside <see cref="ProcessCoreAsync"/>.
+    /// </summary>
+    protected ValueTask EmitSignalAsync(BlockSignal signal, CancellationToken ct = default) =>
+        OutputProduced is not null ? OutputProduced(signal, ct) : ValueTask.CompletedTask;
 }

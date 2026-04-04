@@ -1,5 +1,6 @@
 using MLS.Designer.Blocks.Arbitrage;
 using MLS.Designer.Blocks.DeFi;
+using MLS.Designer.Blocks.MLTraining;
 using MLS.Designer.Blocks.Trading.DataSourceBlocks;
 using MLS.Designer.Blocks.Trading.ExecutionBlocks;
 using MLS.Designer.Blocks.Trading.IndicatorBlocks;
@@ -70,6 +71,9 @@ builder.Services.AddSignalR(hub =>
     hub.MaximumReceiveMessageSize = 1024 * 1024;
 });
 
+// ── Training dispatcher ───────────────────────────────────────────────────────
+builder.Services.AddSingleton<ITrainingDispatcher, TrainingDispatcher>();
+
 builder.Services.AddSingleton<IBlockRegistry>(sp =>
 {
     var registry = new BlockRegistry();
@@ -126,6 +130,17 @@ builder.Services.AddSingleton<IBlockRegistry>(sp =>
     registry.Register<CollateralHealthBlock>("CollateralHealthBlock");
     registry.Register<YieldOptimizerBlock>("YieldOptimizerBlock");
     registry.Register<LiquidationGuardBlock>("LiquidationGuardBlock");
+    registry.Register<LendingHealthBlock>("LendingHealthBlock");
+
+    // ── ML Training blocks ─────────────────────────────────────────────────────
+    var dispatcher = sp.GetRequiredService<ITrainingDispatcher>();
+    registry.Register<DataLoaderBlock>("DataLoaderBlock");
+    registry.Register<FeatureEngineerBlock>("FeatureEngineerBlock");
+    registry.Register<TrainSplitBlock>("TrainSplitBlock");
+    registry.Register("TrainModelBlock",      () => new TrainModelBlock(dispatcher));
+    registry.Register<ValidateModelBlock>("ValidateModelBlock");
+    registry.Register<ExportONNXBlock>("ExportONNXBlock");
+    registry.Register("HyperparamSearchBlock", () => new HyperparamSearchBlock(dispatcher));
 
     return registry;
 });

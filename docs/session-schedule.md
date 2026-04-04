@@ -435,11 +435,44 @@ TrainModelBlock.ProcessAsync()
 
 ---
 
-### Session 07 — Hydra Data Domain Blocks + Strategy Persistence
+### Session 07 — Universal Tile Builder + Transformation Controller + Hydra Data Domain
 
-**Objective**: Complete the Data Hydra domain blocks, implement `StrategyRepository`, and deploy JSON template library.
+**Objective**: Introduce the `ICustomTile` abstraction layer for user-composable indicator rules, the `TransformationController` framework for unified sub-division routing, the `IActionTile` (Block-as-ONE) data source pattern, and complete the Data Hydra domain blocks.
 
-**Files to Create**
+> **Architecture references**:
+> - [Universal Tile Builder](architecture/session-07-universal-tile-builder.md) — `ICustomTile`, `ITileRule` DSL, dynamic socket registration
+> - [Label Schema](architecture/session-07-label-schema.md) — Multi-dimensional label tensors for arbitrage navigation
+> - [Block Action Tiles](architecture/session-07-block-action-tiles.md) — `IActionTile` Block-as-ONE singleton data source pattern
+> - [Transformation Controller](architecture/transformation-controller.md) — Unified payload with `TransformationUnit` audit trail
+
+**Objective (original)**: Complete the Data Hydra domain blocks, implement `StrategyRepository`, and deploy JSON template library.
+
+**Files to Create (Universal Tile Builder + Transformation Controller)**
+
+| Action | File | Description |
+|--------|------|-------------|
+| CREATE | `src/core/MLS.Core/Designer/ICustomTile.cs` | User-composable tile interface |
+| CREATE | `src/core/MLS.Core/Designer/ITileRule.cs` | Rule + condition + action interfaces |
+| CREATE | `src/core/MLS.Core/Designer/ITileCondition.cs` | Condition evaluator contract |
+| CREATE | `src/core/MLS.Core/Designer/ITileAction.cs` | Action executor contract |
+| CREATE | `src/core/MLS.Core/Designer/IActionTile.cs` | Block-as-ONE autonomous data source interface |
+| CREATE | `src/core/MLS.Core/Designer/TransformationUnit.cs` | Per-block transformation descriptor |
+| CREATE | `src/core/MLS.Core/Designer/TransformationEnvelope.cs` | Signal + transformation history |
+| CREATE | `src/core/MLS.Core/Designer/ITransformationController.cs` | TC routing interface |
+| CREATE | `src/core/MLS.Core/Designer/LabelSchema.cs` | Multi-dimensional label schema record |
+| CREATE | `src/core/MLS.Core/Constants/SubDivision.cs` | Named sub-division constants |
+| CREATE | `src/modules/designer/MLS.Designer/Blocks/CustomTiles/CustomIndicatorTile.cs` | Concrete `ICustomTile` + rule engine |
+| CREATE | `src/modules/designer/MLS.Designer/Blocks/CustomTiles/PassThroughTile.cs` | Identity tile |
+| CREATE | `src/modules/designer/MLS.Designer/Services/TileRuleEngine.cs` | Rule evaluation engine |
+| CREATE | `src/modules/designer/MLS.Designer/Services/TransformationController.cs` | TC implementation |
+| MODIFY | `src/modules/designer/MLS.Designer/Blocks/DeFi/LendingHealthBlock.cs` | Implement `IActionTile` |
+| MODIFY | `src/modules/designer/MLS.Designer/Blocks/BlockBase.cs` | Add `EmitTransformedAsync` |
+| CREATE | `docs/architecture/session-07-universal-tile-builder.md` | ✅ Added (this PR) |
+| CREATE | `docs/architecture/session-07-label-schema.md` | ✅ Added (this PR) |
+| CREATE | `docs/architecture/session-07-block-action-tiles.md` | ✅ Added (this PR) |
+| CREATE | `docs/architecture/transformation-controller.md` | ✅ Added (this PR) |
+
+**Files to Create (Hydra Data Domain + Strategy Persistence)**
 
 | Action | File | Description |
 |--------|------|-------------|
@@ -453,6 +486,7 @@ TrainModelBlock.ProcessAsync()
 | CREATE | `designer-templates/defi/morpho-yield-optimizer.json` | Pre-built DeFi template |
 | CREATE | `designer-templates/ml-training/model-t-full-pipeline.json` | Full training template |
 | MODIFY | `src/modules/designer/MLS.Designer/Controllers/StrategiesController.cs` | REST CRUD |
+
 
 **Data Hydra Domain Blocks**
 
