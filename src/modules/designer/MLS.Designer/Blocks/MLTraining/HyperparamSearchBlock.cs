@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MLS.Core.Constants;
 using MLS.Core.Contracts.Designer;
 using MLS.Core.Designer;
 using MLS.Designer.Blocks;
@@ -47,17 +48,41 @@ public sealed class HyperparamSearchBlock : BlockBase
     private readonly List<(JsonElement Hyperparams, float Metric)> _trialResults = [];
 
     private readonly BlockParameter<string> _searchStrategyParam =
-        new("SearchStrategy",  "Search Strategy",   "Grid, Random, or Bayesian",   "Random");
+        new("SearchStrategy",   "Search Strategy",    "Grid, Random, or Bayesian",                              "Random");
     private readonly BlockParameter<int>    _maxTrialsParam =
-        new("MaxTrials",       "Max Trials",         "Maximum number of trials",    20, MinValue: 1, MaxValue: 200);
+        new("MaxTrials",        "Max Trials",          "Maximum number of trials",                               20, MinValue: 1,  MaxValue: 200);
     private readonly BlockParameter<int>    _epochsPerTrialParam =
-        new("EpochsPerTrial",  "Epochs Per Trial",   "Epochs per trial run",        50, MinValue: 1, MaxValue: 1000);
+        new("EpochsPerTrial",   "Epochs Per Trial",    "Epochs per trial run (neural network models only)",      50, MinValue: 1,  MaxValue: 1000);
     private readonly BlockParameter<string> _modelTypeParam =
-        new("ModelType",       "Model Type",         "model-t, model-a, or model-d", "model-t");
+        new("ModelType",        "Model Type",          "model-t, model-a, or model-d",                          "model-t");
     private readonly BlockParameter<string> _optimizeMetricParam =
-        new("OptimizeMetric",  "Optimize Metric",    "Metric to optimise (val_loss, accuracy, f1_macro)", "val_loss");
+        new("OptimizeMetric",   "Optimize Metric",     "Metric to optimise (val_loss, accuracy, f1_macro)",      "val_loss");
     private readonly BlockParameter<bool>   _minimizeParam =
-        new("Minimize",        "Minimize",           "True = minimise the metric; False = maximise", true);
+        new("Minimize",         "Minimize",            "True = minimise the metric; False = maximise",           true);
+
+    // ── Algorithm + extended hyperparameter parameters ────────────────────────
+
+    private readonly BlockParameter<string> _algorithmTypeParam =
+        new("AlgorithmType",    "Algorithm Type",
+            "NeuralNetwork, LogisticRegression, GradientBoosting, or RandomForest",                              "NeuralNetwork");
+    private readonly BlockParameter<int>    _nEstimatorsParam =
+        new("NEstimators",      "N Estimators",
+            "Number of trees / estimators (GradientBoosting, RandomForest)",                                     100, MinValue: 10,  MaxValue: 5000);
+    private readonly BlockParameter<int>    _maxDepthParam =
+        new("MaxDepth",         "Max Depth",
+            "Maximum tree depth (GradientBoosting, RandomForest; 0 = unlimited)",                                6, MinValue: 0,   MaxValue: 64);
+    private readonly BlockParameter<float>  _subsampleParam =
+        new("Subsample",        "Subsample Ratio",
+            "Fraction of samples per tree (GradientBoosting)",                                                   0.8f, MinValue: 0.1f, MaxValue: 1.0f, IsOptimizable: true);
+    private readonly BlockParameter<float>  _dropoutRangeMaxParam =
+        new("DropoutRangeMax",  "Dropout Range Max",
+            "Upper bound for dropout search range (NeuralNetwork)",                                              0.4f, MinValue: 0f,   MaxValue: 0.8f, IsOptimizable: true);
+    private readonly BlockParameter<float>  _weightDecayParam =
+        new("WeightDecay",      "Weight Decay",
+            "L2 regularisation / weight decay (NeuralNetwork)",                                                  1e-4f, MinValue: 0f, MaxValue: 0.1f, IsOptimizable: true);
+    private readonly BlockParameter<int>    _cpuThreadsParam =
+        new("CpuThreads",       "CPU Threads",
+            "Number of CPU threads for training (0 = auto-detect)",                                              0, MinValue: 0,   MaxValue: 256);
 
     /// <inheritdoc/>
     public override string BlockType   => "HyperparamSearchBlock";
@@ -66,7 +91,9 @@ public sealed class HyperparamSearchBlock : BlockBase
     /// <inheritdoc/>
     public override IReadOnlyList<BlockParameter> Parameters =>
         [_searchStrategyParam, _maxTrialsParam, _epochsPerTrialParam,
-         _modelTypeParam, _optimizeMetricParam, _minimizeParam];
+         _modelTypeParam, _optimizeMetricParam, _minimizeParam,
+         _algorithmTypeParam, _nEstimatorsParam, _maxDepthParam,
+         _subsampleParam, _dropoutRangeMaxParam, _weightDecayParam, _cpuThreadsParam];
 
     /// <summary>Initialises a <see cref="HyperparamSearchBlock"/> with the injected dispatcher.</summary>
     public HyperparamSearchBlock(ITrainingDispatcher dispatcher) : base(
@@ -118,7 +145,7 @@ public sealed class HyperparamSearchBlock : BlockBase
 
         var started = new SearchStatus(
             ModelType:   _modelType,
-            State:       "SEARCH_STARTED",
+            State:       TrainingState.SearchStarted,
             TrialIndex:  0,
             MaxTrials:   _maxTrialsParam.DefaultValue,
             BestMetric:  float.NaN,
@@ -161,7 +188,7 @@ public sealed class HyperparamSearchBlock : BlockBase
         var (bestHp, bestMetric) = GetBestTrial();
         var progress = new SearchStatus(
             ModelType:       _modelType,
-            State:           "SEARCH_RUNNING",
+            State:           TrainingState.SearchRunning,
             TrialIndex:      _trialIndex,
             MaxTrials:       _maxTrialsParam.DefaultValue,
             BestMetric:      bestMetric,
@@ -201,7 +228,7 @@ public sealed class HyperparamSearchBlock : BlockBase
 
         var best = new SearchStatus(
             ModelType:       _modelType,
-            State:           "SEARCH_COMPLETE",
+            State:           TrainingState.SearchComplete,
             TrialIndex:      _trialIndex,
             MaxTrials:       _maxTrialsParam.DefaultValue,
             BestMetric:      bestMetric,
@@ -216,7 +243,13 @@ public sealed class HyperparamSearchBlock : BlockBase
 
     private JsonElement GenerateHyperparams(int trialIdx)
     {
-        var strategy = _searchStrategyParam.DefaultValue;
+        var strategy      = _searchStrategyParam.DefaultValue;
+        var algorithmType = _algorithmTypeParam.DefaultValue;
+
+        // For tree-based / linear algorithms (LogisticRegression, GradientBoosting, RandomForest),
+        // the relevant hyperparameters differ from neural-network params.
+        if (!algorithmType.Equals("NeuralNetwork", StringComparison.OrdinalIgnoreCase))
+            return GenerateTreeHyperparams(trialIdx, algorithmType);
 
         return strategy.Equals("Grid", StringComparison.OrdinalIgnoreCase)
             ? GenerateGridHyperparams(trialIdx)
@@ -225,9 +258,49 @@ public sealed class HyperparamSearchBlock : BlockBase
                 : GenerateRandomHyperparams();
     }
 
-    private static JsonElement GenerateGridHyperparams(int idx)
+    /// <summary>
+    /// Generates hyperparameters for tree/linear algorithms
+    /// (LogisticRegression, GradientBoosting, RandomForest).
+    /// Parameters are embedded in the dispatched payload so that the Python pipeline
+    /// can route to the appropriate scikit-learn estimator.
+    /// </summary>
+    private JsonElement GenerateTreeHyperparams(int trialIdx, string algorithmType)
     {
-        // Grid over learning_rate × batch_size
+        var rng          = Random.Shared;
+        int nEst         = _nEstimatorsParam.DefaultValue;
+        int maxDepth     = _maxDepthParam.DefaultValue;
+        float subsample  = _subsampleParam.DefaultValue;
+        int cpuThreads   = _cpuThreadsParam.DefaultValue;
+
+        // Perturb around configured defaults for non-grid strategies
+        var strategy = _searchStrategyParam.DefaultValue;
+        if (!strategy.Equals("Grid", StringComparison.OrdinalIgnoreCase))
+        {
+            // Random or Bayesian: vary key parameters within sensible bounds
+            nEst     = Math.Clamp(nEst + rng.Next(-nEst / 4, nEst / 4 + 1), 10, 5000);
+            maxDepth = Math.Clamp(maxDepth + rng.Next(-2, 3), 1, 64);
+            subsample = Math.Clamp(subsample + (float)(rng.NextDouble() - 0.5) * 0.2f, 0.1f, 1.0f);
+        }
+
+        // LogisticRegression does not use learning_rate for fitting; use 0 as sentinel
+        float lr = algorithmType.Equals("LogisticRegression", StringComparison.OrdinalIgnoreCase)
+            ? 0f
+            : (float)Math.Pow(10, rng.NextDouble() * 2 - 2);  // log ∈ [0.01, 1.0] for boosting
+
+        return JsonSerializer.SerializeToElement(new
+        {
+            algorithm_type = algorithmType.ToLowerInvariant(),
+            n_estimators   = nEst,
+            max_depth      = maxDepth,
+            subsample      = subsample,
+            learning_rate  = lr,
+            n_jobs         = cpuThreads == 0 ? -1 : cpuThreads,  // -1 = use all available cores
+        });
+    }
+
+    private JsonElement GenerateGridHyperparams(int idx)
+    {
+        // Grid over learning_rate × batch_size (neural network)
         float[] lrGrid        = [1e-4f, 5e-4f, 1e-3f, 5e-3f];
         int[]   batchGrid     = [256, 512];
         int     combinations  = lrGrid.Length * batchGrid.Length;
@@ -237,25 +310,31 @@ public sealed class HyperparamSearchBlock : BlockBase
 
         return JsonSerializer.SerializeToElement(new
         {
-            learning_rate = lr,
-            batch_size    = batch,
-            dropout_rate  = 0.2f,
+            algorithm_type = "neural_network",
+            learning_rate  = lr,
+            batch_size     = batch,
+            dropout_rate   = 0.2f,
+            weight_decay   = _weightDecayParam.DefaultValue,
+            n_jobs         = _cpuThreadsParam.DefaultValue == 0 ? -1 : _cpuThreadsParam.DefaultValue,
         });
     }
 
-    private static JsonElement GenerateRandomHyperparams()
+    private JsonElement GenerateRandomHyperparams()
     {
         var rng          = Random.Shared;
         double lrExp     = rng.NextDouble() * 3 - 5;   // log10 ∈ [-5, -2]
         float  lr        = (float)Math.Pow(10, lrExp);
         int[]  batches   = [128, 256, 512, 1024];
-        float  dropout   = (float)(rng.NextDouble() * 0.4);  // [0, 0.4]
+        float  dropout   = (float)(rng.NextDouble() * _dropoutRangeMaxParam.DefaultValue);
 
         return JsonSerializer.SerializeToElement(new
         {
-            learning_rate = lr,
-            batch_size    = batches[rng.Next(batches.Length)],
-            dropout_rate  = dropout,
+            algorithm_type = "neural_network",
+            learning_rate  = lr,
+            batch_size     = batches[rng.Next(batches.Length)],
+            dropout_rate   = dropout,
+            weight_decay   = _weightDecayParam.DefaultValue,
+            n_jobs         = _cpuThreadsParam.DefaultValue == 0 ? -1 : _cpuThreadsParam.DefaultValue,
         });
     }
 
@@ -264,8 +343,8 @@ public sealed class HyperparamSearchBlock : BlockBase
         // TPE approximation: sample around the best known configuration with Gaussian noise
         var (bestHp, _) = GetBestTrial();
 
-        float baseLr    = 1e-3f;
-        int   baseBatch = 512;
+        float baseLr      = 1e-3f;
+        int   baseBatch   = 512;
         float baseDropout = 0.2f;
 
         if (bestHp.ValueKind == JsonValueKind.Object)
@@ -277,15 +356,18 @@ public sealed class HyperparamSearchBlock : BlockBase
 
         var rng   = Random.Shared;
         // Perturb log(lr) by ±0.3 standard deviations
-        double newLrLog  = Math.Log10(baseLr) + (rng.NextDouble() - 0.5) * 0.6;
-        float  newLr     = Math.Clamp((float)Math.Pow(10, newLrLog), 1e-6f, 0.1f);
-        float  newDropout = Math.Clamp(baseDropout + (float)(rng.NextDouble() - 0.5) * 0.1f, 0f, 0.5f);
+        double newLrLog   = Math.Log10(baseLr) + (rng.NextDouble() - 0.5) * 0.6;
+        float  newLr      = Math.Clamp((float)Math.Pow(10, newLrLog), 1e-6f, 0.1f);
+        float  newDropout = Math.Clamp(baseDropout + (float)(rng.NextDouble() - 0.5) * 0.1f, 0f, _dropoutRangeMaxParam.DefaultValue);
 
         return JsonSerializer.SerializeToElement(new
         {
-            learning_rate = newLr,
-            batch_size    = baseBatch,
-            dropout_rate  = newDropout,
+            algorithm_type = "neural_network",
+            learning_rate  = newLr,
+            batch_size     = baseBatch,
+            dropout_rate   = newDropout,
+            weight_decay   = _weightDecayParam.DefaultValue,
+            n_jobs         = _cpuThreadsParam.DefaultValue == 0 ? -1 : _cpuThreadsParam.DefaultValue,
         });
     }
 

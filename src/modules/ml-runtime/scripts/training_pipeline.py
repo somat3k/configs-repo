@@ -72,6 +72,16 @@ try:
 except ImportError:
     _PG_AVAILABLE = False
 
+# ── Optional scikit-learn (regression / ensemble algorithms) ──────────────────
+try:
+    from sklearn.linear_model import LogisticRegression, LinearRegression  # type: ignore
+    from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor  # type: ignore
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor  # type: ignore
+    from sklearn.metrics import accuracy_score, f1_score, mean_squared_error  # type: ignore
+    _SKLEARN_AVAILABLE = True
+except ImportError:
+    _SKLEARN_AVAILABLE = False
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 ARTIFACTS_DIR = Path(os.environ.get("MLS_ARTIFACTS_DIR", "/artifacts/models"))
 ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -96,6 +106,7 @@ class TrainingConfig:
     job_id:            str
     model_type:        str
     schema_version:    int
+    algorithm_type:    str  = "neural_network"  # neural_network | linear_regression | gradient_boosting | random_forest
     epochs:            int = 100
     batch_size:        int = 512
     learning_rate:     float = 1e-3
@@ -105,6 +116,10 @@ class TrainingConfig:
     patience:          int = 20
     hidden_dims:       list[int] = field(default_factory=lambda: [128, 64, 32])
     n_classes:         int = 3
+    n_estimators:      int = 100   # GradientBoosting / RandomForest
+    max_depth:         int = 6     # GradientBoosting / RandomForest (0 = unlimited)
+    subsample:         float = 0.8  # GradientBoosting sample fraction
+    n_jobs:            int = -1    # scikit-learn n_jobs (-1 = all CPU cores)
     data_from:         str = ""
     data_to:           str = ""
 
@@ -116,10 +131,14 @@ class TrainingConfig:
         if isinstance(hidden, str):
             hidden = json.loads(hidden)
 
+        # Normalise algorithm_type: convert to lowercase with underscores
+        raw_algo = str(hp.get("algorithm_type", "neural_network")).lower().replace("-", "_")
+
         return cls(
             job_id=str(payload["job_id"]),
             model_type=payload["model_type"],
             schema_version=int(payload.get("feature_schema_version", 1)),
+            algorithm_type=raw_algo,
             epochs=int(hp.get("epochs", 100)),
             batch_size=int(hp.get("batch_size", 512)),
             learning_rate=float(hp.get("learning_rate", 1e-3)),
@@ -130,6 +149,10 @@ class TrainingConfig:
             hidden_dims=hidden,
             # model-a uses binary classification (BCE); force n_classes=2 regardless of payload
             n_classes=2 if payload["model_type"] == "model-a" else int(hp.get("n_classes", 3)),
+            n_estimators=int(hp.get("n_estimators", 100)),
+            max_depth=int(hp.get("max_depth", 6)),
+            subsample=float(hp.get("subsample", 0.8)),
+            n_jobs=int(hp.get("n_jobs", -1)),
             data_from=dr.get("from", ""),
             data_to=dr.get("to", ""),
         )
@@ -653,11 +676,108 @@ def _build_model(cfg: TrainingConfig) -> nn.Module:
     return ModelT(cfg)  # default: model-t
 
 
+def _build_sklearn_estimator(cfg: TrainingConfig):
+    """
+    Build a scikit-learn estimator for the configured algorithm type.
+    Returns a fitted-ready estimator with a scikit-learn compatible interface.
+    Raises RuntimeError if scikit-learn is not installed.
+    """
+    if not _SKLEARN_AVAILABLE:
+        raise RuntimeError(
+            "scikit-learn is not installed. Install it to use LinearRegression, "
+            "GradientBoosting, or RandomForest algorithm types."
+        )
+
+    algo        = cfg.algorithm_type
+    n_jobs      = cfg.n_jobs
+    max_depth   = cfg.max_depth if cfg.max_depth > 0 else None
+
+    if algo in ("logistic_regression", "linear_regression"):
+        # "logistic_regression" / "linear_regression" both map to LogisticRegression —
+        # a linear classifier that models P(class | features) via softmax / sigmoid.
+        return LogisticRegression(
+            max_iter=max(1000, cfg.epochs),
+            n_jobs=n_jobs,
+            solver="lbfgs",
+            multi_class="auto",
+        )
+
+    if algo == "gradient_boosting":
+        if cfg.n_classes <= 2:
+            return GradientBoostingClassifier(
+                n_estimators=cfg.n_estimators,
+                max_depth=max_depth or 6,
+                learning_rate=cfg.learning_rate,
+                subsample=cfg.subsample,
+                n_iter_no_change=cfg.patience,
+                validation_fraction=0.1,
+                random_state=42,
+            )
+        # Multi-class via one-vs-rest is handled transparently by scikit-learn
+        return GradientBoostingClassifier(
+            n_estimators=cfg.n_estimators,
+            max_depth=max_depth or 6,
+            learning_rate=cfg.learning_rate,
+            subsample=cfg.subsample,
+            n_iter_no_change=cfg.patience,
+            validation_fraction=0.1,
+            random_state=42,
+        )
+
+    if algo == "random_forest":
+        return RandomForestClassifier(
+            n_estimators=cfg.n_estimators,
+            max_depth=max_depth,
+            n_jobs=n_jobs,
+            random_state=42,
+        )
+
+    raise ValueError(f"Unknown algorithm_type: {algo!r}")
+
+
+def _train_sklearn(estimator, cfg: TrainingConfig, X_tr, y_tr, X_val, y_val) -> dict:
+    """
+    Fit a scikit-learn estimator and return final metrics.
+    Emits a single TRAINING_JOB_PROGRESS message after fit (scikit-learn is not epoch-based).
+    """
+    t0 = time.monotonic()
+    _emit_info(cfg.job_id, f"Fitting {cfg.algorithm_type} estimator …")
+
+    estimator.fit(X_tr, y_tr)
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+    # Compute validation metrics
+    y_pred = estimator.predict(X_val)
+    acc    = float(accuracy_score(y_val, y_pred))
+
+    try:
+        f1 = float(f1_score(y_val, y_pred, average="macro", zero_division=0))
+    except Exception:
+        f1 = 0.0
+
+    val_loss = 1.0 - acc  # Surrogate: use 1-accuracy as a loss-like score for non-neural models
+
+    # Emit a single progress event (no epoch loop for tree models)
+    _emit_progress(
+        job_id=cfg.job_id,
+        epoch=1,
+        total_epochs=1,
+        train_loss=val_loss,
+        val_loss=val_loss,
+        accuracy=acc,
+        elapsed_ms=elapsed_ms,
+        eta_ms=0,
+    )
+
+    return {"accuracy": acc, "f1_macro": f1, "val_loss": val_loss}
+
+
 def run(cfg: TrainingConfig) -> None:
-    """Full training run for a single job."""
+    """Full training run for a single job (neural network or scikit-learn algorithm)."""
     t_start = time.monotonic()
 
-    _emit_info(cfg.job_id, f"Loading dataset for {cfg.model_type!r}")
+    _emit_info(cfg.job_id, f"Loading dataset for {cfg.model_type!r} ({cfg.algorithm_type})")
     X, y = load_dataset(cfg)
 
     # model-a uses BCE which requires binary labels in {0, 1}.
@@ -671,19 +791,47 @@ def run(cfg: TrainingConfig) -> None:
         f"Dataset: total={len(X)} train={len(X_tr)} val={len(X_val)} test={len(X_tst)}",
     )
 
-    model = _build_model(cfg)
-    model = train_loop(model, cfg, X_tr, y_tr, X_val, y_val)
+    # ── Route to appropriate training backend ────────────────────────────────
+    if cfg.algorithm_type in ("logistic_regression", "linear_regression", "gradient_boosting", "random_forest"):
+        estimator   = _build_sklearn_estimator(cfg)
+        sk_metrics  = _train_sklearn(estimator, cfg, X_tr, y_tr, X_val, y_val)
 
-    # ── Versioning ───────────────────────────────────────────────────────────
-    version   = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    model_id  = f"{cfg.model_type}-v{version}"
+        version   = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        model_id  = f"{cfg.model_type}-{cfg.algorithm_type}-v{version}"
+        joblib_path = export_joblib(estimator, cfg, version)
 
-    onnx_path   = export_onnx(model, cfg, version)
-    joblib_path = export_joblib(model, cfg, version)
-    ipfs_cid    = upload_to_ipfs(onnx_path)
+        # ONNX export is not available for scikit-learn estimators via this pipeline;
+        # set onnx_path to the joblib path as a consistent artefact reference.
+        onnx_path = joblib_path
+        ipfs_cid  = upload_to_ipfs(joblib_path)
 
-    metrics      = compute_final_metrics(model, cfg, X_tst, y_tst)
-    duration_ms  = int((time.monotonic() - t_start) * 1000)
+        # Final test-set metrics
+        y_tst_pred    = estimator.predict(X_tst)
+        tst_acc       = float(accuracy_score(y_tst, y_tst_pred))
+        try:
+            tst_f1    = float(f1_score(y_tst, y_tst_pred, average="macro", zero_division=0))
+        except Exception:
+            tst_f1    = 0.0
+        metrics = {
+            "accuracy":  tst_acc,
+            "f1_macro":  tst_f1,
+            "val_loss":  sk_metrics["val_loss"],
+        }
+        duration_ms = int((time.monotonic() - t_start) * 1000)
+    else:
+        # Neural network path (default)
+        model = _build_model(cfg)
+        model = train_loop(model, cfg, X_tr, y_tr, X_val, y_val)
+
+        version   = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        model_id  = f"{cfg.model_type}-v{version}"
+
+        onnx_path   = export_onnx(model, cfg, version)
+        joblib_path = export_joblib(model, cfg, version)
+        ipfs_cid    = upload_to_ipfs(onnx_path)
+
+        metrics     = compute_final_metrics(model, cfg, X_tst, y_tst)
+        duration_ms = int((time.monotonic() - t_start) * 1000)
 
     _emit_complete(
         job_id=cfg.job_id,

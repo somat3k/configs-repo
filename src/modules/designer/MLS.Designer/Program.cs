@@ -130,6 +130,7 @@ builder.Services.AddSingleton<IBlockRegistry>(sp =>
     registry.Register<CollateralHealthBlock>("CollateralHealthBlock");
     registry.Register<YieldOptimizerBlock>("YieldOptimizerBlock");
     registry.Register<LiquidationGuardBlock>("LiquidationGuardBlock");
+    registry.Register<LendingHealthBlock>("LendingHealthBlock");
 
     // ── ML Training blocks ─────────────────────────────────────────────────────
     var dispatcher = sp.GetRequiredService<ITrainingDispatcher>();

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MLS.Core.Constants;
 using MLS.Core.Designer;
 using MLS.Designer.Blocks;
 
@@ -54,7 +55,7 @@ public sealed class ValidateModelBlock : BlockBase
             return new ValueTask<BlockSignal?>(result: null);
 
         // Pass PENDING / TRAINING states through unchanged
-        if (!string.Equals(state, "COMPLETE", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(state, TrainingState.Complete, StringComparison.OrdinalIgnoreCase))
             return new ValueTask<BlockSignal?>(result: signal);
 
         // ── Validate completed model ──────────────────────────────────────────────
@@ -68,7 +69,7 @@ public sealed class ValidateModelBlock : BlockBase
             : BuildRejectionReason(accOk, lossOk, f1Ok, accuracy, valLoss, f1);
 
         // Re-emit the original signal value extended with validation info
-        var extended = ExtendWithValidation(signal.Value, passed ? "ACCEPTED" : "REJECTED", passed, reason);
+        var extended = ExtendWithValidation(signal.Value, passed ? TrainingState.Accepted : TrainingState.Rejected, passed, reason);
 
         return new ValueTask<BlockSignal?>(
             EmitObject(BlockId, "status_output", BlockSocketType.TrainingStatus, extended));

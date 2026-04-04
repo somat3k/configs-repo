@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MLS.Core.Constants;
 using MLS.Core.Contracts.Designer;
 using MLS.Core.Designer;
 using MLS.Designer.Blocks;
@@ -117,7 +118,7 @@ public sealed class TrainModelBlock : BlockBase
         var pending = new TrainingStatusValue(
             JobId:       jobId.ToString("N"),
             ModelType:   effectiveModel,
-            State:       "PENDING",
+            State:       TrainingState.Pending,
             Epoch:       0,
             TotalEpochs: _epochsParam.DefaultValue,
             TrainLoss:   0f,
@@ -138,7 +139,7 @@ public sealed class TrainModelBlock : BlockBase
         var status = new TrainingStatusValue(
             JobId:       progress.JobId.ToString("N"),
             ModelType:   modelType ?? _modelTypeParam.DefaultValue,
-            State:       "TRAINING",
+            State:       TrainingState.Training,
             Epoch:       progress.Epoch,
             TotalEpochs: progress.TotalEpochs,
             TrainLoss:   progress.TrainLoss,
@@ -167,7 +168,7 @@ public sealed class TrainModelBlock : BlockBase
         var status = new TrainingStatusValue(
             JobId:       complete.JobId.ToString("N"),
             ModelType:   complete.ModelType,
-            State:       "COMPLETE",
+            State:       TrainingState.Complete,
             Epoch:       0,
             TotalEpochs: 0,
             TrainLoss:   0f,

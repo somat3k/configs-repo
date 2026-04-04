@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MLS.Core.Constants;
 using MLS.Core.Designer;
 using MLS.Designer.Blocks;
 
@@ -73,7 +74,7 @@ public sealed class ExportONNXBlock : BlockBase
         var exportStatus = new ExportReadyStatus(
             JobId:      jobId,
             ModelType:  modelType,
-            State:      "EXPORT_READY",
+            State:      TrainingState.ExportReady,
             ModelId:    effectiveId,
             OnnxPath:   onnxPath   ?? string.Empty,
             JoblibPath: joblibPath ?? string.Empty,
@@ -88,8 +89,8 @@ public sealed class ExportONNXBlock : BlockBase
     // ── Helpers ───────────────────────────────────────────────────────────────────
 
     private static bool IsExportableState(string state) =>
-        string.Equals(state, "ACCEPTED", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(state, "COMPLETE", StringComparison.OrdinalIgnoreCase);
+        string.Equals(state, TrainingState.Accepted, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(state, TrainingState.Complete, StringComparison.OrdinalIgnoreCase);
 
     private static bool TryExtractStatus(
         JsonElement value,
