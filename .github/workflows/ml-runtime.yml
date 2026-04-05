@@ -76,8 +76,8 @@ jobs:
           python training_pipeline.py --config /tmp/train_config.json
 
       - name: Run model validation tests
+        if: ${{ hashFiles(format('src/modules/ml-runtime/scripts/tests/test_{0}_model.py', matrix.model)) != '' }}
         working-directory: src/modules/ml-runtime
-        continue-on-error: true
         run: |
           python -m pytest scripts/tests/test_${{ matrix.model }}_model.py -v \
             --benchmark-only \

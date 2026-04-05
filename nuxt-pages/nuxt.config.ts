@@ -7,7 +7,8 @@ export default defineNuxtConfig({
   nitro: {
     preset: 'github-pages',
     prerender: {
-      failOnError: false,
+      failOnError: true,
+      ignore: ['/architecture', '/modules', '/api', '/checklist'],
     },
   },
 
