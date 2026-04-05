@@ -89,7 +89,51 @@
 
 ---
 
-## 📊 Trader Module
+## 🎨 Designer Module
+
+### Session 06 — ML Training Domain Blocks + Training Pipeline
+- [x] Implement `MLTraining/` block domain (DataLoader, FeatureEngineer, TrainSplit, TrainModel, ValidateModel, ExportONNX, HyperparamSearch)
+- [x] Implement `TrainingDispatcher` service — dispatch `TRAINING_JOB_START` via Block Controller SignalR
+- [x] Implement `training_pipeline.py` unified Python entry point (model-t/a/d, ONNX+JOBLIB export, IPFS upload)
+- [x] `TrainModelBlock` emits `TRAINING_JOB_START` with correct feature schema per model type
+- [x] Shell VM streams `TRAINING_JOB_PROGRESS` per epoch, `TRAINING_JOB_COMPLETE` on finish
+- [x] `ExportONNXBlock` uploads to IPFS and records CID in PostgreSQL
+
+### Session 07 — Universal Tile Builder + Transformation Controller + Hydra Data Domain
+- [x] Implement `ICustomTile`, `ITileRule`, `ITileCondition`, `ITileAction` in MLS.Core.Designer
+- [x] Implement `IActionTile` (Block-as-ONE autonomous data source pattern)
+- [x] Implement `TransformationUnit`, `TransformationEnvelope`, `ITransformationController`, `LabelSchema`
+- [x] Implement `CustomIndicatorTile`, `PassThroughTile` blocks + `TileRuleEngine` service
+- [x] Implement `TransformationController` service + `LendingHealthBlock` as `IActionTile`
+- [x] Implement `DataHydra/` blocks: FeedSource, Filter, Normalisation, Router, Backfill, GapMonitor
+- [x] Implement `StrategyRepository` (EF Core CRUD), `DesignerDbContext`, `StrategiesController`
+- [x] Add 6 strategy JSON templates to `designer-templates/`
+- [x] Architecture docs: session-07-universal-tile-builder.md, session-07-label-schema.md, session-07-block-action-tiles.md, transformation-controller.md
+
+---
+
+## 🤖 AI Hub Module
+
+### Session 08 — AI Hub Module Scaffold + Provider Router
+- [x] Create `MLS.AIHub` project (net9.0, SK 1.74.0, EF Core 9, Npgsql)
+- [x] Implement `ILLMProvider` interface (wraps SK `IChatCompletionService`)
+- [x] Implement `OpenAIProvider` (GPT-4o, GPT-4-turbo, o3)
+- [x] Implement `AnthropicProvider` (Claude 3.5 Sonnet, Claude 3 Opus — custom HTTP adapter)
+- [x] Implement `GoogleProvider` (Gemini 2.5 Pro, Gemini Flash — SK Google connector)
+- [x] Implement `GroqProvider` (Llama3-70b, Mixtral — OpenAI-compatible)
+- [x] Implement `OpenRouterProvider` (100+ model routing — OpenAI-compatible)
+- [x] Implement `VercelAIProvider` (AI SDK edge endpoint — OpenAI-compatible)
+- [x] Implement `LocalProvider` (Ollama/llama.cpp — always-available final fallback)
+- [x] All 7 providers share `ProviderBase` circuit breaker (3 failures → 60s open)
+- [x] Implement `ProviderRouter` (user-defined distributor: override → prefs → fallback → local)
+- [x] Implement `IUserPreferenceRepository` + `UserPreferenceRepository` (EF Core PostgreSQL)
+- [x] Implement `BlockControllerClient` (MODULE_REGISTER + heartbeat every 5s)
+- [x] Module starts on HTTP 5750 / WS 6750
+- [x] Unit tests: `ProviderRouterTests` (5 tests including `SelectProvider_FallsBackToLocalWhenPrimaryUnavailable`)
+
+---
+
+
 
 ### Development
 - [ ] Create project: `src/modules/trader/Trader.csproj`

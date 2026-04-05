@@ -427,11 +427,13 @@ TrainModelBlock.ProcessAsync()
 - `.skills/acceleration/acceleration.md`
 
 **Acceptance Criteria**
-- [ ] `TrainModelBlock` emits `TRAINING_JOB_START` with correct feature schema for each model type
-- [ ] `training_pipeline.py` runs with `--dry-run` flag completing in < 30s
-- [ ] Shell VM streams at least one `TRAINING_JOB_PROGRESS` envelope per epoch
-- [ ] `ExportONNXBlock` uploads ONNX to IPFS and records CID in PostgreSQL
-- [ ] Training job completes end-to-end in test environment (model_t, 5 epochs)
+- [x] `TrainModelBlock` emits `TRAINING_JOB_START` with correct feature schema for each model type
+- [x] `training_pipeline.py` runs with `--dry-run` flag completing in < 30s
+- [x] Shell VM streams at least one `TRAINING_JOB_PROGRESS` envelope per epoch
+- [x] `ExportONNXBlock` uploads ONNX to IPFS and records CID in PostgreSQL
+- [x] Training job completes end-to-end in test environment (model_t, 5 epochs)
+
+**Session Status: ✅ COMPLETE** — Implemented 2026-04-05
 
 ---
 
@@ -521,10 +523,12 @@ POST   /api/strategies/from-template/{name}  Create strategy from template
 - `.skills/storage-data-management.md`
 
 **Acceptance Criteria**
-- [ ] `StrategyRepository.CreateAsync` persists and rehydrates a full strategy graph
-- [ ] `momentum-long.json` template loads and deploys without validation errors
-- [ ] `FeedSourceBlock` connects to DataLayer WebSocket and receives candle stream
-- [ ] `GapMonitorBlock` detects a synthetic 2h gap in test fixture and emits `DATA_GAP_DETECTED`
+- [x] `StrategyRepository.CreateAsync` persists and rehydrates a full strategy graph
+- [x] `momentum-long.json` template loads and deploys without validation errors
+- [x] `FeedSourceBlock` connects to DataLayer WebSocket and receives candle stream
+- [x] `GapMonitorBlock` detects a synthetic 2h gap in test fixture and emits `DATA_GAP_DETECTED`
+
+**Session Status: ✅ COMPLETE** — Implemented 2026-04-05
 
 ---
 
@@ -585,11 +589,13 @@ public sealed class ProviderRouter(
 - `.skills/dotnet-devs.md`
 
 **Acceptance Criteria**
-- [ ] All 6 providers implement `ILLMProvider` and are registered in DI
-- [ ] `ProviderRouter` falls back to Local provider when primary is unavailable
-- [ ] Provider selection persisted in PostgreSQL and restored on startup
-- [ ] Module registers with Block Controller and sends heartbeat
-- [ ] Unit test: `ProviderRouterTests.SelectProvider_FallsBackToLocalWhenPrimaryUnavailable`
+- [x] All 7 providers implement `ILLMProvider` and are registered in DI
+- [x] `ProviderRouter` falls back to Local provider when primary is unavailable
+- [x] Provider selection persisted in PostgreSQL and restored on startup
+- [x] Module registers with Block Controller and sends heartbeat
+- [x] Unit test: `ProviderRouterTests.SelectProvider_FallsBackToLocalWhenPrimaryUnavailable`
+
+**Session Status: ✅ COMPLETE** — Implemented 2026-04-05
 
 ---
 
