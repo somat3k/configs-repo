@@ -58,7 +58,7 @@ public sealed class ContextAssembler(
         // Launch all 10 sources in parallel
         var modulesTask     = FetchJsonAsync<ModuleInfo>    (opts.BlockControllerUrl, "/api/modules",                        "block-controller/modules",  failed, ct);
         var positionsTask   = FetchJsonAsync<PositionInfo>  (opts.TraderUrl,          "/api/positions",                       "trader/positions",          failed, ct);
-        var signalsTask     = FetchJsonAsync<SignalInfo>     (opts.TraderUrl,          $"/api/signals/recent?n={opts.MaxEnvelopeHistory}", "trader/signals", failed, ct);
+        var signalsTask     = FetchJsonAsync<SignalInfo>     (opts.TraderUrl,          $"/api/signals/recent?n={opts.MaxSignalHistory}", "trader/signals", failed, ct);
         var arbTask         = FetchRawArrayAsync             (opts.ArbitragerUrl,      "/api/opportunities/active",            "arbitrager/opportunities",  failed, ct);
         var defiTask        = FetchJsonAsync<DefiHealthInfo> (opts.DeFiUrl,            "/api/positions/health",                "defi/health",               failed, ct);
         var modelsTask      = FetchJsonAsync<ModelInfo>      (opts.MlRuntimeUrl,       "/api/models",                         "ml-runtime/models",         failed, ct);

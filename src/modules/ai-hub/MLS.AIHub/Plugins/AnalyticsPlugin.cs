@@ -114,10 +114,10 @@ public sealed class AnalyticsPlugin(
             // Open report panel on canvas
             await _canvasDispatcher.DispatchAsync(
                 new OpenPanelAction("AnalyticsReport", reportData,
-                    $"{CultureTitle(reportType)} Report{(targetId is not null ? $": {targetId}" : "")}"),
+                    $"{Capitalize(reportType)} Report{(targetId is not null ? $": {targetId}" : "")}"),
                 UserId, ct).ConfigureAwait(false);
 
-            return $"{CultureTitle(reportType)} report opened on canvas.";
+            return $"{Capitalize(reportType)} report opened on canvas.";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -171,7 +171,7 @@ public sealed class AnalyticsPlugin(
         return client;
     }
 
-    private static string CultureTitle(string s) =>
+    private static string Capitalize(string s) =>
         s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..].ToLowerInvariant();
 
     // ── DTOs ──────────────────────────────────────────────────────────────────

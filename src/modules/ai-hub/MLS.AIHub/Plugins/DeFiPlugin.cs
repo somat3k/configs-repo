@@ -50,8 +50,8 @@ public sealed class DeFiPlugin(
                 .OrderBy(p => p.HealthFactor)
                 .Select(p =>
                 {
-                    var alert = p.HealthFactor < 1.2m ? " ⚠️ AT RISK" :
-                                p.HealthFactor < 1.0m ? " 🚨 LIQUIDATABLE" : "";
+                    var alert = p.HealthFactor < 1.0m ? " 🚨 LIQUIDATABLE" :
+                                p.HealthFactor < 1.2m ? " ⚠️ AT RISK" : "";
                     return $"  {p.Protocol,-10} | HF: {p.HealthFactor:F3} | " +
                            $"Collateral: ${p.CollateralUsd:N0} | Borrow: ${p.BorrowUsd:N0} | {p.Severity}{alert}";
                 });

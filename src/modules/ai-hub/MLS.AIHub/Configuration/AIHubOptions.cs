@@ -54,6 +54,9 @@ public sealed class AIHubOptions
     /// <summary>Context assembly timeout in milliseconds. Target: &lt; 200ms.</summary>
     public int ContextAssemblyTimeoutMs { get; set; } = 200;
 
+    /// <summary>Maximum signal history items included in context (for Trader signals query).</summary>
+    public int MaxSignalHistory { get; set; } = 50;
+
     /// <summary>Maximum envelope history items included in context.</summary>
     public int MaxEnvelopeHistory { get; set; } = 50;
 
