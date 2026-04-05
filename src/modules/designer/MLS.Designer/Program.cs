@@ -1,4 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using MLS.Designer.Blocks.Arbitrage;
+using MLS.Designer.Blocks.CustomTiles;
+using MLS.Designer.Blocks.DataHydra;
 using MLS.Designer.Blocks.DeFi;
 using MLS.Designer.Blocks.MLTraining;
 using MLS.Designer.Blocks.Trading.DataSourceBlocks;
@@ -10,6 +13,7 @@ using MLS.Designer.Blocks.Trading.StrategyBlocks;
 using MLS.Designer.Configuration;
 using MLS.Designer.Exchanges;
 using MLS.Designer.Hubs;
+using MLS.Designer.Persistence;
 using MLS.Designer.Services;
 using MLS.Core.Designer;
 using Npgsql;
@@ -60,6 +64,22 @@ builder.Services.AddSingleton<CamelotAdapter>();
 builder.Services.AddSingleton<DFYNAdapter>();
 builder.Services.AddSingleton<BalancerAdapter>();
 builder.Services.AddSingleton<MorphoAdapter>();
+
+// ── EF Core — Designer DB context ────────────────────────────────────────────
+builder.Services.AddDbContext<DesignerDbContext>(options =>
+    options.UseNpgsql(designerOpts.PostgresConnectionString));
+builder.Services.AddScoped<StrategyRepository>();
+
+// ── Transformation controller + tile rule engine ──────────────────────────────
+builder.Services.AddSingleton<ITransformationController, TransformationController>();
+builder.Services.AddSingleton<TileRuleEngine>();
+
+// ── Envelope sender (for StrategiesController → Block Controller) ─────────────
+builder.Services.AddHttpClient<IEnvelopeSender, EnvelopeSender>(client =>
+{
+    client.BaseAddress = new Uri(designerOpts.BlockControllerUrl);
+    client.Timeout     = TimeSpan.FromSeconds(10);
+});
 
 // ── Services ──────────────────────────────────────────────────────────────────
 builder.Services.AddControllers()
@@ -141,6 +161,18 @@ builder.Services.AddSingleton<IBlockRegistry>(sp =>
     registry.Register<ValidateModelBlock>("ValidateModelBlock");
     registry.Register<ExportONNXBlock>("ExportONNXBlock");
     registry.Register("HyperparamSearchBlock", () => new HyperparamSearchBlock(dispatcher));
+
+    // ── Custom Tile blocks ─────────────────────────────────────────────────────
+    registry.Register<CustomIndicatorTile>("CustomIndicatorTile");
+    registry.Register<PassThroughTile>("PassThroughTile");
+
+    // ── Data Hydra blocks ──────────────────────────────────────────────────────
+    registry.Register<FeedSourceBlock>("FeedSourceBlock");
+    registry.Register<FilterBlock>("FilterBlock");
+    registry.Register<NormalisationBlock>("NormalisationBlock");
+    registry.Register<RouterBlock>("RouterBlock");
+    registry.Register<BackfillBlock>("BackfillBlock");
+    registry.Register<GapMonitorBlock>("GapMonitorBlock");
 
     return registry;
 });
