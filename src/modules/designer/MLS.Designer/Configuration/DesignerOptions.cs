@@ -23,4 +23,11 @@ public sealed class DesignerOptions
 
     /// <summary>PostgreSQL connection string for the blockchain address book.</summary>
     public string PostgresConnectionString { get; set; } = "Host=data-layer;Database=mls;Username=mls;Password=mls";
+
+    /// <summary>
+    /// Block Controller SignalR hub HTTP endpoint for training job dispatch and progress streaming.
+    /// The TrainingDispatcher connects here as a client (<c>?clientId=&lt;guid&gt;</c>), and the
+    /// SignalR client negotiates and upgrades transports internally as needed.
+    /// </summary>
+    public string BlockControllerHubUrl { get; set; } = "http://block-controller:6100/hubs/block-controller";
 }

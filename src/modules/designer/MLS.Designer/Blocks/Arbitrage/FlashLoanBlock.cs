@@ -51,26 +51,6 @@ public sealed class FlashLoanBlock : BlockBase
 
     /// <inheritdoc/>
     protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
-    private static bool TryGetDecimalProperty(JsonElement element, string propertyName, out decimal value)
-    {
-        value = 0m;
-
-        return element.ValueKind == JsonValueKind.Object
-            && element.TryGetProperty(propertyName, out var property)
-            && property.TryGetDecimal(out value);
-    }
-
-    private static bool TryGetAssetPriceUsd(JsonElement element, out decimal assetPriceUsd)
-    {
-        assetPriceUsd = 0m;
-
-        return TryGetDecimalProperty(element, "asset_price_usd", out assetPriceUsd)
-            || TryGetDecimalProperty(element, "loan_asset_price_usd", out assetPriceUsd)
-            || TryGetDecimalProperty(element, "price_usd", out assetPriceUsd);
-    }
-
-    /// <inheritdoc/>
-    protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
     {
         if (signal.SocketType != BlockSocketType.ArbitrageOpportunity)
             return new ValueTask<BlockSignal?>(result: null);
