@@ -1,0 +1,81 @@
+{
+  "graph_id": "00000000-0002-0002-0002-000000000002",
+  "name": "Mean Reversion",
+  "schema_version": 1,
+  "blocks": [
+    {
+      "block_id": "b2000001-0002-0002-0002-000000000001",
+      "block_type": "CandleFeedBlock",
+      "parameters": { "symbol": "ETH-USDT", "exchange": "hyperliquid", "timeframe": "15m" }
+    },
+    {
+      "block_id": "b2000001-0002-0002-0002-000000000002",
+      "block_type": "BollingerBlock",
+      "parameters": { "Period": 20, "StdDevMultiplier": 2.0 }
+    },
+    {
+      "block_id": "b2000001-0002-0002-0002-000000000003",
+      "block_type": "RSIBlock",
+      "parameters": { "Period": 14 }
+    },
+    {
+      "block_id": "b2000001-0002-0002-0002-000000000004",
+      "block_type": "MeanReversionBlock",
+      "parameters": { "ZScoreThreshold": 2.0, "LookbackPeriod": 50, "EntryRsi": 30, "ExitRsi": 50 }
+    },
+    {
+      "block_id": "b2000001-0002-0002-0002-000000000005",
+      "block_type": "DrawdownGuardBlock",
+      "parameters": { "MaxDrawdownPct": 0.05 }
+    },
+    {
+      "block_id": "b2000001-0002-0002-0002-000000000006",
+      "block_type": "OrderEmitterBlock",
+      "parameters": { "OrderType": "limit", "Exchange": "hyperliquid" }
+    }
+  ],
+  "connections": [
+    {
+      "connection_id": "c001",
+      "from_block_id": "b2000001-0002-0002-0002-000000000001",
+      "from_socket": "candle_output",
+      "to_block_id": "b2000001-0002-0002-0002-000000000002",
+      "to_socket": "candle_input"
+    },
+    {
+      "connection_id": "c002",
+      "from_block_id": "b2000001-0002-0002-0002-000000000001",
+      "from_socket": "candle_output",
+      "to_block_id": "b2000001-0002-0002-0002-000000000003",
+      "to_socket": "candle_input"
+    },
+    {
+      "connection_id": "c003",
+      "from_block_id": "b2000001-0002-0002-0002-000000000002",
+      "from_socket": "indicator_output",
+      "to_block_id": "b2000001-0002-0002-0002-000000000004",
+      "to_socket": "signal_input"
+    },
+    {
+      "connection_id": "c004",
+      "from_block_id": "b2000001-0002-0002-0002-000000000003",
+      "from_socket": "indicator_output",
+      "to_block_id": "b2000001-0002-0002-0002-000000000004",
+      "to_socket": "signal_input"
+    },
+    {
+      "connection_id": "c005",
+      "from_block_id": "b2000001-0002-0002-0002-000000000004",
+      "from_socket": "ml_output",
+      "to_block_id": "b2000001-0002-0002-0002-000000000005",
+      "to_socket": "signal_input"
+    },
+    {
+      "connection_id": "c006",
+      "from_block_id": "b2000001-0002-0002-0002-000000000005",
+      "from_socket": "risk_output",
+      "to_block_id": "b2000001-0002-0002-0002-000000000006",
+      "to_socket": "signal_input"
+    }
+  ]
+}

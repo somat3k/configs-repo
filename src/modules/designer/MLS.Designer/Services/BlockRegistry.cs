@@ -76,6 +76,16 @@ public sealed class BlockRegistry : IBlockRegistry
     {
         _ when key.EndsWith("FeedBlock",    StringComparison.Ordinal) => "DataSource",
         _ when key.EndsWith("ReplayBlock",  StringComparison.Ordinal) => "DataSource",
+        _ when key.EndsWith("FeedSourceBlock", StringComparison.Ordinal) => "DataHydra",
+        _ when key.Contains("Filter",      StringComparison.Ordinal)
+            && key.Contains("Block",       StringComparison.Ordinal)
+            && !key.Contains("Model",      StringComparison.Ordinal) => "DataHydra",
+        _ when key.Contains("Normalisation", StringComparison.Ordinal) => "DataHydra",
+        _ when key.Contains("Router",      StringComparison.Ordinal)
+            && !key.Contains("Order",      StringComparison.Ordinal) => "DataHydra",
+        _ when key.Contains("Backfill",    StringComparison.Ordinal) => "DataHydra",
+        _ when key.Contains("GapMonitor",  StringComparison.Ordinal) => "DataHydra",
+        _ when key.Contains("Tile",        StringComparison.Ordinal) => "CustomTile",
         _ when key.Contains("RSI",         StringComparison.Ordinal)
             || key.Contains("MACD",        StringComparison.Ordinal)
             || key.Contains("Bollinger",   StringComparison.Ordinal)

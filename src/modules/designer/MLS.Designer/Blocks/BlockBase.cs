@@ -20,10 +20,10 @@ public abstract class BlockBase : IBlockElement
     public abstract string DisplayName { get; }
 
     /// <inheritdoc/>
-    public IReadOnlyList<IBlockSocket> InputSockets { get; }
+    public virtual IReadOnlyList<IBlockSocket> InputSockets { get; }
 
     /// <inheritdoc/>
-    public IReadOnlyList<IBlockSocket> OutputSockets { get; }
+    public virtual IReadOnlyList<IBlockSocket> OutputSockets { get; }
 
     /// <inheritdoc/>
     public abstract IReadOnlyList<BlockParameter> Parameters { get; }
@@ -100,4 +100,19 @@ public abstract class BlockBase : IBlockElement
     /// </summary>
     protected ValueTask EmitSignalAsync(BlockSignal signal, CancellationToken ct = default) =>
         OutputProduced is not null ? OutputProduced(signal, ct) : ValueTask.CompletedTask;
+
+    /// <summary>
+    /// Emits a signal to all connected output sockets (pass-through default: silently discards
+    /// when no consumers are connected).  Used by <see cref="MLS.Core.Designer.IActionTile"/>
+    /// implementations to stream autonomous data-source updates.
+    /// </summary>
+    /// <param name="signal">Signal to emit.</param>
+    /// <param name="ct">Cancellation token.</param>
+    protected ValueTask EmitToConnectedAsync(BlockSignal signal, CancellationToken ct = default)
+    {
+        if (OutputProduced is null)
+            return ValueTask.CompletedTask;  // No consumers — silently drop
+
+        return OutputProduced(signal, ct);
+    }
 }

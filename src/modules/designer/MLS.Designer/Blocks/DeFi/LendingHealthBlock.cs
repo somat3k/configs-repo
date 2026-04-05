@@ -27,8 +27,13 @@ namespace MLS.Designer.Blocks.DeFi;
 /// input so that connected loop blocks (e.g. kaizen-style evaluation tiles) receive a
 /// continuous health stream to act upon.
 /// </para>
+/// <para>
+/// Implements <see cref="IActionTile"/> (Block-as-ONE pattern): when activated via
+/// <see cref="StartAsync"/>, the block runs an autonomous fetch loop and streams
+/// <see cref="BlockSocketType.HealthFactorUpdate"/> signals to all connected consumers.
+/// </para>
 /// </remarks>
-public sealed class LendingHealthBlock : BlockBase
+public sealed class LendingHealthBlock : BlockBase, IActionTile
 {
     // ── Thresholds ────────────────────────────────────────────────────────────────
 
@@ -57,7 +62,17 @@ public sealed class LendingHealthBlock : BlockBase
             "LTV ratio above which a Warning is emitted (0–1 fractional)",
             0.70m, MinValue: 0.10m, MaxValue: 0.99m);
 
+    private readonly BlockParameter<int> _pollIntervalSecondsParam =
+        new("PollIntervalSeconds",   "Poll Interval (seconds)",
+            "How often the autonomous fetch loop re-emits the latest snapshot (IActionTile mode)",
+            30, MinValue: 5, MaxValue: 3600);
+
     // ── State ─────────────────────────────────────────────────────────────────────
+
+    // Latest snapshot stored for IActionTile.GetCurrentSnapshot()
+    private BlockSignal? _snapshot;
+    private readonly object _snapshotLock = new();
+    private CancellationTokenSource? _loopCts;
 
     /// <inheritdoc/>
     public override string BlockType   => "LendingHealthBlock";
@@ -66,7 +81,7 @@ public sealed class LendingHealthBlock : BlockBase
     /// <inheritdoc/>
     public override IReadOnlyList<BlockParameter> Parameters =>
         [_warningHfParam, _criticalHfParam, _liquidatableHfParam,
-         _maxBorrowRateParam, _warningLtvParam];
+         _maxBorrowRateParam, _warningLtvParam, _pollIntervalSecondsParam];
 
     /// <summary>Initialises a new <see cref="LendingHealthBlock"/>.</summary>
     public LendingHealthBlock() : base(
@@ -76,6 +91,74 @@ public sealed class LendingHealthBlock : BlockBase
     /// <inheritdoc/>
     public override void Reset() { }
 
+    // ── IActionTile ───────────────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public bool IsRunning { get; private set; }
+
+    private Task? _fetchLoopTask;
+
+    /// <inheritdoc/>
+    public Task StartAsync(CancellationToken ct)
+    {
+        if (IsRunning) return Task.CompletedTask;
+
+        var loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _loopCts  = loopCts;
+        IsRunning = true;
+
+        _fetchLoopTask = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await RunFetchLoopAsync(loopCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (loopCts.IsCancellationRequested)
+                {
+                    // Normal shutdown path — cancellation requested via StopAsync or DisposeAsync
+                }
+                finally
+                {
+                    IsRunning = false;
+
+                    // Null _loopCts only if it still refers to our specific CTS instance,
+                    // preventing a race where a concurrent StartAsync has already installed a new CTS.
+                    Interlocked.CompareExchange(ref _loopCts, null, loopCts);
+
+                    _fetchLoopTask = null;
+                    loopCts.Dispose();
+                }
+            },
+            CancellationToken.None);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task StopAsync(CancellationToken ct)
+    {
+        _loopCts?.Cancel();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public BlockSignal? GetCurrentSnapshot() { lock (_snapshotLock) return _snapshot; }
+
+    /// <inheritdoc/>
+    public override async ValueTask DisposeAsync()
+    {
+        _loopCts?.Cancel();
+        if (_fetchLoopTask is { } t)
+        {
+            try { await t.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* expected on dispose */ }
+        }
+        _loopCts?.Dispose();
+        await base.DisposeAsync().ConfigureAwait(false);
+    }
+
+    // ── Reactive processing (input-driven path) ───────────────────────────────────
     /// <inheritdoc/>
     protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
     {
@@ -88,11 +171,39 @@ public sealed class LendingHealthBlock : BlockBase
                 out var protocol, out var collateralAsset, out var borrowAsset))
             return new ValueTask<BlockSignal?>(result: null);
 
+        var result = BuildHealthReport(
+            hf, ltvRatio, collateralValueUsd, debtValueUsd,
+            borrowRateApr, protocol, collateralAsset, borrowAsset);
+
+        // Update snapshot for IActionTile.GetCurrentSnapshot() consumers
+        lock (_snapshotLock) { _snapshot = result; }
+
+        return new ValueTask<BlockSignal?>(result);
+    }
+
+    // ── Autonomous fetch loop (IActionTile path) ──────────────────────────────────
+
+    private async Task RunFetchLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_pollIntervalSecondsParam.DefaultValue));
+        while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+        {
+            BlockSignal? snap;
+            lock (_snapshotLock) { snap = _snapshot; }
+            if (snap.HasValue)
+                await EmitToConnectedAsync(snap.Value, ct).ConfigureAwait(false);
+        }
+    }
+
+    private BlockSignal BuildHealthReport(
+        decimal hf, decimal ltvRatio, decimal collateralValueUsd, decimal debtValueUsd,
+        decimal borrowRateApr, string protocol, string collateralAsset, string borrowAsset)
+    {
         // ── Composite score (0–100, higher = healthier) ──────────────────────────
-        decimal hfScore        = ComputeHfScore(hf);
-        decimal ltvScore       = ComputeLtvScore(ltvRatio);
+        decimal hfScore         = ComputeHfScore(hf);
+        decimal ltvScore        = ComputeLtvScore(ltvRatio);
         decimal borrowRateScore = ComputeBorrowRateScore(borrowRateApr);
-        decimal compositeScore = (hfScore * 0.5m + ltvScore * 0.3m + borrowRateScore * 0.2m);
+        decimal compositeScore  = hfScore * 0.5m + ltvScore * 0.3m + borrowRateScore * 0.2m;
 
         // ── Liquidation distance: % collateral drop to reach HF = 1.0 ────────────
         decimal liquidationDistancePct = hf > 1m
@@ -100,34 +211,34 @@ public sealed class LendingHealthBlock : BlockBase
             : 0m;
 
         // ── Severity ──────────────────────────────────────────────────────────────
-        var severity = hf <= _liquidatableHfParam.DefaultValue ? "Liquidatable"
-                     : hf <= _criticalHfParam.DefaultValue     ? "Critical"
-                     : hf <= _warningHfParam.DefaultValue       ? "Warning"
+        var severity = hf <= _liquidatableHfParam.DefaultValue  ? "Liquidatable"
+                     : hf <= _criticalHfParam.DefaultValue      ? "Critical"
+                     : hf <= _warningHfParam.DefaultValue        ? "Warning"
                      : ltvRatio >= _warningLtvParam.DefaultValue ? "Warning"
                      : "Healthy";
 
         var report = new
         {
             protocol,
-            collateral_asset          = collateralAsset,
-            borrow_asset              = borrowAsset,
-            health_factor             = hf,
-            ltv_ratio                 = ltvRatio,
-            collateral_value_usd      = collateralValueUsd,
-            debt_value_usd            = debtValueUsd,
-            borrow_rate_apr           = borrowRateApr,
-            liquidation_distance_pct  = liquidationDistancePct,
-            composite_health_score    = compositeScore,
+            collateral_asset         = collateralAsset,
+            borrow_asset             = borrowAsset,
+            health_factor            = hf,
+            ltv_ratio                = ltvRatio,
+            collateral_value_usd     = collateralValueUsd,
+            debt_value_usd           = debtValueUsd,
+            borrow_rate_apr          = borrowRateApr,
+            liquidation_distance_pct = liquidationDistancePct,
+            composite_health_score   = compositeScore,
             severity,
-            warning_health_factor     = _warningHfParam.DefaultValue,
-            critical_health_factor    = _criticalHfParam.DefaultValue,
-            max_borrow_rate_apr       = _maxBorrowRateParam.DefaultValue,
-            timestamp                 = DateTimeOffset.UtcNow,
+            warning_health_factor    = _warningHfParam.DefaultValue,
+            critical_health_factor   = _criticalHfParam.DefaultValue,
+            max_borrow_rate_apr      = _maxBorrowRateParam.DefaultValue,
+            timestamp                = DateTimeOffset.UtcNow,
         };
 
-        return new ValueTask<BlockSignal?>(
-            EmitObject(BlockId, "health_report", BlockSocketType.HealthFactorUpdate, report));
+        return EmitObject(BlockId, "health_report", BlockSocketType.HealthFactorUpdate, report);
     }
+
 
     // ── Score functions (0–100 scale; 100 = best possible) ────────────────────────
 
