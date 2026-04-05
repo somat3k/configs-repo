@@ -217,15 +217,27 @@ public sealed class StrategiesController(
         if (template is null)
             return NotFound(new { error = $"Template '{name}' not found." });
 
+        // Infer strategyType from the template's directory category
+        var templateInfos  = _repo.ListTemplates();
+        var templateInfo   = templateInfos.FirstOrDefault(t => t.Name == name);
+        var inferredType   = templateInfo?.Category switch
+        {
+            "arbitrage"   => "arbitrage",
+            "defi"        => "defi",
+            "ml-training" => "ml-training",
+            _             => "trading",
+        };
+
         // Assign a new graph ID so the instance is independent from the template
         var newGraph = template with
         {
-            GraphId = Guid.NewGuid(),
-            Name    = string.IsNullOrWhiteSpace(strategyName) ? $"{template.Name} (copy)" : strategyName,
+            GraphId       = Guid.NewGuid(),
+            Name          = string.IsNullOrWhiteSpace(strategyName) ? $"{template.Name} (copy)" : strategyName,
             SchemaVersion = 1,
         };
 
-        var entity = await _repo.CreateAsync(newGraph, templateName: name, ct: ct).ConfigureAwait(false);
+        var entity = await _repo.CreateAsync(
+            newGraph, strategyType: inferredType, templateName: name, ct: ct).ConfigureAwait(false);
         return CreatedAtAction(nameof(GetById), new { id = entity.GraphId }, entity);
     }
 }

@@ -68,8 +68,8 @@ public sealed class TransformationController : ITransformationController
                 return ValueTask.CompletedTask;
             };
 
-            if (block is Blocks.BlockBase bb)
-                bb.OutputProduced += handler;
+            if (block is Blocks.BlockBase blockBase)
+                blockBase.OutputProduced += handler;
 
             try
             {
@@ -77,8 +77,8 @@ public sealed class TransformationController : ITransformationController
             }
             finally
             {
-                if (block is Blocks.BlockBase bb2)
-                    bb2.OutputProduced -= handler;
+                if (block is Blocks.BlockBase blockBase2)
+                    blockBase2.OutputProduced -= handler;
             }
 
             if (output.HasValue)

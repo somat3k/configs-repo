@@ -36,9 +36,6 @@ public sealed class RouterBlock : BlockBase
     /// <inheritdoc/>
     public override IReadOnlyList<BlockParameter> Parameters => [_routeModeParam];
 
-    // Route mode controls which outputs emit — _extraOutput reserved for future per-socket routing
-    private readonly string _routeModeNote = "dual-output via direct EmitSignalAsync";
-
     /// <summary>Initialises a <see cref="RouterBlock"/>.</summary>
     public RouterBlock() : base(
         [BlockSocket.Input("candle_input",    BlockSocketType.CandleStream)],

@@ -62,6 +62,11 @@ public sealed class LendingHealthBlock : BlockBase, IActionTile
             "LTV ratio above which a Warning is emitted (0–1 fractional)",
             0.70m, MinValue: 0.10m, MaxValue: 0.99m);
 
+    private readonly BlockParameter<int> _pollIntervalSecondsParam =
+        new("PollIntervalSeconds",   "Poll Interval (seconds)",
+            "How often the autonomous fetch loop re-emits the latest snapshot (IActionTile mode)",
+            30, MinValue: 5, MaxValue: 3600);
+
     // ── State ─────────────────────────────────────────────────────────────────────
 
     // Latest snapshot stored for IActionTile.GetCurrentSnapshot()
@@ -76,7 +81,7 @@ public sealed class LendingHealthBlock : BlockBase, IActionTile
     /// <inheritdoc/>
     public override IReadOnlyList<BlockParameter> Parameters =>
         [_warningHfParam, _criticalHfParam, _liquidatableHfParam,
-         _maxBorrowRateParam, _warningLtvParam];
+         _maxBorrowRateParam, _warningLtvParam, _pollIntervalSecondsParam];
 
     /// <summary>Initialises a new <see cref="LendingHealthBlock"/>.</summary>
     public LendingHealthBlock() : base(
@@ -156,7 +161,7 @@ public sealed class LendingHealthBlock : BlockBase, IActionTile
 
     private async Task RunFetchLoopAsync(CancellationToken ct)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_pollIntervalSecondsParam.DefaultValue));
         while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
         {
             BlockSignal? snap;

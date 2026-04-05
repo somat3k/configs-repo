@@ -87,7 +87,12 @@ public sealed class StrategyRepository(
                 $"Strategy with graph_id '{graph.GraphId}' already exists.", ex);
         }
 
-        _logger.LogInformation("Created strategy {GraphId} ({Name})", entity.GraphId, entity.Name);
+        // Sanitize the user-supplied strategy name before logging to prevent log-forging (CWE-117)
+        var safeName = entity.Name.Length > 128
+            ? entity.Name[..128].Replace('\r', '_').Replace('\n', '_')
+            : entity.Name.Replace('\r', '_').Replace('\n', '_');
+
+        _logger.LogInformation("Created strategy {GraphId} ({Name})", entity.GraphId, safeName);
         return entity;
     }
 
