@@ -30,7 +30,7 @@ builder.Services.AddDbContext<AIHubDbContext>(options =>
 builder.Services.AddScoped<IUserPreferenceRepository, UserPreferenceRepository>();
 
 // ── LLM Providers ─────────────────────────────────────────────────────────────
-// All six providers registered as ILLMProvider implementations.
+// All seven providers registered as ILLMProvider implementations.
 // ProviderRouter receives IEnumerable<ILLMProvider> to walk the full set.
 builder.Services.AddSingleton<ILLMProvider, OpenAIProvider>();
 builder.Services.AddSingleton<ILLMProvider, AnthropicProvider>();

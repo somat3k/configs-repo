@@ -28,7 +28,12 @@ public sealed class LocalProvider(
     public override IReadOnlyList<string> SupportedModels => Models;
 
     /// <inheritdoc/>
-    public override bool IsAvailable => true; // Local is always considered available as final fallback
+    /// <remarks>
+    /// Always returns <see langword="true"/> to prevent the circuit breaker from disabling this provider.
+    /// Individual probes via <see cref="ProviderBase.CheckAvailabilityAsync"/> may still return
+    /// <see langword="false"/> if Ollama is not running, but the fallback will remain in the selection chain.
+    /// </remarks>
+    public override bool IsAvailable => true;
 
     /// <inheritdoc/>
     protected override async Task<bool> ProbeAsync(CancellationToken ct)

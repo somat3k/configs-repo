@@ -39,7 +39,7 @@ public sealed class AnthropicProvider(
         if (string.IsNullOrWhiteSpace(cfg.ApiKey))
             return false;
 
-        using var client = CreateHttpClient(cfg);
+        using var client = CreateHttpClient(cfg, httpClientFactory);
         try
         {
             using var response = await client.GetAsync($"{cfg.BaseUrl}/v1/models", ct).ConfigureAwait(false);
@@ -58,9 +58,9 @@ public sealed class AnthropicProvider(
         return new AnthropicChatCompletionService(modelId, options.Value.Providers.Anthropic, httpClientFactory, logger);
     }
 
-    private static HttpClient CreateHttpClient(AnthropicConfig cfg)
+    private static HttpClient CreateHttpClient(AnthropicConfig cfg, IHttpClientFactory factory)
     {
-        var client = new HttpClient();
+        var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("x-api-key", cfg.ApiKey);
         client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
         return client;

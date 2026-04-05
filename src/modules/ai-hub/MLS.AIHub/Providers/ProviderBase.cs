@@ -13,7 +13,8 @@ public abstract class ProviderBase(ILogger logger) : ILLMProvider
     private static readonly TimeSpan AvailabilityProbeTimeout = TimeSpan.FromMilliseconds(500);
 
     private int _consecutiveFailures;
-    private DateTimeOffset _circuitOpenedAt = DateTimeOffset.MinValue;
+    // Store as UTC ticks for lock-free atomic update via Interlocked.Exchange
+    private long _circuitOpenedAtTicks = DateTimeOffset.MinValue.UtcTicks;
 
     /// <inheritdoc/>
     public abstract string ProviderId { get; }
@@ -33,7 +34,8 @@ public abstract class ProviderBase(ILogger logger) : ILLMProvider
                 return true;
 
             // Allow re-check after circuit open duration
-            return DateTimeOffset.UtcNow - _circuitOpenedAt >= CircuitOpenDuration;
+            var openedAt = new DateTimeOffset(Interlocked.Read(ref _circuitOpenedAtTicks), TimeSpan.Zero);
+            return DateTimeOffset.UtcNow - openedAt >= CircuitOpenDuration;
         }
     }
 
@@ -87,7 +89,7 @@ public abstract class ProviderBase(ILogger logger) : ILLMProvider
         var failures = Interlocked.Increment(ref _consecutiveFailures);
         if (failures >= FailureThreshold)
         {
-            _circuitOpenedAt = DateTimeOffset.UtcNow;
+            Interlocked.Exchange(ref _circuitOpenedAtTicks, DateTimeOffset.UtcNow.UtcTicks);
             logger.LogWarning("Provider {ProviderId} circuit opened after {Failures} consecutive failures",
                 ProviderId, failures);
         }
