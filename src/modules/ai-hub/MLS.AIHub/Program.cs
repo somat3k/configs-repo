@@ -55,6 +55,9 @@ builder.Services.AddScoped<IContextAssembler, ContextAssembler>();
 // ── Canvas Action Dispatcher ──────────────────────────────────────────────────
 builder.Services.AddScoped<ICanvasActionDispatcher, CanvasActionDispatcher>();
 
+// ── Chat Service ──────────────────────────────────────────────────────────────
+builder.Services.AddScoped<IChatService, ChatService>();
+
 // ── Semantic Kernel Plugins ───────────────────────────────────────────────────
 builder.Services.AddScoped<TradingPlugin>();
 builder.Services.AddScoped<DesignerPlugin>();
@@ -107,7 +110,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 app.MapHealthChecks("/health");
-app.MapHub<AIHubSignalR>("/hubs/ai-hub");
+app.MapHub<MLS.AIHub.Hubs.AIHub>("/hubs/ai-hub");
 
 // ── Ensure DB schema exists ───────────────────────────────────────────────────
 using (var scope = app.Services.CreateScope())

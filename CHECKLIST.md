@@ -133,6 +133,35 @@
 
 ---
 
+### Session 09 — Semantic Kernel Plugins (All Domains)
+- [x] Implement `TradingPlugin` (GetPositions, PlaceOrder, GetSignalHistory, GetPnLSummary)
+- [x] Implement `DesignerPlugin` (CreateStrategy, AddBlock, RunBacktest, ExplainStrategy)
+- [x] Implement `AnalyticsPlugin` (PlotChart, GenerateSHAP, ExportReport, AskAboutData)
+- [x] Implement `MLRuntimePlugin` (TrainModel, GetModelMetrics, DeployModel, ListModels)
+- [x] Implement `DeFiPlugin` (GetHealthFactors, SimulateRebalance, GetPoolAPYs, SupplyCollateral)
+- [x] Implement `ContextAssembler` (8 parallel sources, < 200ms, per-source 120ms timeout)
+- [x] Implement `ProjectSnapshot` with all typed module data DTOs
+- [x] Implement `CanvasAction` discriminated union (OpenPanel, UpdateChart, HighlightBlock, ShowDiagram, AddAnnotation, OpenDesignerGraph)
+- [x] Implement `CanvasActionDispatcher` (wraps `IHubContext<AIHub>`, sends `AI_CANVAS_ACTION` envelopes)
+- [x] All state-modifying `[KernelFunction]` require `confirmed: bool` parameter
+- [x] Integration tests: `PluginPipelineTests` (25+ tests covering all plugins and canvas actions)
+
+---
+
+### Session 10 — Canvas Action Dispatcher + AI Chat Streaming
+- [x] Add `AI_RESPONSE_COMPLETE` to `MessageTypes.Designer.cs`
+- [x] Create `AiResponseCompletePayload` core contract
+- [x] Implement `IChatService` + `ChatService` (AI_QUERY → context → SK streaming → SignalR chunks)
+- [x] Implement `AIHub` SignalR hub (`SendEnvelope` wired to `ChatService.ProcessQueryAsync`)
+- [x] Implement `ChatController` (POST /api/chat → SignalR path, GET /api/chat/stream → SSE path)
+- [x] `ChatService.ProcessQueryAsync` sends `AI_RESPONSE_CHUNK` per token + `AI_RESPONSE_COMPLETE`
+- [x] `ChatService.StreamChunksAsync` returns `IAsyncEnumerable<AiResponseChunkPayload>` for SSE
+- [x] SK `FunctionChoiceBehavior.Auto()` enables automatic plugin invocation during streaming
+- [x] Canvas actions dispatched by plugins as side-effects (parallel with text streaming)
+- [x] Integration tests: `ChatServiceTests` (8 tests — chunks, sequencing, provider routing, SSE terminal)
+
+---
+
 
 
 ### Development

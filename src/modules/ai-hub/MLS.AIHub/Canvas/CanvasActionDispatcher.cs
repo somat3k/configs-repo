@@ -5,6 +5,7 @@ using MLS.AIHub.Hubs;
 using MLS.Core.Constants;
 using MLS.Core.Contracts;
 using MLS.Core.Contracts.Designer;
+using AIHubHub = MLS.AIHub.Hubs.AIHub;
 
 namespace MLS.AIHub.Canvas;
 
@@ -13,7 +14,7 @@ namespace MLS.AIHub.Canvas;
 /// <c>AI_CANVAS_ACTION</c> envelopes to the requesting user's SignalR group via AI Hub's hub.
 /// </summary>
 public sealed class CanvasActionDispatcher(
-    IHubContext<AIHubSignalR> _hubContext,
+    IHubContext<AIHubHub> _hubContext,
     ILogger<CanvasActionDispatcher> _logger) : ICanvasActionDispatcher
 {
     private const string ModuleId = "ai-hub";

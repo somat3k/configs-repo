@@ -27,6 +27,8 @@ public static partial class MessageTypes
     public const string AiResponseChunk     = "AI_RESPONSE_CHUNK";
     /// <summary>ai-hub → web-app: canvas panel or chart action dispatch.</summary>
     public const string AiCanvasAction      = "AI_CANVAS_ACTION";
+    /// <summary>ai-hub → web-app: streaming response complete — all chunks delivered.</summary>
+    public const string AiResponseComplete  = "AI_RESPONSE_COMPLETE";
 
     // ── Hydra data collection ────────────────────────────────────────────────────
     /// <summary>Designer → data-layer: start a Hydra feed collection job.</summary>
