@@ -20,9 +20,6 @@ public sealed class MLRuntimePlugin(
     ICanvasActionDispatcher _canvasDispatcher,
     ILogger<MLRuntimePlugin> _logger)
 {
-    /// <summary>User context injected for canvas action routing.</summary>
-    internal Guid UserId { get; set; }
-
     /// <summary>
     /// List all registered ML models with their current state and latest accuracy metrics.
     /// </summary>
@@ -55,9 +52,12 @@ public sealed class MLRuntimePlugin(
     /// </summary>
     [KernelFunction, Description("Get detailed training metrics for a specific ML model, including accuracy, F1, precision, recall, and training history")]
     public async Task<string> GetModelMetrics(
+        [Description("Authenticated user identifier used to route the metrics panel to the correct canvas")] Guid userId,
         [Description("Model identifier: 'model-t' (trading), 'model-a' (arbitrage), 'model-d' (defi), or a full GUID")] string modelId,
         CancellationToken ct = default)
     {
+        if (userId == Guid.Empty)
+            return "A valid userId is required to open the metrics panel on the canvas.";
         try
         {
             using var client = CreateMlRuntimeClient();
@@ -73,7 +73,7 @@ public sealed class MLRuntimePlugin(
             var panelData = JsonSerializer.SerializeToElement(metrics);
             await _canvasDispatcher.DispatchAsync(
                 new OpenPanelAction("ModelMetrics", panelData, $"Metrics: {modelId}"),
-                UserId, ct).ConfigureAwait(false);
+                userId, ct).ConfigureAwait(false);
 
             return $"Metrics for '{modelId}':\n" +
                    $"  Accuracy:  {metrics.Accuracy:P2}\n" +

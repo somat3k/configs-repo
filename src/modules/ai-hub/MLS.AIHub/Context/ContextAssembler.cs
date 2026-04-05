@@ -25,7 +25,7 @@ public interface IContextAssembler
 /// completing within the configured timeout (default 200ms).
 /// </summary>
 /// <remarks>
-/// Data sources queried (10 total):
+/// Data sources queried (8 total):
 /// <list type="number">
 ///   <item>Block Controller — registered modules + health</item>
 ///   <item>Trader — open positions</item>
@@ -35,8 +35,6 @@ public interface IContextAssembler
 ///   <item>ML Runtime — registered models + metrics</item>
 ///   <item>Designer — active strategies</item>
 ///   <item>Block Controller — recent envelope history</item>
-///   <item>Shell VM — active session logs</item>
-///   <item>Web App — canvas layout for user</item>
 /// </list>
 /// Each source has an individual per-source timeout so a slow module
 /// never blocks the rest of the snapshot.
@@ -55,7 +53,7 @@ public sealed class ContextAssembler(
         var sw        = Stopwatch.StartNew();
         var failed    = new List<string>();
 
-        // Launch all 10 sources in parallel
+        // Launch all 8 sources in parallel
         var modulesTask     = FetchJsonAsync<ModuleInfo>    (opts.BlockControllerUrl, "/api/modules",                        "block-controller/modules",  failed, ct);
         var positionsTask   = FetchJsonAsync<PositionInfo>  (opts.TraderUrl,          "/api/positions",                       "trader/positions",          failed, ct);
         var signalsTask     = FetchJsonAsync<SignalInfo>     (opts.TraderUrl,          $"/api/signals/recent?n={opts.MaxSignalHistory}", "trader/signals", failed, ct);
@@ -63,14 +61,22 @@ public sealed class ContextAssembler(
         var defiTask        = FetchJsonAsync<DefiHealthInfo> (opts.DeFiUrl,            "/api/positions/health",                "defi/health",               failed, ct);
         var modelsTask      = FetchJsonAsync<ModelInfo>      (opts.MlRuntimeUrl,       "/api/models",                         "ml-runtime/models",         failed, ct);
         var strategiesTask  = FetchJsonAsync<StrategyInfo>   (opts.DesignerUrl,        "/api/strategies/active",               "designer/strategies",       failed, ct);
-        var envelopesTask   = FetchRawArrayAsync                    (opts.BlockControllerUrl, $"/api/envelopes/recent?n={opts.MaxEnvelopeHistory}", "block-controller/envelopes", failed, ct);
-        var shellLogsTask   = FetchRawArrayAsync                    (opts.ShellVmUrl,         "/api/sessions/active/logs",            "shell-vm/logs",             failed, ct);
-        var canvasTask      = FetchRawArrayAsync                    (opts.WebAppUrl,          $"/api/canvas/layout/{userId}",         "web-app/canvas",            failed, ct);
+        var envelopesTask   = FetchRawArrayAsync             (opts.BlockControllerUrl, $"/api/envelopes/recent?n={opts.MaxEnvelopeHistory}", "block-controller/envelopes", failed, ct);
 
         await Task.WhenAll(
             modulesTask, positionsTask, signalsTask, arbTask, defiTask,
-            modelsTask, strategiesTask, envelopesTask, shellLogsTask, canvasTask)
+            modelsTask, strategiesTask, envelopesTask)
             .ConfigureAwait(false);
+
+        // Await each completed task individually — avoids .Result which can surface AggregateException
+        var modules     = await modulesTask.ConfigureAwait(false);
+        var positions   = await positionsTask.ConfigureAwait(false);
+        var signals     = await signalsTask.ConfigureAwait(false);
+        var arb         = await arbTask.ConfigureAwait(false);
+        var defi        = await defiTask.ConfigureAwait(false);
+        var models      = await modelsTask.ConfigureAwait(false);
+        var strategies  = await strategiesTask.ConfigureAwait(false);
+        var envelopes   = await envelopesTask.ConfigureAwait(false);
 
         sw.Stop();
 
@@ -87,14 +93,14 @@ public sealed class ContextAssembler(
         {
             AssembledAt      = DateTimeOffset.UtcNow,
             AssemblyMs       = sw.ElapsedMilliseconds,
-            Modules          = modulesTask.Result     ?? [],
-            OpenPositions    = positionsTask.Result   ?? [],
-            RecentSignals    = signalsTask.Result     ?? [],
-            ArbOpportunities = arbTask.Result,
-            DefiHealth       = defiTask.Result        ?? [],
-            MlModels         = modelsTask.Result      ?? [],
-            ActiveStrategies = strategiesTask.Result  ?? [],
-            EnvelopeHistory  = envelopesTask.Result,
+            Modules          = modules     ?? [],
+            OpenPositions    = positions   ?? [],
+            RecentSignals    = signals     ?? [],
+            ArbOpportunities = arb,
+            DefiHealth       = defi        ?? [],
+            MlModels         = models      ?? [],
+            ActiveStrategies = strategies  ?? [],
+            EnvelopeHistory  = envelopes,
             FailedSources    = failed.AsReadOnly(),
         };
     }

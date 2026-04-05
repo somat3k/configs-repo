@@ -2,7 +2,7 @@ namespace MLS.AIHub.Canvas;
 
 /// <summary>
 /// Dispatches a <see cref="CanvasAction"/> to the web-app MDI canvas by sending an
-/// <c>AI_CANVAS_ACTION</c> envelope via the Block Controller SignalR hub.
+/// <c>AI_CANVAS_ACTION</c> envelope via the AI Hub's own SignalR hub.
 /// </summary>
 /// <remarks>
 /// Canvas-producing plugin functions MUST call

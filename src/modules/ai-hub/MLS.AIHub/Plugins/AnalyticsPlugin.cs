@@ -20,25 +20,25 @@ public sealed class AnalyticsPlugin(
     ICanvasActionDispatcher _canvasDispatcher,
     ILogger<AnalyticsPlugin> _logger)
 {
-    /// <summary>User context injected for canvas action routing.</summary>
-    internal Guid UserId { get; set; }
-
     /// <summary>
     /// Open a live price chart for a symbol on the canvas MDI panel.
     /// Emits an AI_CANVAS_ACTION(OpenPanel) envelope before returning.
     /// </summary>
     [KernelFunction, Description("Open a live price/candlestick chart for a trading symbol on the canvas")]
     public async Task<string> PlotChart(
+        [Description("Authenticated user identifier used to route the chart panel to the correct canvas")] Guid userId,
         [Description("Trading symbol to chart (e.g. 'BTC-PERP', 'ETH-PERP')")] string symbol,
         [Description("Timeframe: '1m', '5m', '15m', '1h', '4h', '1d'. Default is '1h'.")] string timeframe = "1h",
         CancellationToken ct = default)
     {
+        if (userId == Guid.Empty)
+            return "A valid userId is required to open the chart on the canvas.";
         var panelData = JsonSerializer.SerializeToElement(new { symbol, timeframe });
 
         // Dispatch canvas action BEFORE returning text (opens panel in parallel)
         await _canvasDispatcher.DispatchAsync(
             new OpenPanelAction("TradingChart", panelData, $"{symbol} {timeframe.ToUpperInvariant()}"),
-            UserId, ct).ConfigureAwait(false);
+            userId, ct).ConfigureAwait(false);
 
         return $"Opened {symbol} {timeframe.ToUpperInvariant()} candlestick chart on your canvas. Fetching live data...";
     }
@@ -49,9 +49,12 @@ public sealed class AnalyticsPlugin(
     /// </summary>
     [KernelFunction, Description("Generate a SHAP feature importance plot for an ML model and display it on the canvas")]
     public async Task<string> GenerateSHAP(
+        [Description("Authenticated user identifier used to route the SHAP plot panel to the correct canvas")] Guid userId,
         [Description("Model identifier (e.g. 'model-t', 'model-a', 'model-d') or a full model GUID")] string modelId,
         CancellationToken ct = default)
     {
+        if (userId == Guid.Empty)
+            return "A valid userId is required to open the SHAP plot on the canvas.";
         try
         {
             using var client = CreateMlRuntimeClient();
@@ -67,7 +70,7 @@ public sealed class AnalyticsPlugin(
             var panelData = JsonSerializer.SerializeToElement(shapResult);
             await _canvasDispatcher.DispatchAsync(
                 new OpenPanelAction("SHAPPlot", panelData, $"SHAP: {modelId}"),
-                UserId, ct).ConfigureAwait(false);
+                userId, ct).ConfigureAwait(false);
 
             var topFeatures = shapResult.TopFeatures.Take(5)
                 .Select(f => $"  {f.Feature}: {f.Importance:F4}");
@@ -92,10 +95,13 @@ public sealed class AnalyticsPlugin(
     /// </summary>
     [KernelFunction, Description("Export a performance analytics report for a strategy or the overall portfolio and display it on the canvas")]
     public async Task<string> ExportReport(
+        [Description("Authenticated user identifier used to route the report panel to the correct canvas")] Guid userId,
         [Description("Report type: 'portfolio', 'strategy', or 'model'")] string reportType,
         [Description("Target identifier: strategy ID (GUID) for 'strategy', model ID for 'model', or omit for 'portfolio'")] string? targetId = null,
         CancellationToken ct = default)
     {
+        if (userId == Guid.Empty)
+            return "A valid userId is required to open the report on the canvas.";
         try
         {
             using var client = CreateTraderClient();
@@ -115,7 +121,7 @@ public sealed class AnalyticsPlugin(
             await _canvasDispatcher.DispatchAsync(
                 new OpenPanelAction("AnalyticsReport", reportData,
                     $"{Capitalize(reportType)} Report{(targetId is not null ? $": {targetId}" : "")}"),
-                UserId, ct).ConfigureAwait(false);
+                userId, ct).ConfigureAwait(false);
 
             return $"{Capitalize(reportType)} report opened on canvas.";
         }

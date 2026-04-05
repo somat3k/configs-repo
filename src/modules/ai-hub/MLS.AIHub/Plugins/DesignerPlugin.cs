@@ -20,19 +20,20 @@ public sealed class DesignerPlugin(
     ICanvasActionDispatcher _canvasDispatcher,
     ILogger<DesignerPlugin> _logger)
 {
-    /// <summary>User context injected by the kernel for canvas dispatch routing.</summary>
-    internal Guid UserId { get; set; }
-
     /// <summary>
     /// Create a new trading strategy from a named template and persist it in the Designer.
     /// Returns the new strategy ID and a summary of the template blocks.
     /// </summary>
     [KernelFunction, Description("Create a new trading strategy from a predefined template and save it in the Designer module")]
     public async Task<string> CreateStrategy(
+        [Description("Authenticated user identifier used to route the canvas graph action to the correct SignalR group")] Guid userId,
         [Description("Display name for the new strategy (e.g. 'BTC RSI Crossover')")] string name,
         [Description("Template name to use as the starting graph (e.g. 'rsi-crossover', 'ma-trend', 'arb-simple')")] string templateName,
         CancellationToken ct = default)
     {
+        if (userId == Guid.Empty)
+            return "A valid userId is required to open the strategy graph on the canvas.";
+
         try
         {
             using var client = CreateDesignerClient();
@@ -50,7 +51,7 @@ public sealed class DesignerPlugin(
             // Open the strategy graph on the canvas
             var schemaElement = JsonSerializer.SerializeToElement(strategy);
             await _canvasDispatcher.DispatchAsync(
-                new OpenDesignerGraphAction(schemaElement), UserId, ct).ConfigureAwait(false);
+                new OpenDesignerGraphAction(schemaElement), userId, ct).ConfigureAwait(false);
 
             return $"Strategy '{strategy.Name}' created (ID: {strategy.StrategyId}). " +
                    $"Template: {templateName} | Blocks: {strategy.BlockCount}. " +
@@ -114,6 +115,7 @@ public sealed class DesignerPlugin(
     /// </summary>
     [KernelFunction, Description("Run a backtest on a strategy and display the results on the canvas")]
     public async Task<string> RunBacktest(
+        [Description("Authenticated user identifier used to route the backtest results panel to the correct canvas")] Guid userId,
         [Description("Strategy unique identifier (GUID)")] Guid strategyId,
         [Description("Backtest start date in ISO 8601 format (e.g. '2024-01-01T00:00:00Z')")] DateTimeOffset from,
         [Description("Backtest end date in ISO 8601 format (e.g. '2024-12-31T00:00:00Z')")] DateTimeOffset to,
@@ -139,7 +141,7 @@ public sealed class DesignerPlugin(
             var resultElement = JsonSerializer.SerializeToElement(result);
             await _canvasDispatcher.DispatchAsync(
                 new OpenPanelAction("BacktestResults", resultElement, $"Backtest: {result.StrategyName}"),
-                UserId, ct).ConfigureAwait(false);
+                userId, ct).ConfigureAwait(false);
 
             return $"Backtest complete for '{result.StrategyName}':\n" +
                    $"  Total return: {result.TotalReturn:+0.00;-0.00}%\n" +

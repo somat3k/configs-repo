@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.SemanticKernel;
 using MLS.AIHub.Canvas;
 using MLS.AIHub.Configuration;
 using MLS.AIHub.Plugins;
@@ -18,6 +19,8 @@ namespace MLS.AIHub.Tests;
 /// </summary>
 public sealed class PluginPipelineTests
 {
+    private static readonly Guid TestUserId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
     private static readonly IOptions<AIHubOptions> DefaultOptions =
         Options.Create(new AIHubOptions
         {
@@ -51,13 +54,34 @@ public sealed class PluginPipelineTests
     [Fact]
     public async Task TradingPlugin_GetPositions_WithSymbolFilter_PassesQueryParam()
     {
-        var json    = "[]";
-        var factory = BuildHttpFactory("http://trader:5300", HttpStatusCode.OK, json);
-        var plugin  = new TradingPlugin(factory, DefaultOptions, NullLogger<TradingPlugin>.Instance);
+        var json = "[]";
+        HttpRequestMessage? capturedRequest = null;
+
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+            });
+
+        var client  = new HttpClient(handler.Object) { BaseAddress = new Uri("http://trader:5300") };
+        var factory = new Mock<IHttpClientFactory>();
+        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(client);
+
+        var plugin = new TradingPlugin(factory.Object, DefaultOptions, NullLogger<TradingPlugin>.Instance);
 
         var result = await plugin.GetPositions("BTC-PERP");
 
         result.Should().Contain("No open positions for BTC-PERP");
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.RequestUri.Should().NotBeNull();
+        capturedRequest.RequestUri!.AbsolutePath.Should().Be("/api/positions");
+        capturedRequest.RequestUri.Query.Should().Contain("symbol=BTC-PERP");
     }
 
     [Fact]
@@ -128,14 +152,26 @@ public sealed class PluginPipelineTests
 
         var plugin = new DesignerPlugin(factory, DefaultOptions, dispatcher.Object, NullLogger<DesignerPlugin>.Instance);
 
-        var result = await plugin.CreateStrategy("My RSI", "rsi-crossover");
+        var result = await plugin.CreateStrategy(TestUserId, "My RSI", "rsi-crossover");
 
         result.Should().Contain("My RSI");
         result.Should().Contain("11111111-1111-1111-1111-111111111111");
         dispatcher.Verify(d => d.DispatchAsync(
             It.IsAny<OpenDesignerGraphAction>(),
-            It.IsAny<Guid>(),
+            TestUserId,
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DesignerPlugin_CreateStrategy_RejectsEmptyUserId()
+    {
+        var factory    = BuildHttpFactory("http://designer:5250", HttpStatusCode.OK, "{}");
+        var dispatcher = Mock.Of<ICanvasActionDispatcher>();
+        var plugin     = new DesignerPlugin(factory, DefaultOptions, dispatcher, NullLogger<DesignerPlugin>.Instance);
+
+        var result = await plugin.CreateStrategy(Guid.Empty, "My RSI", "rsi-crossover");
+
+        result.Should().Contain("valid userId");
     }
 
     [Fact]
@@ -145,10 +181,10 @@ public sealed class PluginPipelineTests
         var dispatcher = Mock.Of<ICanvasActionDispatcher>();
         var plugin     = new DesignerPlugin(factory, DefaultOptions, dispatcher, NullLogger<DesignerPlugin>.Instance);
 
-        var from   = DateTimeOffset.UtcNow;
-        var to     = from.AddDays(-1); // to < from — invalid
+        var from = DateTimeOffset.UtcNow;
+        var to   = from.AddDays(-1); // to < from — invalid
 
-        var result = await plugin.RunBacktest(Guid.NewGuid(), from, to);
+        var result = await plugin.RunBacktest(TestUserId, Guid.NewGuid(), from, to);
 
         result.Should().Contain("before");
     }
@@ -165,14 +201,26 @@ public sealed class PluginPipelineTests
 
         var plugin = new AnalyticsPlugin(factory, DefaultOptions, dispatcher.Object, NullLogger<AnalyticsPlugin>.Instance);
 
-        var result = await plugin.PlotChart("BTC-PERP", "4h");
+        var result = await plugin.PlotChart(TestUserId, "BTC-PERP", "4h");
 
         result.Should().Contain("BTC-PERP");
         result.Should().Contain("4H");
         dispatcher.Verify(d => d.DispatchAsync(
             It.Is<OpenPanelAction>(a => a.PanelType == "TradingChart"),
-            It.IsAny<Guid>(),
+            TestUserId,
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AnalyticsPlugin_PlotChart_RejectsEmptyUserId()
+    {
+        var factory    = BuildHttpFactory("http://trader:5300", HttpStatusCode.OK, "[]");
+        var dispatcher = Mock.Of<ICanvasActionDispatcher>();
+        var plugin     = new AnalyticsPlugin(factory, DefaultOptions, dispatcher, NullLogger<AnalyticsPlugin>.Instance);
+
+        var result = await plugin.PlotChart(Guid.Empty, "BTC-PERP");
+
+        result.Should().Contain("valid userId");
     }
 
     // ── MLRuntimePlugin ───────────────────────────────────────────────────────
@@ -250,7 +298,7 @@ public sealed class PluginPipelineTests
         var dispatcher = Mock.Of<ICanvasActionDispatcher>();
         var plugin     = new DeFiPlugin(factory, DefaultOptions, dispatcher, NullLogger<DeFiPlugin>.Instance);
 
-        var result = await plugin.SimulateRebalance("not-valid-json{{{");
+        var result = await plugin.SimulateRebalance(TestUserId, "not-valid-json{{{");
 
         result.Should().Contain("Invalid JSON");
     }
@@ -275,7 +323,7 @@ public sealed class PluginPipelineTests
         result.Should().Contain("Morpho");
     }
 
-    // ── Context / helpers ─────────────────────────────────────────────────────
+    // ── Canvas types ──────────────────────────────────────────────────────────
 
     [Fact]
     public void CanvasAction_ActionType_ReturnsCorrectDiscriminator()
@@ -288,6 +336,74 @@ public sealed class PluginPipelineTests
         open.ActionType.Should().Be("OpenPanel");
         highlight.ActionType.Should().Be("HighlightBlock");
         diagram.ActionType.Should().Be("ShowDiagram");
+    }
+
+    // ── Kernel-level integration test ─────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that <see cref="TradingPlugin"/> is properly discoverable and invocable via
+    /// the Semantic Kernel plugin system — confirming all <c>[KernelFunction]</c> / <c>[Description]</c>
+    /// attributes are valid for AI tool discovery.
+    /// </summary>
+    [Fact]
+    public async Task Kernel_InvokePlugin_GetPositions_ReturnsExpectedOutput()
+    {
+        // Arrange — build a kernel and register the plugin via SK's plugin system
+        var json    = """[{"symbol":"ETH-PERP","side":"SHORT","size":1.0,"entry_price":3000,"mark_price":2900,"unrealised_pnl":100.0,"leverage":2}]""";
+        var factory = BuildHttpFactory("http://trader:5300", HttpStatusCode.OK, json);
+
+        var plugin = new TradingPlugin(factory, DefaultOptions, NullLogger<TradingPlugin>.Instance);
+
+        var kernel = Kernel.CreateBuilder().Build();
+        kernel.Plugins.AddFromObject(plugin, "Trading");
+
+        // Act — invoke through the kernel's function invocation pipeline
+        var function = kernel.Plugins["Trading"]["GetPositions"];
+        var result   = await kernel.InvokeAsync(function, new KernelArguments());
+
+        // Assert — plugin is correctly invokable through the kernel
+        var output = result.GetValue<string>();
+        output.Should().NotBeNull();
+        output.Should().Contain("ETH-PERP");
+        output.Should().Contain("SHORT");
+    }
+
+    [Fact]
+    public void Kernel_TradingPlugin_ExposesExpectedFunctions()
+    {
+        // Arrange
+        var factory = BuildHttpFactory("http://trader:5300", HttpStatusCode.OK, "[]");
+        var plugin  = new TradingPlugin(factory, DefaultOptions, NullLogger<TradingPlugin>.Instance);
+
+        var kernel = Kernel.CreateBuilder().Build();
+        kernel.Plugins.AddFromObject(plugin, "Trading");
+
+        // Assert — all declared KernelFunctions are discoverable
+        var functions = kernel.Plugins["Trading"].GetFunctionsMetadata();
+        var names     = functions.Select(f => f.Name).ToList();
+
+        names.Should().Contain("GetPositions");
+        names.Should().Contain("PlaceOrder");
+        names.Should().Contain("GetSignalHistory");
+        names.Should().Contain("GetPnLSummary");
+    }
+
+    [Fact]
+    public void Kernel_AnalyticsPlugin_ExposesExpectedFunctions()
+    {
+        var factory    = BuildHttpFactory("http://trader:5300", HttpStatusCode.OK, "[]");
+        var dispatcher = Mock.Of<ICanvasActionDispatcher>();
+        var plugin     = new AnalyticsPlugin(factory, DefaultOptions, dispatcher, NullLogger<AnalyticsPlugin>.Instance);
+
+        var kernel = Kernel.CreateBuilder().Build();
+        kernel.Plugins.AddFromObject(plugin, "Analytics");
+
+        var names = kernel.Plugins["Analytics"].GetFunctionsMetadata().Select(f => f.Name).ToList();
+
+        names.Should().Contain("PlotChart");
+        names.Should().Contain("GenerateSHAP");
+        names.Should().Contain("ExportReport");
+        names.Should().Contain("AskAboutData");
     }
 
     // ── Factory helpers ───────────────────────────────────────────────────────

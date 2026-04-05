@@ -21,9 +21,6 @@ public sealed class DeFiPlugin(
     ICanvasActionDispatcher _canvasDispatcher,
     ILogger<DeFiPlugin> _logger)
 {
-    /// <summary>User context injected for canvas action routing.</summary>
-    internal Guid UserId { get; set; }
-
     /// <summary>
     /// Get the health factors for all open DeFi positions (Morpho, Balancer).
     /// Highlights any positions at risk of liquidation.
@@ -72,9 +69,13 @@ public sealed class DeFiPlugin(
     /// </summary>
     [KernelFunction, Description("Simulate a DeFi portfolio rebalance across Morpho/Balancer without executing. Returns estimated gas, slippage, and APY impact.")]
     public async Task<string> SimulateRebalance(
+        [Description("Authenticated user identifier used to route the simulation results panel to the correct canvas")] Guid userId,
         [Description("Target allocation as JSON (e.g. '{\"morpho_supply\": 0.6, \"balancer_lp\": 0.4}')")] string targetAllocationJson,
         CancellationToken ct = default)
     {
+        if (userId == Guid.Empty)
+            return "A valid userId is required to open the simulation results on the canvas.";
+
         JsonElement targetAllocation;
         try
         {
@@ -101,7 +102,7 @@ public sealed class DeFiPlugin(
             var panelData = JsonSerializer.SerializeToElement(sim);
             await _canvasDispatcher.DispatchAsync(
                 new OpenPanelAction("DeFiSimulation", panelData, "Rebalance Simulation"),
-                UserId, ct).ConfigureAwait(false);
+                userId, ct).ConfigureAwait(false);
 
             return $"Rebalance simulation:\n" +
                    $"  Estimated gas:    {sim.EstimatedGasUsd:F2} USD\n" +
