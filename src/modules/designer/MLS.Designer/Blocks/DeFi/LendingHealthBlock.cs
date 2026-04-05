@@ -122,8 +122,9 @@ public sealed class LendingHealthBlock : BlockBase, IActionTile
                 {
                     IsRunning = false;
 
-                    if (ReferenceEquals(_loopCts, loopCts))
-                        _loopCts = null;
+                    // Null _loopCts only if it still refers to our specific CTS instance,
+                    // preventing a race where a concurrent StartAsync has already installed a new CTS.
+                    Interlocked.CompareExchange(ref _loopCts, null, loopCts);
 
                     _fetchLoopTask = null;
                     loopCts.Dispose();

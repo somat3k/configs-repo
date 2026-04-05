@@ -12,7 +12,7 @@ namespace MLS.Designer.Persistence;
 /// EF Core repository for <see cref="StrategySchema"/> entities.
 /// Provides full CRUD operations and template-based creation for strategy graphs.
 /// </summary>
-public sealed class StrategyRepository(
+public sealed partial class StrategyRepository(
     DesignerDbContext _db,
     IHostEnvironment _env,
     ILogger<StrategyRepository> _logger)
@@ -175,8 +175,8 @@ public sealed class StrategyRepository(
     // ── Template support ──────────────────────────────────────────────────────────
 
     // Allow only safe characters in template names (alphanumeric, dash, underscore)
-    private static readonly Regex _safeNameRegex =
-        new(@"^[A-Za-z0-9_-]+$", RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
+    [System.Text.RegularExpressions.GeneratedRegex(@"^[A-Za-z0-9_-]+$")]
+    private static partial System.Text.RegularExpressions.Regex SafeNameRegex();
 
     /// <summary>
     /// List all available strategy templates by scanning the <c>designer-templates/</c>
@@ -214,7 +214,11 @@ public sealed class StrategyRepository(
     {
         if (!IsValidTemplateName(templateName))
         {
-            _logger.LogWarning("Rejected invalid template name: {TemplateName}", templateName);
+            // templateName has been validated to be non-null and non-empty before reaching this log,
+            // but truncate and sanitize to prevent log-forging (CWE-117)
+            var safeLogName = (templateName.Length > 64 ? templateName[..64] : templateName)
+                .Replace('\r', '_').Replace('\n', '_');
+            _logger.LogWarning("Rejected invalid template name: {TemplateName}", safeLogName);
             return null;
         }
 
@@ -241,7 +245,7 @@ public sealed class StrategyRepository(
     {
         if (string.IsNullOrWhiteSpace(templateName))
             return false;
-        return _safeNameRegex.IsMatch(templateName);
+        return SafeNameRegex().IsMatch(templateName);
     }
 }
 

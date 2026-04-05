@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 using MLS.Core.Designer;
 
 namespace MLS.Designer.Services;
@@ -11,9 +12,11 @@ namespace MLS.Designer.Services;
 /// and an in-memory audit trail keyed by origin signal block ID.
 /// </summary>
 /// <remarks>
-/// <para>Thread-safe: <c>_divisions</c> uses an immutable snapshot swap (ImmutableArray +
-/// Interlocked exchange) so <see cref="RegisterBlock"/> and <see cref="RouteAsync"/>
-/// never race.  <c>_history</c> is guarded by <c>_historyLock</c> for all reads and writes.</para>
+/// <para>Thread-safe: <c>_divisions</c> stores a <see cref="StrongBox{T}"/> per sub-division
+/// so that <see cref="ImmutableInterlocked.Update"/> can atomically append blocks without a lock.
+/// <see cref="RouteAsync"/> reads the current snapshot without locking.
+/// <c>_history</c> is a plain <see cref="Dictionary{TKey, TValue}"/> fully guarded by
+/// <c>_historyLock</c> for both reads and writes.</para>
 /// <para>History entries are bounded to the last
 /// <see cref="MaxHistoryEntries"/> origins to prevent unbounded growth in long-running sessions.</para>
 /// </remarks>
@@ -21,12 +24,10 @@ public sealed class TransformationController : ITransformationController
 {
     private const int MaxHistoryEntries = 1024;
 
-    // sub-division name → immutable array snapshot of registered blocks (lock-free reads)
-    private readonly ConcurrentDictionary<string, ImmutableArray<IBlockElement>> _divisions =
-        new(StringComparer.Ordinal);
-
-    // per-sub-division locks used only by RegisterBlock to safely build new snapshots
-    private readonly ConcurrentDictionary<string, object> _divisionLocks =
+    // sub-division name → StrongBox holding an immutable array snapshot.
+    // StrongBox gives a stable heap location so ImmutableInterlocked.Update can operate
+    // on the boxed field without needing a ref to the dictionary slot itself.
+    private readonly ConcurrentDictionary<string, StrongBox<ImmutableArray<IBlockElement>>> _divisions =
         new(StringComparer.Ordinal);
 
     // origin block ID → list of transformation units accumulated for that origin
@@ -44,13 +45,14 @@ public sealed class TransformationController : ITransformationController
         ArgumentException.ThrowIfNullOrWhiteSpace(subDivision);
         ArgumentNullException.ThrowIfNull(block);
 
-        var divLock = _divisionLocks.GetOrAdd(subDivision, _ => new object());
-        lock (divLock)
-        {
-            var current = _divisions.GetOrAdd(subDivision, _ => ImmutableArray<IBlockElement>.Empty);
-            // Atomically replace the snapshot with a new one that includes the new block
-            _divisions[subDivision] = current.Add(block);
-        }
+        // Get or create the StrongBox for this sub-division.
+        // All concurrent RegisterBlock calls for the same sub-division contend on this box
+        // via ImmutableInterlocked.Update, which spin-retries until the CAS succeeds.
+        var box = _divisions.GetOrAdd(
+            subDivision,
+            _ => new StrongBox<ImmutableArray<IBlockElement>>(ImmutableArray<IBlockElement>.Empty));
+
+        ImmutableInterlocked.Update(ref box.Value!, static (arr, b) => arr.Add(b), block);
     }
 
     /// <inheritdoc/>
@@ -62,12 +64,13 @@ public sealed class TransformationController : ITransformationController
         ArgumentException.ThrowIfNullOrWhiteSpace(subDivision);
         ArgumentNullException.ThrowIfNull(envelope);
 
-        if (!_divisions.TryGetValue(subDivision, out var blocks) || blocks.IsEmpty)
+        if (!_divisions.TryGetValue(subDivision, out var box) || box.Value!.IsEmpty)
             return envelope;
 
+        // Take a snapshot of the array — safe to enumerate without a lock
+        var blocks = box.Value;
         var current = envelope;
 
-        // Snapshot is an ImmutableArray — safe to enumerate without a lock
         foreach (var block in blocks)
         {
             ct.ThrowIfCancellationRequested();
@@ -75,13 +78,11 @@ public sealed class TransformationController : ITransformationController
             BlockSignal? output = null;
 
             // Subscribe to capture the first output emitted during this specific ProcessAsync call.
-            // The handler is subscribed and unsubscribed within the same synchronous frame around
-            // the await, preventing stale captures from asynchronous background emissions.
+            // First-emit-wins: `output ??= sig` ignores any subsequent emissions from the same block.
+            // Note: multi-output blocks (e.g. RouterBlock) emit their additional outputs via their
+            // own output sockets and should not be placed in a TransformationController sub-division.
             Func<BlockSignal, CancellationToken, ValueTask> handler = (sig, _) =>
             {
-                // Capture only the first emission (last-wins would drop earlier outputs).
-                // For multi-output blocks (e.g. RouterBlock) the TransformationController
-                // is not the right routing vehicle; use those blocks' own output sockets directly.
                 output ??= sig;
                 return ValueTask.CompletedTask;
             };
@@ -110,7 +111,6 @@ public sealed class TransformationController : ITransformationController
                 current = current.WithTransformation(unit);
                 current = current with { Signal = output.Value };
 
-                // Record in history
                 RecordHistory(envelope.OriginBlockId, unit);
             }
         }
@@ -124,7 +124,7 @@ public sealed class TransformationController : ITransformationController
         lock (_historyLock)
         {
             if (_history.TryGetValue(originSignalId, out var units))
-                return units.ToArray();  // Return immutable copy under lock
+                return units.ToArray();  // Return immutable copy taken under lock
             return Array.Empty<TransformationUnit>();
         }
     }
@@ -140,7 +140,6 @@ public sealed class TransformationController : ITransformationController
         {
             if (!_history.ContainsKey(originId))
             {
-                // Evict oldest entry when at capacity
                 if (_historyOrder.Count >= MaxHistoryEntries)
                 {
                     var evict = _historyOrder.Dequeue();
