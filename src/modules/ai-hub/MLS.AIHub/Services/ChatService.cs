@@ -26,6 +26,7 @@ public interface IChatService
     /// <summary>
     /// Processes an <c>AI_QUERY</c>: assembles context, invokes SK with streaming,
     /// dispatches canvas actions, and forwards all chunks to the user's SignalR group.
+    /// Always sends <c>AI_RESPONSE_COMPLETE</c> regardless of success or failure.
     /// </summary>
     /// <param name="query">Incoming query payload.</param>
     /// <param name="userId">Requesting user / client identifier — routes to their SignalR group.</param>
@@ -35,6 +36,7 @@ public interface IChatService
     /// <summary>
     /// Returns an <see cref="IAsyncEnumerable{T}"/> of response chunks for SSE / HTTP streaming clients.
     /// Canvas actions are still dispatched as a side-effect.
+    /// Always yields a terminal chunk with <c>IsFinal=true</c>, even when streaming fails.
     /// </summary>
     /// <param name="query">Incoming query payload.</param>
     /// <param name="userId">Requesting user / client identifier.</param>
@@ -57,6 +59,7 @@ public sealed class ChatService(
     IContextAssembler _context,
     IProviderRouter _router,
     IHubContext<AIHubHub> _hub,
+    ICanvasActionCounter _canvasCounter,
     TradingPlugin _trading,
     DesignerPlugin _designer,
     AnalyticsPlugin _analytics,
@@ -71,40 +74,70 @@ public sealed class ChatService(
     /// <inheritdoc/>
     public async Task ProcessQueryAsync(AiQueryPayload query, Guid userId, CancellationToken ct = default)
     {
-        var sw = Stopwatch.StartNew();
-        var provider = await SelectProviderAsync(query, userId, ct).ConfigureAwait(false);
-        var modelId  = ResolveModelId(query, provider);
-        var chatSvc  = provider.BuildService(modelId);
-        var snapshot = await _context.AssembleAsync(userId, ct).ConfigureAwait(false);
-        var history  = BuildChatHistory(query, snapshot);
-        var kernel   = BuildKernel(chatSvc);
+        var sw         = Stopwatch.StartNew();
+        var providerId = "unknown";
+        var modelId    = "unknown";
+        var chunkIndex = 0;
+        // When true the finally block sends AI_RESPONSE_COMPLETE.
+        // Set to false only when the caller explicitly cancels — the connection may already be gone.
+        var sendComplete = true;
 
-        int chunkIndex = 0;
-
-        await foreach (var chunk in InnerStreamAsync(chatSvc, history, kernel, ct).ConfigureAwait(false))
+        try
         {
-            var payload  = new AiResponseChunkPayload(chunkIndex++, chunk, false, 0);
-            var envelope = EnvelopePayload.Create(MessageTypes.AiResponseChunk, ModuleId, payload);
+            var provider = await SelectProviderAsync(query, userId, ct).ConfigureAwait(false);
+            providerId = provider.ProviderId;
+            modelId    = ResolveModelId(query, provider);
 
-            await _hub.Clients.Group(userId.ToString())
-                .SendAsync("ReceiveEnvelope", envelope, ct)
-                .ConfigureAwait(false);
+            var chatSvc  = provider.BuildService(modelId);
+            var snapshot = await _context.AssembleAsync(userId, ct).ConfigureAwait(false);
+            var history  = BuildChatHistory(query, snapshot);
+            var kernel   = BuildKernel(chatSvc);
+
+            await foreach (var chunk in InnerStreamAsync(chatSvc, history, kernel, ct).ConfigureAwait(false))
+            {
+                var payload  = new AiResponseChunkPayload(chunkIndex++, chunk, false, 0);
+                var envelope = EnvelopePayload.Create(MessageTypes.AiResponseChunk, ModuleId, payload);
+
+                await _hub.Clients.Group(userId.ToString())
+                    .SendAsync("ReceiveEnvelope", envelope, ct)
+                    .ConfigureAwait(false);
+            }
+
+            _logger.LogInformation(
+                "ChatService: response complete — {Chunks} chunks, {Elapsed}ms, provider={Provider}, model={Model}",
+                chunkIndex, sw.ElapsedMilliseconds, providerId,
+                // Sanitise user-supplied model override to prevent log-forging
+                modelId.Replace('\r', '_').Replace('\n', '_'));
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller cancelled (e.g. connection dropped) — skip terminal envelope;
+            // the recipient group may no longer be listening.
+            sendComplete = false;
+            _logger.LogInformation("ChatService: query cancelled for userId {UserId}", userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ChatService: error processing query for userId {UserId}", userId);
+            // sendComplete remains true — fall through to finally to send the terminal signal.
+        }
+        finally
+        {
+            if (sendComplete)
+            {
+                sw.Stop();
+                var completePayload  = new AiResponseCompletePayload(
+                    chunkIndex, sw.ElapsedMilliseconds, providerId, modelId, _canvasCounter.Count);
+                var completeEnvelope = EnvelopePayload.Create(
+                    MessageTypes.AiResponseComplete, ModuleId, completePayload);
 
-        sw.Stop();
-
-        var completePayload  = new AiResponseCompletePayload(chunkIndex, sw.ElapsedMilliseconds, provider.ProviderId, modelId, 0);
-        var completeEnvelope = EnvelopePayload.Create(MessageTypes.AiResponseComplete, ModuleId, completePayload);
-
-        await _hub.Clients.Group(userId.ToString())
-            .SendAsync("ReceiveEnvelope", completeEnvelope, ct)
-            .ConfigureAwait(false);
-
-        _logger.LogInformation(
-            "ChatService: response complete — {Chunks} chunks, {Elapsed}ms, provider={Provider}, model={Model}",
-            chunkIndex, sw.ElapsedMilliseconds, provider.ProviderId,
-            // Sanitise user-supplied model override to prevent log-forging
-            modelId.Replace('\r', '_').Replace('\n', '_'));
+                // CancellationToken.None — always deliver the terminal envelope,
+                // even when ct was cancelled or a streaming error occurred.
+                await _hub.Clients.Group(userId.ToString())
+                    .SendAsync("ReceiveEnvelope", completeEnvelope, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -119,15 +152,22 @@ public sealed class ChatService(
         var history  = BuildChatHistory(query, snapshot);
         var kernel   = BuildKernel(chatSvc);
 
-        int chunkIndex = 0;
+        int chunkIndex  = 0;
+        string? errorMsg = null;
 
-        await foreach (var text in InnerStreamAsync(chatSvc, history, kernel, ct).ConfigureAwait(false))
+        // WrapStreamAsync catches non-cancellation exceptions from InnerStreamAsync,
+        // ensuring the iterator always reaches the terminal yield below.
+        await foreach (var text in WrapStreamAsync(
+                InnerStreamAsync(chatSvc, history, kernel, ct),
+                ex => errorMsg = "Streaming interrupted; please retry.",
+                ct)
+            .ConfigureAwait(false))
         {
             yield return new AiResponseChunkPayload(chunkIndex++, text, false, 0);
         }
 
-        // Terminal chunk signals end-of-stream to the SSE consumer
-        yield return new AiResponseChunkPayload(chunkIndex, string.Empty, true, 0);
+        // Terminal chunk — always yielded (includes error hint when streaming failed)
+        yield return new AiResponseChunkPayload(chunkIndex, errorMsg ?? string.Empty, true, 0);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -154,6 +194,49 @@ public sealed class ChatService(
         }
     }
 
+    /// <summary>
+    /// Wraps <paramref name="source"/> to catch non-cancellation exceptions, invoking
+    /// <paramref name="onError"/> and stopping iteration cleanly so the caller can
+    /// yield a terminal chunk. This pattern avoids placing <c>yield return</c> inside
+    /// a try/catch block (a C# compiler restriction).
+    /// </summary>
+    private async IAsyncEnumerable<string> WrapStreamAsync(
+        IAsyncEnumerable<string> source,
+        Action<Exception> onError,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await using var enumerator = source.GetAsyncEnumerator(ct);
+
+        while (true)
+        {
+            // --- try/catch block: sets flags but does NOT contain yield ---
+            string? value  = null;
+            bool    hasNext = false;
+            bool    stop    = false;
+
+            try
+            {
+                hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                if (hasNext) value = enumerator.Current;
+            }
+            catch (OperationCanceledException)
+            {
+                stop = true;   // ct cancelled — stop cleanly
+            }
+            catch (Exception ex)
+            {
+                onError(ex);
+                _logger.LogError(ex, "ChatService.WrapStreamAsync: streaming error");
+                stop = true;
+            }
+            // -------------------------------------------------------------------
+
+            if (stop || !hasNext) break;  // break is outside try/catch — valid
+
+            yield return value!;           // yield is outside try/catch — valid
+        }
+    }
+
     private async Task<ILLMProvider> SelectProviderAsync(
         AiQueryPayload query, Guid userId, CancellationToken ct)
     {
@@ -168,13 +251,34 @@ public sealed class ChatService(
         }
     }
 
-    private static string ResolveModelId(AiQueryPayload query, ILLMProvider provider) =>
-        !string.IsNullOrWhiteSpace(query.ModelOverride)
-            ? query.ModelOverride
-            : provider.SupportedModels.Count > 0
-                ? provider.SupportedModels[0]
-                : throw new InvalidOperationException(
-                    $"Provider '{provider.ProviderId}' reports no supported models.");
+    /// <summary>
+    /// Resolves the model to use, validating any override against the provider's
+    /// declared <see cref="ILLMProvider.SupportedModels"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Provider has no supported models.</exception>
+    /// <exception cref="ArgumentException">Model override is not in the provider's list.</exception>
+    private static string ResolveModelId(AiQueryPayload query, ILLMProvider provider)
+    {
+        if (provider.SupportedModels.Count == 0)
+            throw new InvalidOperationException(
+                $"Provider '{provider.ProviderId}' reports no supported models.");
+
+        if (!string.IsNullOrWhiteSpace(query.ModelOverride))
+        {
+            foreach (var supported in provider.SupportedModels)
+            {
+                if (string.Equals(supported, query.ModelOverride, StringComparison.OrdinalIgnoreCase))
+                    return supported;
+            }
+
+            throw new ArgumentException(
+                $"Model override '{query.ModelOverride}' is not supported by provider " +
+                $"'{provider.ProviderId}'. Supported models: {string.Join(", ", provider.SupportedModels)}.",
+                nameof(query));
+        }
+
+        return provider.SupportedModels[0];
+    }
 
     /// <summary>Builds a fresh <see cref="Kernel"/> scoped to this request.</summary>
     private Kernel BuildKernel(IChatCompletionService chatSvc)
@@ -201,18 +305,21 @@ public sealed class ChatService(
         var history = new ChatHistory();
         history.AddSystemMessage(BuildSystemPrompt(snapshot));
 
-        // Replay prior turns from the conversation history
-        foreach (var turn in query.ConversationHistory)
+        // Guard against null ConversationHistory (possible when the JSON field is omitted)
+        if (query.ConversationHistory is not null)
         {
-            if (!turn.TryGetProperty("role", out var roleEl) ||
-                !turn.TryGetProperty("content", out var contentEl))
-                continue;
+            foreach (var turn in query.ConversationHistory)
+            {
+                if (!turn.TryGetProperty("role", out var roleEl) ||
+                    !turn.TryGetProperty("content", out var contentEl))
+                    continue;
 
-            var role    = roleEl.GetString();
-            var content = contentEl.GetString() ?? string.Empty;
+                var role    = roleEl.GetString();
+                var content = contentEl.GetString() ?? string.Empty;
 
-            if (role == "user")      history.AddUserMessage(content);
-            else if (role == "assistant") history.AddAssistantMessage(content);
+                if (role == "user")           history.AddUserMessage(content);
+                else if (role == "assistant") history.AddAssistantMessage(content);
+            }
         }
 
         history.AddUserMessage(query.Query);

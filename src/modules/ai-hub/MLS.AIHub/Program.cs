@@ -55,8 +55,16 @@ builder.Services.AddScoped<IContextAssembler, ContextAssembler>();
 // ── Canvas Action Dispatcher ──────────────────────────────────────────────────
 builder.Services.AddScoped<ICanvasActionDispatcher, CanvasActionDispatcher>();
 
+// ── Canvas Action Counter (scoped — tracks per-request canvas dispatches) ─────
+builder.Services.AddScoped<ICanvasActionCounter, CanvasActionCounter>();
+
 // ── Chat Service ──────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IChatService, ChatService>();
+
+// ── Chat Request Queue (bounded Channel<T> — protects against load spikes) ───
+builder.Services.AddSingleton<ChatQueueProcessor>();
+builder.Services.AddSingleton<IChatRequestQueue>(sp => sp.GetRequiredService<ChatQueueProcessor>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ChatQueueProcessor>());
 
 // ── Semantic Kernel Plugins ───────────────────────────────────────────────────
 builder.Services.AddScoped<TradingPlugin>();

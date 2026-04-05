@@ -12,9 +12,12 @@ namespace MLS.AIHub.Canvas;
 /// <summary>
 /// Dispatches <see cref="CanvasAction"/> instances to the web-app MDI canvas by sending
 /// <c>AI_CANVAS_ACTION</c> envelopes to the requesting user's SignalR group via AI Hub's hub.
+/// Also increments <see cref="ICanvasActionCounter"/> so <c>AI_RESPONSE_COMPLETE</c>
+/// reports the accurate dispatch count.
 /// </summary>
 public sealed class CanvasActionDispatcher(
     IHubContext<AIHubHub> _hubContext,
+    ICanvasActionCounter _counter,
     ILogger<CanvasActionDispatcher> _logger) : ICanvasActionDispatcher
 {
     private const string ModuleId = "ai-hub";
@@ -45,6 +48,8 @@ public sealed class CanvasActionDispatcher(
                 .Group(userId.ToString())
                 .SendAsync("ReceiveEnvelope", envelope, ct)
                 .ConfigureAwait(false);
+
+            _counter.Increment();
 
             _logger.LogDebug(
                 "CanvasAction {ActionType} dispatched to user {UserId}",

@@ -18,7 +18,6 @@ using Moq.Protected;
 using System.Net;
 using Xunit;
 using AIHubHub = MLS.AIHub.Hubs.AIHub;
-
 namespace MLS.AIHub.Tests;
 
 /// <summary>
@@ -165,11 +164,13 @@ public sealed class ChatServiceTests
     {
         var factory    = httpFactory ?? BuildEmptyHttpFactory();
         var dispatcher = Mock.Of<ICanvasActionDispatcher>();
+        var counter    = Mock.Of<ICanvasActionCounter>();
 
         return new ChatService(
             contextAssembler,
             router,
             hub,
+            counter,
             new TradingPlugin(factory, DefaultOptions, NullLogger<TradingPlugin>.Instance),
             new DesignerPlugin(factory, DefaultOptions, dispatcher, NullLogger<DesignerPlugin>.Instance),
             new AnalyticsPlugin(factory, DefaultOptions, dispatcher, NullLogger<AnalyticsPlugin>.Instance),
@@ -411,7 +412,159 @@ public sealed class ChatServiceTests
         capturedGroup.Should().Be(TestUserId.ToString());
     }
 
+    // ── New tests for review feedback ─────────────────────────────────────────
+
+    [Fact]
+    public async Task ProcessQueryAsync_AlwaysSendsCompleteEvenWhenStreamingThrows()
+    {
+        // Arrange — chat service throws during streaming
+        var mock = new Mock<IChatCompletionService>();
+        mock.Setup(s => s.GetStreamingChatMessageContentsAsync(
+                It.IsAny<ChatHistory>(), It.IsAny<PromptExecutionSettings?>(),
+                It.IsAny<Kernel?>(), It.IsAny<CancellationToken>()))
+            .Returns(ThrowingAsyncEnumerable());
+        var provider = BuildMockProvider(mock.Object);
+        var router   = BuildMockRouter(provider.Object);
+        var (hub, calls) = BuildMockHub();
+
+        var service = BuildChatService(BuildMockContextAssembler().Object, router.Object, hub.Object);
+
+        // Act — should not throw
+        await service.ProcessQueryAsync(BuildQuery("error test"), TestUserId);
+
+        // Assert — AI_RESPONSE_COMPLETE must always be sent
+        calls.Should().NotBeEmpty();
+        var lastEnv = calls.Last()[0] as MLS.Core.Contracts.EnvelopePayload;
+        lastEnv!.Type.Should().Be(MLS.Core.Constants.MessageTypes.AiResponseComplete);
+    }
+
+    [Fact]
+    public async Task StreamChunksAsync_AlwaysYieldsTerminalChunkWhenStreamingThrows()
+    {
+        // Arrange — provider throws mid-stream
+        var mock = new Mock<IChatCompletionService>();
+        mock.Setup(s => s.GetStreamingChatMessageContentsAsync(
+                It.IsAny<ChatHistory>(), It.IsAny<PromptExecutionSettings?>(),
+                It.IsAny<Kernel?>(), It.IsAny<CancellationToken>()))
+            .Returns(ThrowingAsyncEnumerable());
+        var provider = BuildMockProvider(mock.Object);
+        var router   = BuildMockRouter(provider.Object);
+        var (hub, _) = BuildMockHub();
+
+        var service = BuildChatService(BuildMockContextAssembler().Object, router.Object, hub.Object);
+
+        // Act
+        var chunks = new List<AiResponseChunkPayload>();
+        await foreach (var chunk in service.StreamChunksAsync(BuildQuery("throw test"), TestUserId))
+            chunks.Add(chunk);
+
+        // Assert — terminal chunk always yielded
+        chunks.Should().NotBeEmpty();
+        chunks.Last().IsFinal.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ProcessQueryAsync_InvalidModelOverride_SendsCompleteWithErrorInfo()
+    {
+        // Arrange — provider only supports "mock-model", query requests "unknown-model"
+        var chatSvc  = BuildMockChatService("hi");
+        var provider = BuildMockProvider(chatSvc);
+        var router   = BuildMockRouter(provider.Object);
+        var (hub, calls) = BuildMockHub();
+
+        var service = BuildChatService(BuildMockContextAssembler().Object, router.Object, hub.Object);
+
+        // AI_QUERY with an unsupported model override
+        var query = new AiQueryPayload(
+            Query:                "test",
+            ProviderOverride:     null,
+            ModelOverride:        "gpt-99-nonexistent",
+            IncludeCanvasContext: false,
+            ConversationHistory:  []);
+
+        // Act — should not throw; should still deliver AI_RESPONSE_COMPLETE
+        await service.ProcessQueryAsync(query, TestUserId);
+
+        // Assert — AI_RESPONSE_COMPLETE is sent even for rejected model overrides
+        calls.Should().NotBeEmpty();
+        var lastEnv = calls.Last()[0] as MLS.Core.Contracts.EnvelopePayload;
+        lastEnv!.Type.Should().Be(MLS.Core.Constants.MessageTypes.AiResponseComplete);
+    }
+
+    [Fact]
+    public async Task ProcessQueryAsync_NullConversationHistory_DoesNotThrow()
+    {
+        // Arrange — ConversationHistory is null (JSON field omitted in deserialization)
+        var chatSvc  = BuildMockChatService("ok");
+        var provider = BuildMockProvider(chatSvc);
+        var router   = BuildMockRouter(provider.Object);
+        var (hub, calls) = BuildMockHub();
+
+        var service = BuildChatService(BuildMockContextAssembler().Object, router.Object, hub.Object);
+
+        var query = new AiQueryPayload(
+            Query:                "null history test",
+            ProviderOverride:     null,
+            ModelOverride:        null,
+            IncludeCanvasContext: false,
+            ConversationHistory:  null!);  // explicitly null
+
+        // Act & Assert — must not throw
+        await service.Invoking(s => s.ProcessQueryAsync(query, TestUserId))
+            .Should().NotThrowAsync();
+
+        calls.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task ProcessQueryAsync_CanvasActionsDispatchedReflectedInCompletePayload()
+    {
+        // Arrange — use a real CanvasActionCounter and verify count is passed through
+        var chatSvc  = BuildMockChatService("hi");
+        var provider = BuildMockProvider(chatSvc);
+        var router   = BuildMockRouter(provider.Object);
+        var (hub, calls) = BuildMockHub();
+
+        var counter    = new MLS.AIHub.Canvas.CanvasActionCounter();
+        var dispatcher = Mock.Of<ICanvasActionDispatcher>();
+        var factory    = BuildEmptyHttpFactory();
+
+        // Simulate 2 canvas actions dispatched via the counter
+        counter.Increment();
+        counter.Increment();
+
+        var service = new ChatService(
+            BuildMockContextAssembler().Object,
+            router.Object,
+            hub.Object,
+            counter,
+            new TradingPlugin(factory, DefaultOptions, NullLogger<TradingPlugin>.Instance),
+            new DesignerPlugin(factory, DefaultOptions, dispatcher, NullLogger<DesignerPlugin>.Instance),
+            new AnalyticsPlugin(factory, DefaultOptions, dispatcher, NullLogger<AnalyticsPlugin>.Instance),
+            new MLRuntimePlugin(factory, DefaultOptions, dispatcher, NullLogger<MLRuntimePlugin>.Instance),
+            new DeFiPlugin(factory, DefaultOptions, dispatcher, NullLogger<DeFiPlugin>.Instance),
+            NullLogger<ChatService>.Instance);
+
+        // Act
+        await service.ProcessQueryAsync(BuildQuery("canvas count"), TestUserId);
+
+        // Assert — complete payload reports 2 canvas actions
+        var completeEnv = calls.Last()[0] as MLS.Core.Contracts.EnvelopePayload;
+        var payload = JsonSerializer.Deserialize<AiResponseCompletePayload>(completeEnv!.Payload.GetRawText());
+        payload!.CanvasActionsDispatched.Should().Be(2);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static async IAsyncEnumerable<StreamingChatMessageContent> ThrowingAsyncEnumerable()
+    {
+        yield return new StreamingChatMessageContent(AuthorRole.Assistant, "first");
+        await Task.Yield();
+        throw new InvalidOperationException("Simulated streaming failure");
+#pragma warning disable CS0162 // Unreachable code
+        yield break;
+#pragma warning restore CS0162
+    }
 
     private static AiQueryPayload BuildQuery(string text) => new(
         Query:                text,

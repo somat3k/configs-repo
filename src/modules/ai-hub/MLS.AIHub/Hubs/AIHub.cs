@@ -73,8 +73,10 @@ public sealed class AIHub(
             return Task.CompletedTask;
         }
 
-        // Resolve userId from the connection's clientId query param
-        var httpCtx = Context.GetHttpContext();
+        // Resolve userId from the connection's clientId query param.
+        // NOTE: clientId is trusted for group routing; production deployments should enforce
+        // authentication and derive this from a verified principal instead.
+        var httpCtx  = Context.GetHttpContext();
         var clientId = httpCtx?.Request.Query["clientId"].FirstOrDefault();
 
         if (!Guid.TryParse(clientId, out var userId))
@@ -106,20 +108,53 @@ public sealed class AIHub(
             return Task.CompletedTask;
         }
 
-        // Process on a background scope — ChatService is scoped and must not outlive the call
-        _ = ProcessInScopeAsync(queryPayload, userId);
+        // Validate required fields
+        if (string.IsNullOrWhiteSpace(queryPayload.Query))
+        {
+            _logger.LogWarning(
+                "AIHub: AI_QUERY has empty Query for envelope {SessionId} — dropping",
+                envelope.SessionId);
+            return Task.CompletedTask;
+        }
+
+        // Normalize optional collection — JSON may omit the field entirely
+        if (queryPayload.ConversationHistory is null)
+            queryPayload = queryPayload with { ConversationHistory = [] };
+
+        // Capture connection-abort token before the fire-and-forget so the background
+        // task can cancel AI work when the caller's connection drops.
+        var connectionAborted = Context.ConnectionAborted;
+
+        _ = ProcessInScopeAsync(queryPayload, userId, connectionAborted);
         return Task.CompletedTask;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private async Task ProcessInScopeAsync(AiQueryPayload query, Guid userId)
+    private async Task ProcessInScopeAsync(
+        AiQueryPayload query, Guid userId, CancellationToken connectionAborted)
     {
-        using var scope   = _scopeFactory.CreateScope();
-        var chatService   = scope.ServiceProvider.GetRequiredService<IChatService>();
+        using var scope      = _scopeFactory.CreateScope();
+        var chatService      = scope.ServiceProvider.GetRequiredService<IChatService>();
+
+        // Link connection-abort with a 2-minute hard timeout to prevent provider spend
+        // from a long-running request with no active listener.
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(connectionAborted);
+        cts.CancelAfter(TimeSpan.FromMinutes(2));
+
         try
         {
-            await chatService.ProcessQueryAsync(query, userId).ConfigureAwait(false);
+            await chatService.ProcessQueryAsync(query, userId, cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (connectionAborted.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "AIHub: AI_QUERY processing cancelled — connection aborted for user {UserId}", userId);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning(
+                "AIHub: AI_QUERY processing timed out (2 min) for user {UserId}", userId);
         }
         catch (Exception ex)
         {
@@ -133,3 +168,4 @@ public sealed class AIHub(
             ? id[..64].Replace('\r', '_').Replace('\n', '_')
             : id.Replace('\r', '_').Replace('\n', '_');
 }
+

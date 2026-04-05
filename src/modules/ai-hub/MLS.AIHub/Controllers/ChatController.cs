@@ -7,21 +7,23 @@ namespace MLS.AIHub.Controllers;
 
 /// <summary>
 /// REST + SSE endpoint for the AI chat pipeline.
-/// Provides both a fire-and-forget POST endpoint (primary SignalR path)
+/// Provides both a bounded-queue POST endpoint (primary SignalR path)
 /// and a GET SSE endpoint for HTTP-only clients.
 /// </summary>
 [ApiController]
 [Route("api/chat")]
 public sealed class ChatController(
+    IChatRequestQueue _queue,
     IChatService _chatService,
     ILogger<ChatController> _logger) : ControllerBase
 {
     // ── POST /api/chat ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Accepts an AI query and triggers the full streaming pipeline.
+    /// Accepts an AI query and enqueues it for background processing.
     /// Response chunks are delivered to the caller's SignalR group
     /// (<c>AI_RESPONSE_CHUNK</c> / <c>AI_CANVAS_ACTION</c> / <c>AI_RESPONSE_COMPLETE</c>).
+    /// Returns HTTP 429 when the processing queue is at capacity.
     /// </summary>
     /// <param name="request">Query and optional conversation history.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -29,6 +31,7 @@ public sealed class ChatController(
     [HttpPost("")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public IActionResult PostChat(
         [FromBody] ChatRequest request,
         CancellationToken ct)
@@ -46,23 +49,16 @@ public sealed class ChatController(
             IncludeCanvasContext:   request.IncludeCanvasContext,
             ConversationHistory:    request.ConversationHistory ?? []);
 
-        // Fire-and-forget — the actual response is delivered via SignalR, not this HTTP response.
-        // CancellationToken.None is intentional: even if the caller closes the HTTP connection before
-        // receiving the 202, the AI processing must continue so the SignalR response reaches the client.
-        _ = Task.Run(async () =>
+        // Enqueue for background processing via bounded channel.
+        // Pass ct so the queue processor can cancel if the HTTP caller disconnects first.
+        var item = new ChatQueueItem(payload, request.UserId, ct);
+        if (!_queue.TryEnqueue(item))
         {
-            try
-            {
-                await _chatService.ProcessQueryAsync(payload, request.UserId, CancellationToken.None)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "ChatController: unhandled error in background ProcessQueryAsync for userId {UserId}",
-                    request.UserId);
-            }
-        }, CancellationToken.None);
+            _logger.LogWarning(
+                "ChatController: queue at capacity — returning 429 for userId {UserId}", request.UserId);
+            return StatusCode(StatusCodes.Status429TooManyRequests,
+                new { error = "Server busy; retry the request shortly." });
+        }
 
         return Accepted(new { message = "Query accepted. Response streaming via SignalR." });
     }
