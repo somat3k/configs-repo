@@ -4,19 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       model_type:
-        description: 'Model to train (trader/arbitrager/defi/all)'
+        description: 'Model to train (model-t/model-a/model-d/all)'
         required: true
         default: 'all'
         type: choice
-        options: [trader, arbitrager, defi, all]
+        options: [model-t, model-a, model-d, all]
       environment:
         description: 'Target environment'
         required: true
         default: 'staging'
         type: choice
         options: [staging, production]
-  schedule:
-    - cron: '0 2 * * *'  # Nightly retraining at 2am UTC
 
 env:
   PYTHON_VERSION: '3.12'
@@ -32,7 +30,7 @@ jobs:
     if: hashFiles('src/modules/ml-runtime/requirements.lock') != ''
     strategy:
       matrix:
-        model: ${{ fromJson(inputs.model_type == 'all' && '["trader","arbitrager","defi"]' || format('["{0}"]', inputs.model_type)) }}
+        model: ${{ fromJson(inputs.model_type == 'all' && '["model-t","model-a","model-d"]' || format('["{0}"]', inputs.model_type)) }}
       fail-fast: false
 
     steps:
@@ -52,21 +50,36 @@ jobs:
           pip install -r requirements.lock
 
       - name: Run training pipeline
-        working-directory: src/modules/ml-runtime
+        working-directory: src/modules/ml-runtime/scripts
         env:
           MODEL_TYPE: ${{ matrix.model }}
           MLS_ENV: ${{ inputs.environment || 'staging' }}
+          MLS_ARTIFACTS_DIR: ${{ github.workspace }}/${{ env.ARTIFACTS_DIR }}
         run: |
-          python training/train_${{ matrix.model }}.py \
-            --output-dir ${{ env.ARTIFACTS_DIR }} \
-            --export-onnx \
-            --export-joblib \
-            --validate
+          cat > /tmp/train_config.json <<EOF
+          {
+            "job_id": "${{ github.run_id }}-${{ matrix.model }}",
+            "model_type": "${{ matrix.model }}",
+            "feature_schema_version": 1,
+            "hyperparams": {
+              "epochs": 100,
+              "batch_size": 512,
+              "learning_rate": 0.001,
+              "dropout_rate": 0.2,
+              "hidden_dims": [128, 64, 32],
+              "weight_decay": 1e-5,
+              "warmup_steps": 500,
+              "early_stopping_patience": 20
+            }
+          }
+          EOF
+          python training_pipeline.py --config /tmp/train_config.json
 
       - name: Run model validation tests
+        if: ${{ hashFiles(format('src/modules/ml-runtime/scripts/tests/test_{0}_model.py', matrix.model)) != '' }}
         working-directory: src/modules/ml-runtime
         run: |
-          python -m pytest tests/test_${{ matrix.model }}_model.py -v \
+          python -m pytest scripts/tests/test_${{ matrix.model }}_model.py -v \
             --benchmark-only \
             --benchmark-json=benchmark_${{ matrix.model }}.json
 
@@ -75,8 +88,8 @@ jobs:
         with:
           name: ml-models-${{ matrix.model }}-${{ github.run_number }}
           path: |
-            src/modules/ml-runtime/artifacts/models/${{ matrix.model }}.onnx
-            src/modules/ml-runtime/artifacts/models/${{ matrix.model }}.joblib
+            ${{ env.ARTIFACTS_DIR }}/*.onnx
+            ${{ env.ARTIFACTS_DIR }}/*.joblib
             src/modules/ml-runtime/benchmark_${{ matrix.model }}.json
           retention-days: 30
 

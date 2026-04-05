@@ -95,8 +95,12 @@ jobs:
           fi
 
           echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
-          [ -n "$CONTEXT" ]    && echo "context=$CONTEXT"       >> "$GITHUB_OUTPUT"
-          [ -n "$DOCKERFILE" ] && echo "dockerfile=$DOCKERFILE" >> "$GITHUB_OUTPUT"
+          if [ -n "$CONTEXT" ]; then
+            echo "context=$CONTEXT" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$DOCKERFILE" ]; then
+            echo "dockerfile=$DOCKERFILE" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and push Docker image
         if: steps.ctx.outputs.skip != 'true'
