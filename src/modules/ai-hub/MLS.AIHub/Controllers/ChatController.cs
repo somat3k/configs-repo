@@ -46,7 +46,9 @@ public sealed class ChatController(
             IncludeCanvasContext:   request.IncludeCanvasContext,
             ConversationHistory:    request.ConversationHistory ?? []);
 
-        // Fire-and-forget; response delivered asynchronously via SignalR
+        // Fire-and-forget — the actual response is delivered via SignalR, not this HTTP response.
+        // CancellationToken.None is intentional: even if the caller closes the HTTP connection before
+        // receiving the 202, the AI processing must continue so the SignalR response reaches the client.
         _ = Task.Run(async () =>
         {
             try
@@ -60,7 +62,7 @@ public sealed class ChatController(
                     "ChatController: unhandled error in background ProcessQueryAsync for userId {UserId}",
                     request.UserId);
             }
-        }, ct);
+        }, CancellationToken.None);
 
         return Accepted(new { message = "Query accepted. Response streaming via SignalR." });
     }

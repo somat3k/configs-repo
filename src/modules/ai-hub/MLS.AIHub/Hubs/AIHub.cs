@@ -92,13 +92,17 @@ public sealed class AIHub(
         }
         catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "AIHub: failed to deserialise AiQueryPayload — dropping");
+            _logger.LogWarning(ex,
+                "AIHub: failed to deserialise AiQueryPayload for envelope {SessionId} — dropping",
+                envelope.SessionId);
             return Task.CompletedTask;
         }
 
         if (queryPayload is null)
         {
-            _logger.LogWarning("AIHub: AiQueryPayload deserialised to null — dropping");
+            _logger.LogWarning(
+                "AIHub: AiQueryPayload deserialised to null for envelope {SessionId} — dropping",
+                envelope.SessionId);
             return Task.CompletedTask;
         }
 

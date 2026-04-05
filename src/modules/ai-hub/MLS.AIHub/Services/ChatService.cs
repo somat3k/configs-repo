@@ -102,7 +102,9 @@ public sealed class ChatService(
 
         _logger.LogInformation(
             "ChatService: response complete — {Chunks} chunks, {Elapsed}ms, provider={Provider}, model={Model}",
-            chunkIndex, sw.ElapsedMilliseconds, provider.ProviderId, modelId);
+            chunkIndex, sw.ElapsedMilliseconds, provider.ProviderId,
+            // Sanitise user-supplied model override to prevent log-forging
+            modelId.Replace('\r', '_').Replace('\n', '_'));
     }
 
     /// <inheritdoc/>
