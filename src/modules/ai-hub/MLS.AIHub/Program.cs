@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
+using MLS.AIHub.Canvas;
 using MLS.AIHub.Configuration;
+using MLS.AIHub.Context;
 using MLS.AIHub.Hubs;
 using MLS.AIHub.Persistence;
+using MLS.AIHub.Plugins;
 using MLS.AIHub.Providers;
 using MLS.AIHub.Services;
 
@@ -45,6 +48,19 @@ builder.Services.AddSingleton<ILLMProvider, LocalProvider>();
 
 // ── Provider Router ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IProviderRouter, ProviderRouter>();
+
+// ── Context Assembler ─────────────────────────────────────────────────────────
+builder.Services.AddScoped<IContextAssembler, ContextAssembler>();
+
+// ── Canvas Action Dispatcher ──────────────────────────────────────────────────
+builder.Services.AddScoped<ICanvasActionDispatcher, CanvasActionDispatcher>();
+
+// ── Semantic Kernel Plugins ───────────────────────────────────────────────────
+builder.Services.AddScoped<TradingPlugin>();
+builder.Services.AddScoped<DesignerPlugin>();
+builder.Services.AddScoped<AnalyticsPlugin>();
+builder.Services.AddScoped<MLRuntimePlugin>();
+builder.Services.AddScoped<DeFiPlugin>();
 
 // ── Semantic Kernel ───────────────────────────────────────────────────────────
 // Kernel is registered as a factory — each request gets a fresh kernel scoped
