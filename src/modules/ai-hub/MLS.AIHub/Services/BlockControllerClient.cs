@@ -41,7 +41,11 @@ public sealed class BlockControllerClient(
     public override async Task StopAsync(CancellationToken ct)
     {
         await base.StopAsync(ct).ConfigureAwait(false);
-        await DeregisterAsync(CancellationToken.None).ConfigureAwait(false);
+
+        using var deregistrationCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deregistrationCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+        await DeregisterAsync(deregistrationCts.Token).ConfigureAwait(false);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

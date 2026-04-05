@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
 using MLS.AIHub.Configuration;
+using MLS.AIHub.Hubs;
 using MLS.AIHub.Persistence;
 using MLS.AIHub.Providers;
 using MLS.AIHub.Services;
@@ -14,6 +15,8 @@ var aiHubOpts = builder.Configuration.GetSection("AIHub").Get<AIHubOptions>()
                 ?? new AIHubOptions();
 
 // ── HTTP clients ──────────────────────────────────────────────────────────────
+// BlockControllerClient is registered as a typed HTTP client so the HttpClient
+// it receives has the correct BaseAddress and Timeout pre-configured.
 builder.Services.AddHttpClient<BlockControllerClient>(client =>
 {
     client.BaseAddress = new Uri(aiHubOpts.BlockControllerUrl);
@@ -54,7 +57,8 @@ builder.Services.AddTransient<Kernel>(sp =>
 });
 
 // ── Block Controller registration + heartbeat ─────────────────────────────────
-builder.Services.AddHostedService<BlockControllerClient>();
+// Resolve via the typed-client registration so HttpClient has BaseAddress configured.
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockControllerClient>());
 
 // ── SignalR ───────────────────────────────────────────────────────────────────
 builder.Services.AddSignalR(hub =>
@@ -87,6 +91,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 app.MapHealthChecks("/health");
+app.MapHub<AIHubSignalR>("/hubs/ai-hub");
 
 // ── Ensure DB schema exists ───────────────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
@@ -94,6 +99,10 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AIHubDbContext>();
     await db.Database.EnsureCreatedAsync().ConfigureAwait(false);
 }
+
+// HTTP API port 5750 + WebSocket port 6750 — same Kestrel instance, both ports active
+app.Urls.Add("http://0.0.0.0:5750");
+app.Urls.Add("http://0.0.0.0:6750");
 
 app.Logger.LogInformation(
     "AI Hub starting on HTTP {Http} / WS {Ws}",

@@ -4,7 +4,8 @@ namespace MLS.AIHub.Persistence;
 
 /// <summary>
 /// EF Core database context for the AI Hub module.
-/// Manages user preferences and conversation history.
+/// Manages per-user LLM provider preferences.
+/// Conversation history persistence will be added in a future session.
 /// </summary>
 public sealed class AIHubDbContext(DbContextOptions<AIHubDbContext> options) : DbContext(options)
 {

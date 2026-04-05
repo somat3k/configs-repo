@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using MLS.AIHub.Configuration;
 using MLS.AIHub.Persistence;
 using MLS.AIHub.Providers;
 using MLS.AIHub.Services;
@@ -13,6 +15,12 @@ namespace MLS.AIHub.Tests;
 /// <summary>Unit tests for <see cref="ProviderRouter"/>.</summary>
 public sealed class ProviderRouterTests
 {
+    private static readonly IOptions<AIHubOptions> DefaultOptions =
+        Options.Create(new AIHubOptions
+        {
+            FallbackChain = ["openai", "anthropic", "groq", "local"],
+        });
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static AiQueryPayload BuildQuery(string? providerOverride = null) => new(
@@ -69,6 +77,7 @@ public sealed class ProviderRouterTests
         var router = new ProviderRouter(
             [openai.Object, groq.Object, local.Object],
             prefs.Object,
+            DefaultOptions,
             NullLogger<ProviderRouter>.Instance);
 
         // Act
@@ -88,6 +97,7 @@ public sealed class ProviderRouterTests
         var router = new ProviderRouter(
             [openai.Object, groq.Object],
             BuildPrefsWithNoPreference().Object,
+            DefaultOptions,
             NullLogger<ProviderRouter>.Instance);
 
         // Act
@@ -109,6 +119,7 @@ public sealed class ProviderRouterTests
         var router = new ProviderRouter(
             [openai.Object, local.Object],
             prefs.Object,
+            DefaultOptions,
             NullLogger<ProviderRouter>.Instance);
 
         // Act
@@ -126,15 +137,12 @@ public sealed class ProviderRouterTests
         var anthropic = BuildProvider("anthropic", isAvailable: true,  probeResult: true);
         var local     = BuildProvider("local",     isAvailable: true,  probeResult: true);
 
-        var prefs = BuildPrefsWithNoPreference();
-
-        // No user preference → fallback chain from router defaults
-        // Override user pref to test fallback chain explicitly
         var prefsWithFallback = BuildPrefsWithPreference("openai", ["openai", "anthropic", "local"]);
 
         var router = new ProviderRouter(
             [openai.Object, anthropic.Object, local.Object],
             prefsWithFallback.Object,
+            DefaultOptions,
             NullLogger<ProviderRouter>.Instance);
 
         // Act
@@ -151,6 +159,7 @@ public sealed class ProviderRouterTests
         var router = new ProviderRouter(
             [],
             BuildPrefsWithNoPreference().Object,
+            DefaultOptions,
             NullLogger<ProviderRouter>.Instance);
 
         // Act
@@ -159,5 +168,27 @@ public sealed class ProviderRouterTests
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*No LLM provider*");
+    }
+
+    [Fact]
+    public async Task SelectProvider_OverrideFallsThroughToPreferenceWhenCircuitOpen()
+    {
+        // Arrange — override provider is circuit-open, user preference is available
+        var openai = BuildProvider("openai", isAvailable: false, probeResult: false);
+        var groq   = BuildProvider("groq",   isAvailable: true,  probeResult: true);
+
+        var prefs = BuildPrefsWithPreference("groq", ["groq", "local"]);
+
+        var router = new ProviderRouter(
+            [openai.Object, groq.Object],
+            prefs.Object,
+            DefaultOptions,
+            NullLogger<ProviderRouter>.Instance);
+
+        // Act — override specifies "openai" which is circuit-open → should fall through to "groq"
+        var selected = await router.SelectProviderAsync(BuildQuery(providerOverride: "openai"), Guid.NewGuid());
+
+        // Assert
+        selected.ProviderId.Should().Be("groq");
     }
 }

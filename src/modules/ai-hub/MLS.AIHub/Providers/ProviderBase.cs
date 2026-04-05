@@ -64,7 +64,19 @@ public abstract class ProviderBase(ILogger logger) : ILLMProvider
             }
             return available;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller cancelled — propagate, do not record as provider failure
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            // Internal 500 ms timeout fired — treat as unavailable
+            RecordFailure();
+            logger.LogWarning(ex, "Provider {ProviderId} availability probe timed out", ProviderId);
+            return false;
+        }
+        catch (Exception ex)
         {
             RecordFailure();
             logger.LogWarning(ex, "Provider {ProviderId} availability probe failed", ProviderId);

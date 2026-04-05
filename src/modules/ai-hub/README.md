@@ -47,7 +47,7 @@ All providers implement `ILLMProvider` and wrap Semantic Kernel's `IChatCompleti
 |-------------|-------------|-----------------|---------|
 | `openai` | OpenAI | GPT-4o, GPT-4-turbo, o3 | OpenAI REST |
 | `anthropic` | Anthropic | Claude 3.5 Sonnet, Claude 3 Opus | Anthropic Messages API |
-| `google` | Google AI | Gemini 2.5 Pro, Gemini Flash | SK Google connector |
+| `google` | Google AI | gemini-2.5-pro, gemini-2.0-flash | OpenAI-compatible (Gemini endpoint) |
 | `groq` | Groq | Llama3-70b, Mixtral | OpenAI-compatible |
 | `openrouter` | OpenRouter | 100+ models | OpenAI-compatible |
 | `vercelai` | Vercel AI | Configurable | OpenAI-compatible |

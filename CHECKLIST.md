@@ -115,7 +115,7 @@
 ## 🤖 AI Hub Module
 
 ### Session 08 — AI Hub Module Scaffold + Provider Router
-- [x] Create `MLS.AIHub` project (net9.0, SK 1.32, EF Core 9, Npgsql)
+- [x] Create `MLS.AIHub` project (net9.0, SK 1.74.0, EF Core 9, Npgsql)
 - [x] Implement `ILLMProvider` interface (wraps SK `IChatCompletionService`)
 - [x] Implement `OpenAIProvider` (GPT-4o, GPT-4-turbo, o3)
 - [x] Implement `AnthropicProvider` (Claude 3.5 Sonnet, Claude 3 Opus — custom HTTP adapter)

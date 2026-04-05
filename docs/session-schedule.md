@@ -589,7 +589,7 @@ public sealed class ProviderRouter(
 - `.skills/dotnet-devs.md`
 
 **Acceptance Criteria**
-- [x] All 6 providers implement `ILLMProvider` and are registered in DI
+- [x] All 7 providers implement `ILLMProvider` and are registered in DI
 - [x] `ProviderRouter` falls back to Local provider when primary is unavailable
 - [x] Provider selection persisted in PostgreSQL and restored on startup
 - [x] Module registers with Block Controller and sends heartbeat
