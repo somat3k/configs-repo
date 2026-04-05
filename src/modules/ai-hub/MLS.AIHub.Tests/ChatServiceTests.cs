@@ -561,9 +561,6 @@ public sealed class ChatServiceTests
         yield return new StreamingChatMessageContent(AuthorRole.Assistant, "first");
         await Task.Yield();
         throw new InvalidOperationException("Simulated streaming failure");
-#pragma warning disable CS0162 // Unreachable code
-        yield break;
-#pragma warning restore CS0162
     }
 
     private static AiQueryPayload BuildQuery(string text) => new(

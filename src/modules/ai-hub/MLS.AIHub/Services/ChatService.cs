@@ -231,9 +231,9 @@ public sealed class ChatService(
             }
             // -------------------------------------------------------------------
 
-            if (stop || !hasNext) break;  // break is outside try/catch — valid
+            if (stop || !hasNext) break;
 
-            yield return value!;           // yield is outside try/catch — valid
+            yield return value!;
         }
     }
 
