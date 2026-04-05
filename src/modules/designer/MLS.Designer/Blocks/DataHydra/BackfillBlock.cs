@@ -60,17 +60,22 @@ public sealed class BackfillBlock : BlockBase
         if (signal.SocketType != BlockSocketType.TrainingStatus)
             return new ValueTask<BlockSignal?>(result: null);
 
+        if (signal.SocketType != BlockSocketType.TrainingStatus)
+        {
+            return new ValueTask<BlockSignal?>((BlockSignal?)null);
+        }
+
         // Emit a DATA_COLLECTION_START request payload describing the backfill job
         var request = new
         {
-            type       = MessageTypes.DataCollectionStart,
-            exchange   = _exchangeParam.DefaultValue,
-            symbol     = _symbolParam.DefaultValue,
-            timeframe  = _timeframeParam.DefaultValue,
-            from       = _fromDateParam.DefaultValue,
-            to         = _toDateParam.DefaultValue,
-            chunk_size = _chunkSizeParam.DefaultValue,
-            mode       = "backfill",
+            type         = MessageTypes.DataCollectionStart,
+            exchange     = _exchangeParam.DefaultValue,
+            symbol       = _symbolParam.DefaultValue,
+            timeframe    = _timeframeParam.DefaultValue,
+            from         = _fromDateParam.DefaultValue,
+            to           = _toDateParam.DefaultValue,
+            chunk_size   = _chunkSizeParam.DefaultValue,
+            mode         = "backfill",
             requested_at = DateTimeOffset.UtcNow,
         };
 
