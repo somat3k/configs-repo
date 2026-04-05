@@ -1,8 +1,6 @@
 using System.Net.Http.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using MLS.Core.Contracts;
-using MLS.Designer.Configuration;
 
 namespace MLS.Designer.Services;
 
@@ -19,8 +17,8 @@ public sealed class EnvelopeSender(
     {
         try
         {
-            var response = await _http.PostAsJsonAsync("/api/envelopes", envelope, ct)
-                                      .ConfigureAwait(false);
+            using var response = await _http.PostAsJsonAsync("/api/envelopes", envelope, ct)
+                                            .ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
                 _logger.LogWarning("SendEnvelope returned {Status} for type={Type}",

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MLS.Core.Designer;
 using MLS.Designer.Blocks;
 
@@ -62,9 +61,11 @@ public sealed class PassThroughTile : BlockBase, ICustomTile
     /// <inheritdoc/>
     protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
     {
-        // Forward the signal directly; return it so BlockBase emits via OutputProduced
+        // Forward the payload through this tile's output while preserving value + socket type,
+        // but re-stamp provenance to this block so downstream routing is correct.
         var forwarded = signal with
         {
+            SourceBlockId    = BlockId,
             SourceSocketName = "passthrough_output",
         };
         return new ValueTask<BlockSignal?>(forwarded);

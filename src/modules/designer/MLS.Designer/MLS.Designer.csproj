@@ -28,6 +28,12 @@
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.3" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="../../../designer-templates/**/*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>designer-templates/%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../../core/MLS.Core/MLS.Core.csproj" />
   </ItemGroup>
 </Project>

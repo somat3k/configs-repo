@@ -47,7 +47,8 @@ public sealed class NumericThresholdCondition(string expression, Func<double, do
 
 /// <summary>
 /// Action that forwards the incoming signal to the owning tile's <c>OutputProduced</c>
-/// event unchanged (pass-through).
+/// event, re-stamped with the tile's own <see cref="BlockSignal.SourceBlockId"/> and
+/// the designated output socket name derived from the action expression.
 /// </summary>
 public sealed class PassThroughAction(string expression) : ITileAction
 {
@@ -57,14 +58,39 @@ public sealed class PassThroughAction(string expression) : ITileAction
     /// <inheritdoc/>
     public ValueTask ExecuteAsync(BlockSignal signal, ICustomTile tile, CancellationToken ct)
     {
-        if (tile is CustomIndicatorTile concrete)
-            return concrete.EmitSignalInternalAsync(signal, ct);
-        return ValueTask.CompletedTask;
+        if (tile is not CustomIndicatorTile concrete)
+            return ValueTask.CompletedTask;
+
+        // Derive the target output socket from the expression (e.g. "PASS_THROUGH output[0]" → "tile_output_0")
+        var socketName = ParseOutputSocket(expression, concrete.BlockId);
+
+        var forwarded = new BlockSignal(
+            concrete.BlockId,
+            socketName,
+            signal.SocketType,
+            signal.Value);
+
+        return concrete.EmitSignalInternalAsync(forwarded, ct);
+    }
+
+    private static string ParseOutputSocket(string expr, Guid fallbackBlockId)
+    {
+        var token = "output[";
+        var start = expr.IndexOf(token, StringComparison.Ordinal);
+        if (start >= 0)
+        {
+            var open  = start + token.Length;
+            var close = expr.IndexOf(']', open);
+            if (close > open && int.TryParse(expr[open..close], out var idx))
+                return $"tile_output_{idx}";
+        }
+        return "tile_output_0";
     }
 }
 
 /// <summary>
-/// Action that applies a scalar multiplier to the signal value and emits the result.
+/// Action that applies a scalar multiplier to the signal value and emits the result,
+/// attributed to the owning tile's <see cref="BlockSignal.SourceBlockId"/>.
 /// </summary>
 public sealed class ComputeMultiplyAction(string expression, double multiplier) : ITileAction
 {
@@ -74,6 +100,9 @@ public sealed class ComputeMultiplyAction(string expression, double multiplier) 
     /// <inheritdoc/>
     public ValueTask ExecuteAsync(BlockSignal signal, ICustomTile tile, CancellationToken ct)
     {
+        if (tile is not CustomIndicatorTile concrete)
+            return ValueTask.CompletedTask;
+
         double inputValue = 0;
         if (signal.Value.ValueKind == JsonValueKind.Number)
             inputValue = signal.Value.GetDouble();
@@ -82,15 +111,31 @@ public sealed class ComputeMultiplyAction(string expression, double multiplier) 
             v.TryGetDouble(out inputValue);
 
         var result = inputValue * multiplier;
+
+        // Derive the target output socket from the expression (e.g. "MULTIPLY output[0]" → "tile_output_0")
+        var socketName = ParseOutputSocket(expression);
+
         var computed = new BlockSignal(
-            signal.SourceBlockId,
-            signal.SourceSocketName,
+            concrete.BlockId,
+            socketName,
             signal.SocketType,
             JsonSerializer.SerializeToElement(result));
 
-        if (tile is CustomIndicatorTile concrete)
-            return concrete.EmitSignalInternalAsync(computed, ct);
-        return ValueTask.CompletedTask;
+        return concrete.EmitSignalInternalAsync(computed, ct);
+    }
+
+    private static string ParseOutputSocket(string expr)
+    {
+        var token = "output[";
+        var start = expr.IndexOf(token, StringComparison.Ordinal);
+        if (start >= 0)
+        {
+            var open  = start + token.Length;
+            var close = expr.IndexOf(']', open);
+            if (close > open && int.TryParse(expr[open..close], out var idx))
+                return $"tile_output_{idx}";
+        }
+        return "tile_output_0";
     }
 }
 

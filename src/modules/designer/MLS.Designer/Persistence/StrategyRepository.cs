@@ -1,7 +1,10 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MLS.Core.Contracts.Designer;
+using Npgsql;
 
 namespace MLS.Designer.Persistence;
 
@@ -11,6 +14,7 @@ namespace MLS.Designer.Persistence;
 /// </summary>
 public sealed class StrategyRepository(
     DesignerDbContext _db,
+    IHostEnvironment _env,
     ILogger<StrategyRepository> _logger)
 {
     // ── Read operations ───────────────────────────────────────────────────────────
@@ -81,8 +85,10 @@ public sealed class StrategyRepository(
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
         catch (DbUpdateException ex)
+            when (ex.InnerException is PostgresException pgEx &&
+                  pgEx.SqlState == PostgresErrorCodes.UniqueViolation)
         {
-            _logger.LogError(ex, "Failed to create strategy {GraphId}", graph.GraphId);
+            _logger.LogWarning(ex, "Duplicate strategy {GraphId} — unique constraint violation", graph.GraphId);
             throw new InvalidOperationException(
                 $"Strategy with graph_id '{graph.GraphId}' already exists.", ex);
         }
@@ -168,14 +174,17 @@ public sealed class StrategyRepository(
 
     // ── Template support ──────────────────────────────────────────────────────────
 
+    // Allow only safe characters in template names (alphanumeric, dash, underscore)
+    private static readonly Regex _safeNameRegex =
+        new(@"^[A-Za-z0-9_-]+$", RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
+
     /// <summary>
     /// List all available strategy templates by scanning the <c>designer-templates/</c>
-    /// directory (relative to the application base directory).
+    /// directory relative to the application content root.
     /// </summary>
     public IReadOnlyList<TemplateInfo> ListTemplates()
     {
-        var baseDir = AppContext.BaseDirectory;
-        var templatesDir = Path.Combine(baseDir, "designer-templates");
+        var templatesDir = Path.Combine(_env.ContentRootPath, "designer-templates");
 
         if (!Directory.Exists(templatesDir))
             return Array.Empty<TemplateInfo>();
@@ -194,21 +203,45 @@ public sealed class StrategyRepository(
 
     /// <summary>
     /// Load a strategy template by name and return it as a <see cref="StrategyGraphPayload"/>.
-    /// Returns <see langword="null"/> when the template file is not found.
+    /// Returns <see langword="null"/> when the template file is not found or the name is invalid.
     /// </summary>
+    /// <remarks>
+    /// Template names must match <c>[A-Za-z0-9_-]+</c>.  Names containing path separators,
+    /// wildcards, or other special characters are rejected to prevent path traversal.
+    /// </remarks>
     public async Task<StrategyGraphPayload?> LoadTemplateAsync(
         string templateName, CancellationToken ct = default)
     {
-        var baseDir      = AppContext.BaseDirectory;
-        var templatesDir = Path.Combine(baseDir, "designer-templates");
+        if (!IsValidTemplateName(templateName))
+        {
+            _logger.LogWarning("Rejected invalid template name: {TemplateName}", templateName);
+            return null;
+        }
 
+        var templatesDir = Path.Combine(_env.ContentRootPath, "designer-templates");
         if (!Directory.Exists(templatesDir)) return null;
 
-        var files = Directory.GetFiles(templatesDir, $"{templateName}.json", SearchOption.AllDirectories);
-        if (files.Length == 0) return null;
+        // Use exact filename match instead of a wildcard pattern to avoid injection
+        var templatePath = Directory
+            .EnumerateFiles(templatesDir, "*.json", SearchOption.AllDirectories)
+            .FirstOrDefault(path =>
+                string.Equals(
+                    Path.GetFileNameWithoutExtension(path),
+                    templateName,
+                    StringComparison.Ordinal));
 
-        var json = await File.ReadAllTextAsync(files[0], ct).ConfigureAwait(false);
+        if (templatePath is null) return null;
+
+        var json = await File.ReadAllTextAsync(templatePath, ct).ConfigureAwait(false);
         return JsonSerializer.Deserialize<StrategyGraphPayload>(json);
+    }
+
+    /// <summary>Returns <see langword="true"/> when the template name contains only safe characters.</summary>
+    private static bool IsValidTemplateName(string templateName)
+    {
+        if (string.IsNullOrWhiteSpace(templateName))
+            return false;
+        return _safeNameRegex.IsMatch(templateName);
     }
 }
 

@@ -96,24 +96,42 @@ public sealed class LendingHealthBlock : BlockBase, IActionTile
     /// <inheritdoc/>
     public bool IsRunning { get; private set; }
 
-    /// <inheritdoc/>
-    public async Task StartAsync(CancellationToken ct)
-    {
-        if (IsRunning) return;
+    private Task? _fetchLoopTask;
 
-        _loopCts  = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    /// <inheritdoc/>
+    public Task StartAsync(CancellationToken ct)
+    {
+        if (IsRunning) return Task.CompletedTask;
+
+        var loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _loopCts  = loopCts;
         IsRunning = true;
 
-        try
-        {
-            await RunFetchLoopAsync(_loopCts.Token).ConfigureAwait(false);
-        }
-        finally
-        {
-            IsRunning = false;
-            _loopCts.Dispose();
-            _loopCts = null;
-        }
+        _fetchLoopTask = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await RunFetchLoopAsync(loopCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (loopCts.IsCancellationRequested)
+                {
+                    // Normal shutdown path — cancellation requested via StopAsync or DisposeAsync
+                }
+                finally
+                {
+                    IsRunning = false;
+
+                    if (ReferenceEquals(_loopCts, loopCts))
+                        _loopCts = null;
+
+                    _fetchLoopTask = null;
+                    loopCts.Dispose();
+                }
+            },
+            CancellationToken.None);
+
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -130,6 +148,11 @@ public sealed class LendingHealthBlock : BlockBase, IActionTile
     public override async ValueTask DisposeAsync()
     {
         _loopCts?.Cancel();
+        if (_fetchLoopTask is { } t)
+        {
+            try { await t.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* expected on dispose */ }
+        }
         _loopCts?.Dispose();
         await base.DisposeAsync().ConfigureAwait(false);
     }

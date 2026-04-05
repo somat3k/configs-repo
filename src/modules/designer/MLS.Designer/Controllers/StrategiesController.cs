@@ -128,14 +128,15 @@ public sealed class StrategiesController(
         if (graph is null)
             return BadRequest(new { error = "Could not deserialise strategy graph." });
 
+        // Mark as deploying first; the Block Controller will confirm via STRATEGY_STATE_CHANGE
+        await _repo.SetStatusAsync(id, "deploying", ct).ConfigureAwait(false);
+
         await _envelopeSender.SendEnvelopeAsync(
             EnvelopePayload.Create(MessageTypes.StrategyDeploy, "designer", graph), ct)
             .ConfigureAwait(false);
 
-        await _repo.SetStatusAsync(id, "deployed", ct).ConfigureAwait(false);
-
-        _logger.LogInformation("Deployed strategy {GraphId}", id);
-        return Accepted(new { message = "Strategy deploy request sent.", graph_id = id });
+        _logger.LogInformation("Accepted deploy request for strategy {GraphId}; status set to deploying", id);
+        return Accepted(new { message = "Strategy deploy request accepted.", graph_id = id, status = "deploying" });
     }
 
     /// <summary>Stop a deployed strategy.</summary>

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using MLS.Core.Designer;
 
 namespace MLS.Designer.Services;
@@ -10,21 +11,26 @@ namespace MLS.Designer.Services;
 /// and an in-memory audit trail keyed by origin signal block ID.
 /// </summary>
 /// <remarks>
-/// <para>Thread-safe: uses <see cref="ConcurrentDictionary"/> for both the block registry
-/// and the history store.  Processing within a sub-division is sequential (registration order).</para>
-/// <para>History entries are retained in-memory and are bounded to the last
+/// <para>Thread-safe: <c>_divisions</c> uses an immutable snapshot swap (ImmutableArray +
+/// Interlocked exchange) so <see cref="RegisterBlock"/> and <see cref="RouteAsync"/>
+/// never race.  <c>_history</c> is guarded by <c>_historyLock</c> for all reads and writes.</para>
+/// <para>History entries are bounded to the last
 /// <see cref="MaxHistoryEntries"/> origins to prevent unbounded growth in long-running sessions.</para>
 /// </remarks>
 public sealed class TransformationController : ITransformationController
 {
     private const int MaxHistoryEntries = 1024;
 
-    // sub-division name → ordered list of registered processing blocks
-    private readonly ConcurrentDictionary<string, List<IBlockElement>> _divisions =
+    // sub-division name → immutable array snapshot of registered blocks (lock-free reads)
+    private readonly ConcurrentDictionary<string, ImmutableArray<IBlockElement>> _divisions =
+        new(StringComparer.Ordinal);
+
+    // per-sub-division locks used only by RegisterBlock to safely build new snapshots
+    private readonly ConcurrentDictionary<string, object> _divisionLocks =
         new(StringComparer.Ordinal);
 
     // origin block ID → list of transformation units accumulated for that origin
-    private readonly ConcurrentDictionary<Guid, List<TransformationUnit>> _history = new();
+    private readonly Dictionary<Guid, List<TransformationUnit>> _history = new();
 
     // Eviction queue keeps track of insertion order for bounded history
     private readonly Queue<Guid> _historyOrder = new();
@@ -38,7 +44,13 @@ public sealed class TransformationController : ITransformationController
         ArgumentException.ThrowIfNullOrWhiteSpace(subDivision);
         ArgumentNullException.ThrowIfNull(block);
 
-        _divisions.GetOrAdd(subDivision, _ => []).Add(block);
+        var divLock = _divisionLocks.GetOrAdd(subDivision, _ => new object());
+        lock (divLock)
+        {
+            var current = _divisions.GetOrAdd(subDivision, _ => ImmutableArray<IBlockElement>.Empty);
+            // Atomically replace the snapshot with a new one that includes the new block
+            _divisions[subDivision] = current.Add(block);
+        }
     }
 
     /// <inheritdoc/>
@@ -50,21 +62,27 @@ public sealed class TransformationController : ITransformationController
         ArgumentException.ThrowIfNullOrWhiteSpace(subDivision);
         ArgumentNullException.ThrowIfNull(envelope);
 
-        if (!_divisions.TryGetValue(subDivision, out var blocks) || blocks.Count == 0)
+        if (!_divisions.TryGetValue(subDivision, out var blocks) || blocks.IsEmpty)
             return envelope;
 
         var current = envelope;
 
+        // Snapshot is an ImmutableArray — safe to enumerate without a lock
         foreach (var block in blocks)
         {
             ct.ThrowIfCancellationRequested();
 
             BlockSignal? output = null;
 
-            // Intercept the block's OutputProduced event for this single signal pass
+            // Subscribe to capture the first output emitted during this specific ProcessAsync call.
+            // The handler is subscribed and unsubscribed within the same synchronous frame around
+            // the await, preventing stale captures from asynchronous background emissions.
             Func<BlockSignal, CancellationToken, ValueTask> handler = (sig, _) =>
             {
-                output = sig;
+                // Capture only the first emission (last-wins would drop earlier outputs).
+                // For multi-output blocks (e.g. RouterBlock) the TransformationController
+                // is not the right routing vehicle; use those blocks' own output sockets directly.
+                output ??= sig;
                 return ValueTask.CompletedTask;
             };
 
@@ -103,9 +121,12 @@ public sealed class TransformationController : ITransformationController
     /// <inheritdoc/>
     public IReadOnlyList<TransformationUnit> GetHistory(Guid originSignalId)
     {
-        if (_history.TryGetValue(originSignalId, out var units))
-            return units.AsReadOnly();
-        return Array.Empty<TransformationUnit>();
+        lock (_historyLock)
+        {
+            if (_history.TryGetValue(originSignalId, out var units))
+                return units.ToArray();  // Return immutable copy under lock
+            return Array.Empty<TransformationUnit>();
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────────
@@ -123,7 +144,7 @@ public sealed class TransformationController : ITransformationController
                 if (_historyOrder.Count >= MaxHistoryEntries)
                 {
                     var evict = _historyOrder.Dequeue();
-                    _history.TryRemove(evict, out _);
+                    _history.Remove(evict);
                 }
 
                 _historyOrder.Enqueue(originId);

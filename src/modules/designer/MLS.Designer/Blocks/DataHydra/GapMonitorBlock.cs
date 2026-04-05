@@ -89,6 +89,11 @@ public sealed class GapMonitorBlock : BlockBase
             ? 1.0 - (double)_receivedCount / expectedCount
             : 0.0;
 
+        // Capture locals before resetting window state
+        var priorWindowStart  = _windowStart;
+        var priorReceivedCount = _receivedCount;
+        int missingCount = Math.Max(0, expectedCount - priorReceivedCount);
+
         // Roll the window
         _windowStart   = now;
         _receivedCount = 0;
@@ -104,9 +109,10 @@ public sealed class GapMonitorBlock : BlockBase
             symbol             = _symbolParam.DefaultValue,
             timeframe,
             expected_count     = expectedCount,
-            received_count     = expectedCount - (int)(gapRatio * expectedCount),
+            received_count     = priorReceivedCount,
+            missing_count      = missingCount,
             gap_ratio          = Math.Round(gapRatio, 4),
-            window_start       = _windowStart,
+            window_start       = priorWindowStart,
             window_end         = now,
             detected_at        = now,
         };

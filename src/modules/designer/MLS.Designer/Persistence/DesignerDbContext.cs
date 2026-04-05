@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace MLS.Designer.Persistence;
@@ -27,10 +26,10 @@ public sealed class DesignerDbContext(DbContextOptions<DesignerDbContext> option
             .HasColumnType("jsonb")
             .HasDefaultValue("{}");
 
-        // Unique index on Name for non-deleted strategies
+        // Unique index on (Name, IsDeleted=false) to prevent duplicate active strategy names
         strategy.HasIndex(s => new { s.Name, s.IsDeleted })
             .HasDatabaseName("ix_strategy_schemas_name_active")
-            .IsUnique(false);
+            .IsUnique(true);
 
         base.OnModelCreating(modelBuilder);
     }

@@ -56,6 +56,10 @@ public sealed class BackfillBlock : BlockBase
     /// <inheritdoc/>
     protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
     {
+        // Only trigger on TrainingStatus signals (e.g. from GapMonitor or training lifecycle)
+        if (signal.SocketType != BlockSocketType.TrainingStatus)
+            return new ValueTask<BlockSignal?>(result: null);
+
         // Emit a DATA_COLLECTION_START request payload describing the backfill job
         var request = new
         {
