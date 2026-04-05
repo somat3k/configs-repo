@@ -18,6 +18,27 @@ public sealed class AIHubOptions
     /// <summary>Block Controller SignalR hub endpoint.</summary>
     public string BlockControllerHubUrl { get; set; } = "http://block-controller:6100/hubs/block-controller";
 
+    /// <summary>Trader module HTTP base URL.</summary>
+    public string TraderUrl { get; set; } = "http://trader:5300";
+
+    /// <summary>Arbitrager module HTTP base URL.</summary>
+    public string ArbitragerUrl { get; set; } = "http://arbitrager:5400";
+
+    /// <summary>DeFi module HTTP base URL.</summary>
+    public string DeFiUrl { get; set; } = "http://defi:5500";
+
+    /// <summary>ML Runtime module HTTP base URL.</summary>
+    public string MlRuntimeUrl { get; set; } = "http://ml-runtime:5600";
+
+    /// <summary>Designer module HTTP base URL.</summary>
+    public string DesignerUrl { get; set; } = "http://designer:5250";
+
+    /// <summary>Shell VM module HTTP base URL.</summary>
+    public string ShellVmUrl { get; set; } = "http://shell-vm:5950";
+
+    /// <summary>Web App HTTP base URL (for canvas layout queries).</summary>
+    public string WebAppUrl { get; set; } = "http://web-app:5200";
+
     /// <summary>PostgreSQL connection string for user preferences and conversation history.</summary>
     public string PostgresConnectionString { get; set; } = "Host=data-layer;Database=mls;Username=mls;Password=mls";
 
