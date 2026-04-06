@@ -67,7 +67,7 @@
         <div class="hm-metric">
             <span class="hm-metric-label">LTV</span>
             <span class="hm-metric-value @(_ltv > 0.75 ? "negative" : "")">
-                @(_ltv * 100).ToString("F1")%
+                @((_ltv * 100).ToString("F1"))%
             </span>
         </div>
         <div class="hm-metric">

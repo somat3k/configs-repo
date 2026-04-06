@@ -1,0 +1,42 @@
+info: MLS.WebApp[0]
+      MLS Web App starting on HTTP 5200 / WS 6200
+warn: MLS.WebApp.Services.BlockControllerClient[0]
+      Failed to register with Block Controller — will retry on next heartbeat
+      System.InvalidOperationException: An invalid request URI was provided. Either the request URI must be an absolute URI or BaseAddress must be set.
+         at System.Net.Http.HttpClient.PrepareRequestMessage(HttpRequestMessage request)
+         at System.Net.Http.HttpClient.SendAsync(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationToken cancellationToken)
+         at MLS.WebApp.Services.BlockControllerClient.RegisterAsync(CancellationToken ct) in /home/runner/work/configs-repo/configs-repo/src/web-app/WebApp/Services/BlockControllerClient.cs:line 38
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://0.0.0.0:5200
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://0.0.0.0:6200
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: /home/runner/work/configs-repo/configs-repo/src/web-app/WebApp
+info: Microsoft.Hosting.Lifetime[0]
+      Application is shutting down...
+info: MLS.WebApp[0]
+      MLS Web App starting on HTTP 5200 / WS 6200
+warn: MLS.WebApp.Services.BlockControllerClient[0]
+      Failed to register with Block Controller — will retry on next heartbeat
+      System.InvalidOperationException: An invalid request URI was provided. Either the request URI must be an absolute URI or BaseAddress must be set.
+         at System.Net.Http.HttpClient.PrepareRequestMessage(HttpRequestMessage request)
+         at System.Net.Http.HttpClient.SendAsync(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationToken cancellationToken)
+         at MLS.WebApp.Services.BlockControllerClient.RegisterAsync(CancellationToken ct) in /home/runner/work/configs-repo/configs-repo/src/web-app/WebApp/Services/BlockControllerClient.cs:line 38
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://0.0.0.0:5200
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://0.0.0.0:6200
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: /home/runner/work/configs-repo/configs-repo/src/web-app/WebApp
+info: MLS.WebApp.Components.Canvas.WindowManager[0]
+      Restored 3 windows from localStorage
+info: MLS.WebApp.Components.Canvas.WindowManager[0]
+      Restored 3 windows from localStorage
