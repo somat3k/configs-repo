@@ -271,9 +271,11 @@
                 }
 
                 await JS.InvokeVoidAsync("updateApexSeries", $"tp-loss-{_id}",
-                    _currentEpoch, _trainLoss, _valLoss).ConfigureAwait(false);
+                    "train_loss", _currentEpoch, _trainLoss).ConfigureAwait(false);
+                await JS.InvokeVoidAsync("updateApexSeries", $"tp-loss-{_id}",
+                    "val_loss", _currentEpoch, _valLoss).ConfigureAwait(false);
                 await JS.InvokeVoidAsync("updateApexSeries", $"tp-accuracy-{_id}",
-                    _currentEpoch, _accuracy).ConfigureAwait(false);
+                    "accuracy", _currentEpoch, _accuracy).ConfigureAwait(false);
             }
             else if (envelope.Type == MLS.Core.Constants.MessageTypes.TrainingJobComplete)
             {

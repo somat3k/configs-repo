@@ -123,18 +123,17 @@
                 _modules[moduleId] = update;
             }
 
-            // Initialise graph on first module or update existing nodes
+            // Rebuild full element set so deregistered nodes are removed and health colours are current
+            var elements = BuildCytoscapeElements();
             if (!_graphInitialised && _modules.Count > 0)
             {
-                var elements = BuildCytoscapeElements();
                 await JS.InvokeVoidAsync("initCytoscapeGraph", $"nt-graph-{_id}", elements)
                     .ConfigureAwait(false);
                 _graphInitialised = true;
             }
             else if (_graphInitialised)
             {
-                await JS.InvokeVoidAsync("updateCytoscapeNode", $"nt-graph-{_id}",
-                    moduleId, GetNodeColor(_modules.GetValueOrDefault(moduleId)?.Status ?? "Offline"))
+                await JS.InvokeVoidAsync("updateCytoscapeGraph", $"nt-graph-{_id}", elements)
                     .ConfigureAwait(false);
             }
 
@@ -144,16 +143,24 @@
 
     private object[] BuildCytoscapeElements()
     {
-        var nodes = _modules.Values.Select(m => new
+        var nodes = _modules.Values.Select(m =>
         {
-            data = new { id = m.ModuleId, label = m.ModuleId, color = GetNodeColor(m.Status) }
-        }).Cast<object>().ToList();
+            var color = GetNodeColor(m.Status);
+            return (object)new
+            {
+                data  = new { id = m.ModuleId, label = m.ModuleId, color },
+                style = new Dictionary<string, string> { ["background-color"] = color },
+            };
+        }).ToList();
 
         // Hub-and-spoke edges: every module connects to block-controller
+        // weight = "WS" satisfies the Cytoscape stylesheet's label: 'data(weight)'
         var edges = _modules.Keys
             .Where(id => id != "block-controller")
-            .Select(id => new { data = new { id = $"e-{id}", source = id, target = "block-controller", label = "WS" } })
-            .Cast<object>();
+            .Select(id => (object)new
+            {
+                data = new { id = $"e-{id}", source = id, target = "block-controller", label = "WS", weight = "WS" },
+            });
 
         return nodes.Concat(edges).ToArray();
     }

@@ -120,16 +120,31 @@
     // ── Chart update helpers (targeted DOM, no Blazor re-render) ────────────
 
     /**
-     * Push a new data point to an ApexCharts instance.
-     * @param {string} chartId   - id attribute of chart container
-     * @param {string} seriesName
-     * @param {number} epoch     - Unix ms timestamp
-     * @param {number} value
+     * Push a new data point to an ApexCharts instance by series name.
+     * When the element was initialised by initTrainCharts (i.e. it has _seriesData),
+     * the named series is updated and the full chart is refreshed.
+     * Otherwise falls back to appendData for single-series charts.
+     * @param {string} chartId    - id attribute of chart container
+     * @param {string} seriesName - name of the series to update
+     * @param {number} epoch      - x-axis value (epoch index or Unix ms)
+     * @param {number} value      - y-axis value
      */
     window.updateApexSeries = function (chartId, seriesName, epoch, value) {
         const el = document.getElementById(chartId);
         if (!el || !el._apexChart) return;
-        el._apexChart.appendData([{ data: [[epoch, value]] }]);
+
+        if (el._seriesData && Object.prototype.hasOwnProperty.call(el._seriesData, seriesName)) {
+            // Named-series chart initialised by initTrainCharts
+            el._seriesData[seriesName].push([epoch, value]);
+            const updatedSeries = Object.keys(el._seriesData).map(name => ({
+                name,
+                data: el._seriesData[name],
+            }));
+            el._apexChart.updateSeries(updatedSeries, false);
+        } else {
+            // Legacy / single-series fallback
+            el._apexChart.appendData([{ data: [[epoch, value]] }]);
+        }
     };
 
     /**
@@ -324,6 +339,128 @@
         }
         el._cy.json({ elements: graphData });
         el._cy.layout({ name: 'cose', animate: true }).run();
+    };
+
+    // ── ML training chart helpers ────────────────────────────────────────────
+
+    /**
+     * Initialize ApexCharts line charts for TrainProgress loss and accuracy panels.
+     * Stores _seriesData on each element for named-series tracking via updateApexSeries.
+     * @param {string} lossChartId     - element id for the loss chart container
+     * @param {string} accuracyChartId - element id for the accuracy chart container
+     */
+    window.initTrainCharts = function (lossChartId, accuracyChartId) {
+        function buildLineChart(containerId, seriesNames, colors) {
+            const container = document.getElementById(containerId);
+            if (!container || typeof ApexCharts === 'undefined') return;
+            if (container._apexChart) { container._apexChart.destroy(); }
+
+            container._seriesData = {};
+            seriesNames.forEach(n => { container._seriesData[n] = []; });
+
+            const chart = new ApexCharts(container, {
+                series: seriesNames.map((name, i) => ({ name, data: [], color: colors[i] })),
+                chart: {
+                    id: containerId,
+                    type: 'line',
+                    height: '100%',
+                    background: 'transparent',
+                    foreColor: '#8b949e',
+                    animations: { enabled: false },
+                    toolbar: { show: false },
+                },
+                stroke: { curve: 'smooth', width: 2 },
+                xaxis: {
+                    title: { text: 'Epoch', style: { color: '#8b949e' } },
+                    labels: { style: { colors: '#8b949e' } },
+                },
+                yaxis: {
+                    labels: { formatter: v => v.toFixed(4), style: { colors: '#8b949e' } },
+                },
+                grid: { borderColor: 'rgba(255,255,255,0.05)' },
+                theme: { mode: 'dark' },
+                legend: { show: true, labels: { colors: '#8b949e' } },
+            });
+            chart.render();
+            container._apexChart = chart;
+        }
+
+        buildLineChart(lossChartId, ['train_loss', 'val_loss'], ['#00d4ff', '#7c3aed']);
+        buildLineChart(accuracyChartId, ['accuracy'], ['#22c55e']);
+    };
+
+    /**
+     * Render an ApexCharts heatmap for a confusion matrix on TRAINING_JOB_COMPLETE.
+     * @param {string}     containerId - element id
+     * @param {number[][]} matrix      - square matrix of class counts
+     */
+    window.renderConfusionMatrix = function (containerId, matrix) {
+        const container = document.getElementById(containerId);
+        if (!container || typeof ApexCharts === 'undefined') return;
+        if (container._apexChart) { container._apexChart.destroy(); }
+
+        const n = matrix.length;
+        const labels = Array.from({ length: n }, (_, i) => `Class ${i}`);
+        const series = matrix.map((row, ri) => ({
+            name: labels[ri],
+            data: row.map((val, ci) => ({ x: labels[ci], y: val })),
+        }));
+
+        const chart = new ApexCharts(container, {
+            series,
+            chart: {
+                type: 'heatmap',
+                height: '100%',
+                background: 'transparent',
+                foreColor: '#8b949e',
+                toolbar: { show: false },
+            },
+            colors: ['#7c3aed'],
+            dataLabels: { enabled: true, style: { colors: ['#fff'], fontSize: '11px' } },
+            xaxis: { labels: { style: { colors: Array(n).fill('#8b949e') } } },
+            theme: { mode: 'dark' },
+        });
+        chart.render();
+        container._apexChart = chart;
+    };
+
+    /**
+     * Render a horizontal bar chart of SHAP feature importances on TRAINING_JOB_COMPLETE.
+     * Shows top-15 features sorted by |SHAP value| descending.
+     * @param {string}   containerId  - element id
+     * @param {string[]} featureNames
+     * @param {number[]} shapValues
+     */
+    window.renderShapChart = function (containerId, featureNames, shapValues) {
+        const container = document.getElementById(containerId);
+        if (!container || typeof ApexCharts === 'undefined') return;
+        if (container._apexChart) { container._apexChart.destroy(); }
+
+        const pairs = featureNames.map((name, i) => ({ name, value: shapValues[i] }));
+        pairs.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+        const top = pairs.slice(0, 15);
+
+        const chart = new ApexCharts(container, {
+            series: [{ name: 'SHAP', data: top.map(d => parseFloat(d.value.toFixed(4))) }],
+            chart: {
+                type: 'bar',
+                height: '100%',
+                background: 'transparent',
+                foreColor: '#8b949e',
+                toolbar: { show: false },
+            },
+            plotOptions: { bar: { horizontal: true, barHeight: '70%' } },
+            colors: ['#00d4ff'],
+            xaxis: {
+                categories: top.map(d => d.name),
+                labels: { style: { colors: Array(top.length).fill('#8b949e') } },
+            },
+            yaxis: { labels: { style: { colors: '#8b949e' } } },
+            dataLabels: { enabled: false },
+            theme: { mode: 'dark' },
+        });
+        chart.render();
+        container._apexChart = chart;
     };
 
     // ── Utilities ────────────────────────────────────────────────────────────

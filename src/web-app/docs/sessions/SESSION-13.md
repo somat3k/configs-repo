@@ -40,7 +40,7 @@ On TRAINING_JOB_COMPLETE:
 
 Envelope topics consumed: `TRAINING_JOB_PROGRESS`, `TRAINING_JOB_COMPLETE`.
 
-Constants used: `MessageTypes.Designer.TrainingJobProgress`, `MessageTypes.Designer.TrainingJobComplete`.
+Constants used: `MessageTypes.TrainingJobProgress`, `MessageTypes.TrainingJobComplete`.
 
 ---
 
@@ -71,9 +71,9 @@ Constants used: `MessageTypes.Designer.TrainingJobProgress`, `MessageTypes.Desig
 #### NetworkTopology
 
 - Cytoscape.js graph with one node per registered module.
-- Node colour encodes health: green = Healthy, amber = Degraded, red = Offline.
-- Edges represent active inter-module connections tracked from heartbeat data.
-- Node click expands to show uptime, CPU, memory (calls `ModuleCard` as popup).
+- Node colour encodes health: green = Healthy, amber = Degraded, red = Offline (applied via per-node inline `style`).
+- Edges represent active inter-module connections tracked from heartbeat data; edge labels use `data(weight)` = `"WS"`.
+- Module health cards are listed below the graph in the same panel (using `ModuleCard` components).
 - Subscribes to: `MODULE_HEARTBEAT`, `MODULE_REGISTER`, `MODULE_DEREGISTER`.
 
 #### ModuleCard

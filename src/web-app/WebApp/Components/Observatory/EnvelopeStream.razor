@@ -52,7 +52,10 @@
 
     @* ── Envelope rows ────────────────────────────────────────────────────── *@
     <div class="es-scroll" id="es-scroll-@_id">
-        @foreach (var entry in FilteredEntries())
+        @{
+            var filtered = FilteredEntries();
+        }
+        @foreach (var entry in filtered)
         {
             <div class="es-row" @key="entry.EntryId">
                 <span class="es-ts mono">@entry.Timestamp.ToString("HH:mm:ss.fff")</span>
@@ -63,7 +66,7 @@
                 <span class="es-summary">@entry.PayloadSummary</span>
             </div>
         }
-        @if (!FilteredEntries().Any())
+        @if (!filtered.Any())
         {
             <div class="es-empty">No envelopes match the current filter</div>
         }
@@ -254,7 +257,7 @@
         }
     }
 
-    private IEnumerable<EnvelopeEntry> FilteredEntries()
+    private IReadOnlyList<EnvelopeEntry> FilteredEntries()
     {
         IEnumerable<EnvelopeEntry> result = _buffer;
 
@@ -265,22 +268,44 @@
         // Regex filter
         if (!string.IsNullOrWhiteSpace(_regexFilter))
         {
+            System.Text.RegularExpressions.Regex? rx = null;
             try
             {
-                var rx = new System.Text.RegularExpressions.Regex(
+                rx = new System.Text.RegularExpressions.Regex(
                     _regexFilter,
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase,
                     TimeSpan.FromMilliseconds(50));
                 _regexError = null;
-                result = result.Where(e => rx.IsMatch(e.Type));
             }
             catch (System.Text.RegularExpressions.RegexParseException ex)
             {
                 _regexError = ex.Message;
             }
+
+            if (rx is not null)
+            {
+                var matched = new List<EnvelopeEntry>();
+                foreach (var entry in result)
+                {
+                    try
+                    {
+                        if (rx.IsMatch(entry.Type)) matched.Add(entry);
+                    }
+                    catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+                    {
+                        _regexError = "Regex match timed out — simplify the pattern";
+                        return [];
+                    }
+                }
+                result = matched;
+            }
+        }
+        else
+        {
+            _regexError = null;
         }
 
-        return result.Reverse(); // newest first
+        return result.Reverse().ToList();
     }
 
     private void ToggleCategory(string category)
