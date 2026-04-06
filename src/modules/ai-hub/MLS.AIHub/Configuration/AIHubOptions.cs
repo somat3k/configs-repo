@@ -54,6 +54,9 @@ public sealed class AIHubOptions
     /// <summary>Context assembly timeout in milliseconds. Target: &lt; 200ms.</summary>
     public int ContextAssemblyTimeoutMs { get; set; } = 200;
 
+    /// <summary>Maximum number of AI queries that can be queued for background processing. Default 256.</summary>
+    public int ChatQueueCapacity { get; set; } = 256;
+
     /// <summary>Maximum signal history items included in context (for Trader signals query).</summary>
     public int MaxSignalHistory { get; set; } = 50;
 
