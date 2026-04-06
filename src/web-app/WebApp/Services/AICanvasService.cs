@@ -76,6 +76,7 @@ public sealed class AICanvasService(
     private Channel<AiResponseChunkPayload> _chunks = CreateResponseChannel();
 
     private readonly List<CanvasActionRecord> _recentActions = [];
+    private readonly object _lock = new();
 
     /// <inheritdoc/>
     public bool IsConnected => _connection?.State == HubConnectionState.Connected;
@@ -84,7 +85,10 @@ public sealed class AICanvasService(
     public event Action? OnStateChanged;
 
     /// <inheritdoc/>
-    public IReadOnlyList<CanvasActionRecord> RecentActions => _recentActions.AsReadOnly();
+    public IReadOnlyList<CanvasActionRecord> RecentActions
+    {
+        get { lock (_lock) { return _recentActions.ToList().AsReadOnly(); } }
+    }
 
     // ── Connection ────────────────────────────────────────────────────────────────
 
@@ -136,8 +140,15 @@ public sealed class AICanvasService(
         await EnsureConnectedAsync(ct).ConfigureAwait(false);
 
         // Reset response channel so the new stream is isolated.
-        _chunks.Writer.TryComplete();
-        _chunks = CreateResponseChannel();
+        // The lock prevents a race between SendQueryAsync and HandleEnvelope.
+        Channel<AiResponseChunkPayload> oldChannel;
+        Channel<AiResponseChunkPayload> newChannel = CreateResponseChannel();
+        lock (_lock)
+        {
+            oldChannel = _chunks;
+            _chunks = newChannel;
+        }
+        oldChannel.Writer.TryComplete();
 
         var payload = new AiQueryPayload(
             Query: query,
@@ -157,7 +168,12 @@ public sealed class AICanvasService(
 
     /// <inheritdoc/>
     public IAsyncEnumerable<AiResponseChunkPayload> ReadChunksAsync(CancellationToken ct)
-        => _chunks.Reader.ReadAllAsync(ct);
+    {
+        // Capture the current channel under lock to avoid reading from a stale instance.
+        Channel<AiResponseChunkPayload> channel;
+        lock (_lock) { channel = _chunks; }
+        return channel.Reader.ReadAllAsync(ct);
+    }
 
     // ── Envelope handler ──────────────────────────────────────────────────────────
 
@@ -169,9 +185,11 @@ public sealed class AICanvasService(
                 var chunk = envelope.Payload.Deserialize<AiResponseChunkPayload>(JsonOptions);
                 if (chunk is not null)
                 {
-                    _chunks.Writer.TryWrite(chunk);
+                    Channel<AiResponseChunkPayload> target;
+                    lock (_lock) { target = _chunks; }
+                    target.Writer.TryWrite(chunk);
                     if (chunk.IsFinal)
-                        _chunks.Writer.TryComplete();
+                        target.Writer.TryComplete();
                 }
                 break;
 
@@ -182,7 +200,9 @@ public sealed class AICanvasService(
                 break;
 
             case MessageTypes.AiResponseComplete:
-                _chunks.Writer.TryComplete();
+                Channel<AiResponseChunkPayload> toComplete;
+                lock (_lock) { toComplete = _chunks; }
+                toComplete.Writer.TryComplete();
                 break;
         }
 
@@ -208,12 +228,15 @@ public sealed class AICanvasService(
                 action.PanelType, windowId);
         }
 
-        _recentActions.Add(new CanvasActionRecord(
-            ActionType: action.ActionType,
-            PanelType: action.PanelType,
-            Title: action.Title,
-            WindowId: windowId,
-            Timestamp: DateTimeOffset.UtcNow));
+        lock (_lock)
+        {
+            _recentActions.Add(new CanvasActionRecord(
+                ActionType: action.ActionType,
+                PanelType: action.PanelType,
+                Title: action.Title,
+                WindowId: windowId,
+                Timestamp: DateTimeOffset.UtcNow));
+        }
     }
 
     // ── Disposal ──────────────────────────────────────────────────────────────────
