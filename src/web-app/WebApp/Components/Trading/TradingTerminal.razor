@@ -1,0 +1,158 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="trading-terminal">
+    <div class="tt-header">
+        <div class="tt-symbol-picker">
+            <FluentSelect TOption="string" @bind-Value="_symbol" @bind-Value:after="OnSymbolChanged">
+                @foreach (var sym in _symbols)
+                {
+                    <FluentOption TOption="string" Value="@sym">@sym</FluentOption>
+                }
+            </FluentSelect>
+            <FluentSelect TOption="string" @bind-Value="_timeframe" @bind-Value:after="OnTimeframeChanged">
+                <FluentOption TOption="string" Value="1m">1m</FluentOption>
+                <FluentOption TOption="string" Value="5m">5m</FluentOption>
+                <FluentOption TOption="string" Value="15m">15m</FluentOption>
+                <FluentOption TOption="string" Value="1h">1h</FluentOption>
+                <FluentOption TOption="string" Value="4h">4h</FluentOption>
+                <FluentOption TOption="string" Value="1D">1D</FluentOption>
+            </FluentSelect>
+        </div>
+        <div class="tt-price-strip">
+            <span class="tt-price" id="price-@_symbol">@_lastPrice.ToString("F4")</span>
+            <span class="tt-change @(_priceChange >= 0 ? "positive" : "negative")">
+                @(_priceChange >= 0 ? "+" : "")@_priceChange.ToString("F2")%
+            </span>
+        </div>
+    </div>
+
+    <div class="tt-body">
+        <TradingChart Symbol="@_symbol" Timeframe="@_timeframe" />
+
+        <div class="tt-sidebar">
+            <div class="tt-section-label">Order Book</div>
+            <OrderBook Symbol="@_symbol" />
+
+            <div class="tt-section-label">Positions</div>
+            <PositionsGrid Symbol="@_symbol" />
+        </div>
+    </div>
+</div>
+
+<style>
+    .trading-terminal {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #0d1117;
+        overflow: hidden;
+    }
+
+    .tt-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        background: var(--neutral-layer-2, #161b22);
+        flex-shrink: 0;
+    }
+
+    .tt-symbol-picker {
+        display: flex;
+        gap: 6px;
+    }
+
+    .tt-price-strip {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        margin-left: auto;
+    }
+
+    .tt-price {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #e6edf3;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .tt-change {
+        font-size: 0.78rem;
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .tt-change.positive { color: #2ea043; }
+    .tt-change.negative { color: #f85149; }
+
+    .tt-body {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+        gap: 0;
+    }
+
+    .tt-sidebar {
+        width: 220px;
+        flex-shrink: 0;
+        border-left: 1px solid rgba(255,255,255,0.07);
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        padding: 4px 0;
+    }
+
+    .tt-section-label {
+        font-size: 0.65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #484f58;
+        padding: 6px 10px 2px;
+    }
+</style>
+
+@code {
+    private string _symbol = "BTC-USD";
+    private string _timeframe = "1h";
+    private double _lastPrice;
+    private double _priceChange;
+    private CancellationTokenSource _cts = new();
+
+    private static readonly string[] _symbols = ["BTC-USD", "ETH-USD", "ARB-USD", "SOL-USD"];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["PRICE_UPDATE", "TRADE_SIGNAL"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            if (envelope.Payload.TryGetProperty("symbol", out var sym) &&
+                sym.GetString() == _symbol)
+            {
+                if (envelope.Payload.TryGetProperty("price", out var priceEl))
+                {
+                    var price = priceEl.GetDouble();
+                    _priceChange = _lastPrice > 0 ? (price - _lastPrice) / _lastPrice * 100 : 0;
+                    _lastPrice = price;
+                    await JS.InvokeVoidAsync("updatePositionRow", _symbol,
+                        new { pnl = _priceChange, price = _lastPrice }).ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
+    private void OnSymbolChanged() { }
+    private void OnTimeframeChanged() { }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

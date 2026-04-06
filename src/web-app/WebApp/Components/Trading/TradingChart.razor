@@ -1,0 +1,97 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="trading-chart" id="chart-@_chartId">
+    <div id="apex-@_chartId" class="apex-container"></div>
+</div>
+
+<style>
+    .trading-chart {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: #0d1117;
+        position: relative;
+    }
+
+    .apex-container {
+        flex: 1;
+        min-height: 200px;
+    }
+</style>
+
+@code {
+    /// <summary>Trading symbol, e.g. "BTC-USD".</summary>
+    [Parameter] public string Symbol { get; set; } = "BTC-USD";
+
+    /// <summary>Candle timeframe: 1m, 5m, 15m, 1h, 4h, 1D.</summary>
+    [Parameter] public string Timeframe { get; set; } = "1h";
+
+    private readonly string _chartId = Guid.NewGuid().ToString("N")[..8];
+    private CancellationTokenSource _cts = new();
+    private bool _chartInitialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitChartAsync().ConfigureAwait(false);
+            _ = SubscribeToUpdatesAsync();
+        }
+    }
+
+    private async Task InitChartAsync()
+    {
+        // Chart initialization is handled by mlsChart.initCandleChart in canvas-interop.js
+        await JS.InvokeVoidAsync("mlsChart.initCandleChart", $"apex-{_chartId}", Symbol)
+            .ConfigureAwait(false);
+        _chartInitialized = true;
+    }
+
+    private async Task SubscribeToUpdatesAsync()
+    {
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["CANDLE_UPDATE", "TRADE_SIGNAL"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            if (!envelope.Payload.TryGetProperty("symbol", out var sym) ||
+                sym.GetString() != Symbol) continue;
+
+            if (envelope.Type == "CANDLE_UPDATE")
+            {
+                var payload = envelope.Payload;
+                var candle = new
+                {
+                    t = payload.TryGetProperty("timestamp", out var ts) ? ts.GetInt64() : 0L,
+                    o = payload.TryGetProperty("open",  out var o) ? o.GetDouble() : 0d,
+                    h = payload.TryGetProperty("high",  out var h) ? h.GetDouble() : 0d,
+                    l = payload.TryGetProperty("low",   out var l) ? l.GetDouble() : 0d,
+                    c = payload.TryGetProperty("close", out var c) ? c.GetDouble() : 0d,
+                };
+                await JS.InvokeVoidAsync("pushCandleToChart", $"chart-{_chartId}", candle)
+                    .ConfigureAwait(false);
+            }
+            else if (envelope.Type == "TRADE_SIGNAL")
+            {
+                var payload = envelope.Payload;
+                var signal = new
+                {
+                    time = payload.TryGetProperty("timestamp", out var ts) ? ts.GetInt64() : 0L,
+                    label = payload.TryGetProperty("direction", out var dir) ? dir.GetString() : "?",
+                    color = payload.TryGetProperty("direction", out var d2) && d2.GetString() == "BUY"
+                            ? "#2ea043" : "#f85149",
+                };
+                await JS.InvokeVoidAsync("addTradeAnnotation", $"chart-{_chartId}", signal)
+                    .ConfigureAwait(false);
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

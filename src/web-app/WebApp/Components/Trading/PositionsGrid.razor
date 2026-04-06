@@ -1,0 +1,172 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="positions-grid">
+    @if (_positions.Count == 0)
+    {
+        <div class="pg-empty">No open positions</div>
+    }
+    else
+    {
+        <table class="pg-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Side</th>
+                    <th>Size</th>
+                    <th>Entry</th>
+                    <th>Mark</th>
+                    <th>P&amp;L</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var pos in _positions.Values)
+                {
+                    var p = pos;
+                    <tr @key="p.Symbol" data-symbol="@p.Symbol">
+                        <td>@p.Symbol</td>
+                        <td class="@(p.Side == "LONG" ? "side-long" : "side-short")">@p.Side</td>
+                        <td data-field="size">@p.Size.ToString("F4")</td>
+                        <td data-field="entry">@p.EntryPrice.ToString("F4")</td>
+                        <td data-field="price">@p.MarkPrice.ToString("F4")</td>
+                        <td data-field="pnl" class="pnl-value @(p.UnrealizedPnl >= 0 ? "positive" : "negative")">
+                            @(p.UnrealizedPnl >= 0 ? "+" : "")@p.UnrealizedPnl.ToString("F2")
+                        </td>
+                        <td>
+                            <FluentButton Appearance="Appearance.Stealth" class="pg-close-btn"
+                                          title="Close position">×</FluentButton>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="pg-summary">
+            Total P&amp;L:
+            <span class="@(_totalPnl >= 0 ? "positive" : "negative")">
+                @(_totalPnl >= 0 ? "+" : "")@_totalPnl.ToString("F2")
+            </span>
+        </div>
+    }
+</div>
+
+<style>
+    .positions-grid {
+        font-size: 0.7rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        overflow-x: auto;
+    }
+
+    .pg-empty {
+        padding: 8px;
+        color: #484f58;
+        font-size: 0.72rem;
+        font-style: italic;
+    }
+
+    .pg-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .pg-table th {
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        color: #484f58;
+        padding: 4px 6px;
+        text-align: left;
+        font-weight: 600;
+        font-family: system-ui, sans-serif;
+        letter-spacing: 0.3px;
+    }
+
+    .pg-table td {
+        padding: 3px 6px;
+        color: #8b949e;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        white-space: nowrap;
+    }
+
+    .pg-table tr:hover td { background: rgba(255,255,255,0.03); }
+
+    .side-long  { color: #2ea043 !important; font-weight: 600; }
+    .side-short { color: #f85149 !important; font-weight: 600; }
+    .positive   { color: #2ea043; }
+    .negative   { color: #f85149; }
+
+    .pg-close-btn { font-size: 1rem; line-height: 1; padding: 0 4px; color: #484f58; }
+    .pg-close-btn:hover { color: #f85149; }
+
+    .pg-summary {
+        padding: 4px 6px;
+        font-size: 0.7rem;
+        border-top: 1px solid rgba(255,255,255,0.07);
+        color: #8b949e;
+    }
+</style>
+
+@code {
+    [Parameter] public string? Symbol { get; set; }
+
+    private sealed class PositionModel
+    {
+        public string Symbol { get; set; } = "";
+        public string Side { get; set; } = "LONG";
+        public double Size { get; set; }
+        public double EntryPrice { get; set; }
+        public double MarkPrice { get; set; }
+        public double UnrealizedPnl { get; set; }
+    }
+
+    private readonly Dictionary<string, PositionModel> _positions = new();
+    private double _totalPnl;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["POSITION_UPDATE", "POSITION_CLOSE"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            if (!envelope.Payload.TryGetProperty("symbol", out var symEl)) continue;
+            var sym = symEl.GetString() ?? "";
+
+            if (envelope.Type == "POSITION_CLOSE")
+            {
+                _positions.Remove(sym);
+                RecalcTotalPnl();
+                continue;
+            }
+
+            var pos = _positions.GetValueOrDefault(sym) ?? new PositionModel { Symbol = sym };
+
+            if (envelope.Payload.TryGetProperty("side",           out var side)) pos.Side = side.GetString() ?? "LONG";
+            if (envelope.Payload.TryGetProperty("size",           out var sz))   pos.Size = sz.GetDouble();
+            if (envelope.Payload.TryGetProperty("entry_price",    out var ep))   pos.EntryPrice = ep.GetDouble();
+            if (envelope.Payload.TryGetProperty("mark_price",     out var mp))   pos.MarkPrice = mp.GetDouble();
+            if (envelope.Payload.TryGetProperty("unrealized_pnl", out var pnl))  pos.UnrealizedPnl = pnl.GetDouble();
+
+            _positions[sym] = pos;
+            RecalcTotalPnl();
+
+            // Targeted JS DOM update — no StateHasChanged
+            await JS.InvokeVoidAsync("updatePositionRow", sym,
+                new { pnl = pos.UnrealizedPnl, price = pos.MarkPrice, size = pos.Size })
+                .ConfigureAwait(false);
+        }
+    }
+
+    private void RecalcTotalPnl() =>
+        _totalPnl = _positions.Values.Sum(p => p.UnrealizedPnl);
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

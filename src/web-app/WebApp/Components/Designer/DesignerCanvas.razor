@@ -1,0 +1,468 @@
+@using MLS.Core.Designer
+@using Microsoft.AspNetCore.Components.Web
+@inject IJSRuntime JS
+
+<div class="designer-canvas-wrapper" @ref="_wrapperRef">
+
+    @* ── Toolbar ──────────────────────────────────────────────────────────── *@
+    <div class="designer-toolbar">
+        <FluentButton Appearance="Appearance.Stealth"
+                     
+                      title="Toggle palette"
+                      @onclick="TogglePalette">
+            Blocks
+        </FluentButton>
+
+        <FluentDivider Orientation="Orientation.Vertical" />
+
+        <FluentButton Appearance="Appearance.Stealth"
+                     
+                      title="Undo" @onclick="Undo" Disabled="@(!_canUndo)" />
+
+        <FluentButton Appearance="Appearance.Stealth"
+                     
+                      title="Redo" @onclick="Redo" Disabled="@(!_canRedo)" />
+
+        <FluentDivider Orientation="Orientation.Vertical" />
+
+        <FluentButton Appearance="Appearance.Stealth"
+                     
+                      title="Fit to view" @onclick="FitToView" />
+
+        <FluentDivider Orientation="Orientation.Vertical" />
+
+        <FluentButton Appearance="Appearance.Accent"
+                     
+                      title="Deploy strategy">
+            Deploy
+        </FluentButton>
+
+        <FluentButton Appearance="Appearance.Stealth"
+                     
+                      title="Stop strategy">
+            Stop
+        </FluentButton>
+    </div>
+
+    @* ── Main canvas area ─────────────────────────────────────────────────── *@
+    <div class="designer-canvas"
+         @ref="_canvasRef"
+         @onwheel="OnWheel"
+         @onmousedown="OnCanvasMouseDown"
+         @onmousemove="OnCanvasMouseMove"
+         @onmouseup="OnCanvasMouseUp"
+         @ondrop="OnDrop"
+         @ondragover:preventDefault>
+
+        <svg class="connections-svg"
+             xmlns="http://www.w3.org/2000/svg">
+            <ConnectionRenderer Connections="_connections" Blocks="_blocks" />
+            @if (_pendingConnection is not null)
+            {
+                <line x1="@_pendingConnection.StartX" y1="@_pendingConnection.StartY"
+                      x2="@_pendingConnection.EndX" y2="@_pendingConnection.EndY"
+                      stroke="rgba(0,212,255,0.6)" stroke-width="2" stroke-dasharray="6 3" />
+            }
+        </svg>
+
+        <div class="blocks-layer"
+             style="transform: translate(@(_panX)px, @(_panY)px) scale(@(_zoom))">
+            @foreach (var block in _blocks)
+            {
+                var b = block;
+                <div class="block-node @(b.BlockId == _selectedBlockId ? "selected" : "")"
+                     style="left:@(b.X)px; top:@(b.Y)px;"
+                     @key="b.BlockId"
+                     @onmousedown="(args) => OnBlockMouseDown(args, b)"
+                     @onclick="() => SelectBlock(b.BlockId)">
+
+                    <div class="block-header">
+                        <span class="block-badge" style="background:@GetBlockColor(b.BlockType)">
+                            @GetBlockCategory(b.BlockType)
+                        </span>
+                        <span class="block-name">@b.BlockType</span>
+                    </div>
+
+                    @* Input sockets (left side) *@
+                    <div class="socket-column socket-inputs">
+                        @foreach (var socket in b.InputSockets)
+                        {
+                            var s = socket;
+                            <div class="socket socket-input"
+                                 title="@s.Name (@s.SocketType)"
+                                 @onmouseup="() => OnSocketMouseUp(b.BlockId, s.SocketId, isInput: true)"
+                                 style="--socket-color:@GetSocketColor(s.SocketType)">
+                                <span class="socket-dot" />
+                                <span class="socket-label">@s.Name</span>
+                            </div>
+                        }
+                    </div>
+
+                    @* Output sockets (right side) *@
+                    <div class="socket-column socket-outputs">
+                        @foreach (var socket in b.OutputSockets)
+                        {
+                            var s = socket;
+                            <div class="socket socket-output"
+                                 title="@s.Name (@s.SocketType)"
+                                 @onmousedown:stopPropagation
+                                 @onmousedown="(args) => OnSocketMouseDown(args, b.BlockId, s.SocketId)"
+                                 style="--socket-color:@GetSocketColor(s.SocketType)">
+                                <span class="socket-label">@s.Name</span>
+                                <span class="socket-dot" />
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* ── Block palette drawer ─────────────────────────────────────────────── *@
+    @if (_paletteOpen)
+    {
+        <BlockPalette OnBlockDragStart="OnPaletteBlockDragStart"
+                      OnClose="() => _paletteOpen = false" />
+    }
+
+    @* ── Property editor drawer ───────────────────────────────────────────── *@
+    @if (_selectedBlockId.HasValue)
+    {
+        var selectedBlock = _blocks.FirstOrDefault(b => b.BlockId == _selectedBlockId);
+        @if (selectedBlock is not null)
+        {
+            <PropertyEditor Block="selectedBlock"
+                            OnClose="() => _selectedBlockId = null" />
+        }
+    }
+</div>
+
+<style>
+    .designer-canvas-wrapper {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #0d1117;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .designer-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        background: var(--neutral-layer-3, #1c2128);
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        flex-shrink: 0;
+        height: 40px;
+    }
+
+    .designer-canvas {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+        cursor: default;
+    }
+
+    .connections-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .blocks-layer {
+        position: absolute;
+        inset: 0;
+        transform-origin: 0 0;
+        z-index: 2;
+    }
+
+    .block-node {
+        position: absolute;
+        min-width: 180px;
+        background: var(--neutral-layer-2, #161b22);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 8px;
+        cursor: grab;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .block-node:active { cursor: grabbing; }
+    .block-node.selected {
+        border-color: #00d4ff;
+        box-shadow: 0 0 0 2px rgba(0,212,255,0.25), 0 2px 12px rgba(0,0,0,0.4);
+    }
+
+    .block-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .block-badge {
+        font-size: 0.6rem;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-weight: 700;
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .block-name {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #e6edf3;
+        white-space: nowrap;
+    }
+
+    .socket-column {
+        display: flex;
+        flex-direction: column;
+        padding: 4px 0;
+    }
+
+    .socket {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 8px;
+        font-size: 0.68rem;
+        color: #8b949e;
+        cursor: crosshair;
+    }
+
+    .socket:hover .socket-dot { transform: scale(1.4); }
+
+    .socket-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--socket-color, #00d4ff);
+        flex-shrink: 0;
+        transition: transform 0.15s;
+    }
+
+    .socket-label { white-space: nowrap; }
+    .socket-output { flex-direction: row-reverse; }
+</style>
+
+@code {
+    private ElementReference _wrapperRef;
+    private ElementReference _canvasRef;
+    private bool _paletteOpen = true;
+    private Guid? _selectedBlockId;
+    private bool _canUndo, _canRedo;
+
+    // Pan & zoom
+    private double _panX, _panY;
+    private double _zoom = 1.0;
+
+    // Block drag
+    private BlockViewModel? _draggingBlock;
+    private double _dragOffsetX, _dragOffsetY;
+
+    // Connection drawing
+    private record PendingConnectionState(Guid FromBlockId, Guid FromSocketId, double StartX, double StartY, double EndX, double EndY);
+    private PendingConnectionState? _pendingConnection;
+
+    private readonly List<BlockViewModel> _blocks = [];
+    private readonly List<ConnectionViewModel> _connections = [];
+
+    private void TogglePalette() => _paletteOpen = !_paletteOpen;
+
+    private void SelectBlock(Guid id)
+    {
+        _selectedBlockId = _selectedBlockId == id ? null : id;
+    }
+
+    private void Undo() { /* TODO: undo stack */ }
+    private void Redo() { /* TODO: redo stack */ }
+
+    private async Task FitToView()
+    {
+        if (_blocks.Count == 0) return;
+        _panX = 20; _panY = 20; _zoom = 1.0;
+        await JS.InvokeVoidAsync("mlsCanvas.fitToView").ConfigureAwait(false);
+    }
+
+    private void OnWheel(WheelEventArgs args)
+    {
+        const double step = 0.1;
+        _zoom = args.DeltaY < 0
+            ? Math.Min(3.0, _zoom + step)
+            : Math.Max(0.2, _zoom - step);
+    }
+
+    private bool _isPanning;
+    private double _panStartX, _panStartY;
+
+    private void OnCanvasMouseDown(MouseEventArgs args)
+    {
+        if (args.Button == 1) // middle button — pan
+        {
+            _isPanning = true;
+            _panStartX = args.ClientX - _panX;
+            _panStartY = args.ClientY - _panY;
+        }
+    }
+
+    private void OnCanvasMouseMove(MouseEventArgs args)
+    {
+        if (_isPanning)
+        {
+            _panX = args.ClientX - _panStartX;
+            _panY = args.ClientY - _panStartY;
+        }
+
+        if (_draggingBlock is not null)
+        {
+            _draggingBlock.X = (args.ClientX - _panX) / _zoom - _dragOffsetX;
+            _draggingBlock.Y = (args.ClientY - _panY) / _zoom - _dragOffsetY;
+        }
+
+        if (_pendingConnection is not null)
+        {
+            _pendingConnection = _pendingConnection with
+            {
+                EndX = (args.ClientX - _panX) / _zoom,
+                EndY = (args.ClientY - _panY) / _zoom,
+            };
+        }
+    }
+
+    private void OnCanvasMouseUp(MouseEventArgs args)
+    {
+        _isPanning = false;
+        _draggingBlock = null;
+        _pendingConnection = null;
+    }
+
+    private void OnBlockMouseDown(MouseEventArgs args, BlockViewModel block)
+    {
+        if (args.Button != 0) return;
+        _draggingBlock = block;
+        _dragOffsetX = (args.ClientX - _panX) / _zoom - block.X;
+        _dragOffsetY = (args.ClientY - _panY) / _zoom - block.Y;
+    }
+
+    private void OnSocketMouseDown(MouseEventArgs args, Guid blockId, Guid socketId)
+    {
+        var block = _blocks.First(b => b.BlockId == blockId);
+        var sockIdx = block.OutputSockets.FindIndex(s => s.SocketId == socketId);
+        var startY = block.Y + 32 + sockIdx * 22 + 11;
+        _pendingConnection = new(blockId, socketId, block.X + 180, startY, args.ClientX, args.ClientY);
+    }
+
+    private void OnSocketMouseUp(Guid blockId, Guid socketId, bool isInput)
+    {
+        if (_pendingConnection is null || !isInput) return;
+        _connections.Add(new ConnectionViewModel(
+            Guid.NewGuid(),
+            _pendingConnection.FromBlockId,
+            _pendingConnection.FromSocketId,
+            blockId,
+            socketId));
+        _pendingConnection = null;
+    }
+
+    private void OnPaletteBlockDragStart(string blockType)
+    {
+        // Add block at a default position; refined in OnDrop
+        var block = CreateBlock(blockType, 200 + _blocks.Count * 30, 100 + _blocks.Count * 20);
+        _blocks.Add(block);
+    }
+
+    private void OnDrop(DragEventArgs args)
+    {
+        // If a palette drag is in progress, position the last-added block at drop point
+        if (_blocks.Count > 0)
+        {
+            var last = _blocks[^1];
+            last.X = (args.ClientX - _panX) / _zoom - 90;
+            last.Y = (args.ClientY - _panY) / _zoom - 20;
+        }
+    }
+
+    private static BlockViewModel CreateBlock(string blockType, double x, double y)
+    {
+        var (inputs, outputs) = GetDefaultSockets(blockType);
+        return new BlockViewModel(Guid.NewGuid(), blockType, x, y, inputs, outputs);
+    }
+
+    private static (List<SocketViewModel> inputs, List<SocketViewModel> outputs) GetDefaultSockets(string blockType)
+    {
+        return blockType switch
+        {
+            "CandleFeedBlock" => ([], [new(Guid.NewGuid(), "candle_output", BlockSocketType.CandleStream)]),
+            "RSIBlock"        => ([new(Guid.NewGuid(), "candle_input", BlockSocketType.CandleStream)], [new(Guid.NewGuid(), "indicator_output", BlockSocketType.IndicatorValue)]),
+            "MACDBlock"       => ([new(Guid.NewGuid(), "candle_input", BlockSocketType.CandleStream)], [new(Guid.NewGuid(), "indicator_output", BlockSocketType.IndicatorValue)]),
+            "ModelTInferenceBlock" => ([new(Guid.NewGuid(), "feature_input", BlockSocketType.IndicatorSeries)], [new(Guid.NewGuid(), "ml_output", BlockSocketType.MLSignal)]),
+            "OrderEmitterBlock"    => ([new(Guid.NewGuid(), "signal_input", BlockSocketType.RiskDecision)], [new(Guid.NewGuid(), "order_output", BlockSocketType.TradeOrder)]),
+            "nHOPPathFinderBlock"  => ([], [new(Guid.NewGuid(), "path_output", BlockSocketType.PathUpdate)]),
+            "MorphoSupplyBlock"    => ([new(Guid.NewGuid(), "signal_input", BlockSocketType.DeFiSignal)], [new(Guid.NewGuid(), "health_output", BlockSocketType.HealthFactorUpdate)]),
+            _ => ([], []),
+        };
+    }
+
+    private static string GetBlockColor(string blockType) => blockType switch
+    {
+        var t when t.Contains("Feed")       => "#1e6091",
+        var t when t.Contains("RSI")
+                 || t.Contains("MACD")
+                 || t.Contains("Bollinger") => "#0a7c7c",
+        var t when t.Contains("Model")
+                 || t.Contains("Inference") => "#6b2fa0",
+        var t when t.Contains("Order")
+                 || t.Contains("Risk")      => "#2d7d46",
+        var t when t.Contains("Arb")
+                 || t.Contains("nHOP")      => "#9e5a00",
+        var t when t.Contains("Morpho")
+                 || t.Contains("Defi")
+                 || t.Contains("DeFi")      => "#0e7490",
+        _                                   => "#374151",
+    };
+
+    private static string GetBlockCategory(string blockType) => blockType switch
+    {
+        var t when t.Contains("Feed") || t.Contains("Data")   => "DATA",
+        var t when t.Contains("RSI")  || t.Contains("MACD")
+                 || t.Contains("ATR") || t.Contains("Boll")   => "IND",
+        var t when t.Contains("Model")                         => "ML",
+        var t when t.Contains("Order") || t.Contains("Risk")
+                 || t.Contains("Stop") || t.Contains("Draw")  => "EXEC",
+        var t when t.Contains("Arb")  || t.Contains("nHOP")   => "ARB",
+        var t when t.Contains("Morph") || t.Contains("Bal")
+                 || t.Contains("DeFi") || t.Contains("Yield") => "DEFI",
+        _                                                       => "BLK",
+    };
+
+    private static string GetSocketColor(BlockSocketType type) => type switch
+    {
+        BlockSocketType.CandleStream    => "#3b82f6",
+        BlockSocketType.OrderBookUpdate => "#1d4ed8",
+        BlockSocketType.IndicatorValue  => "#06b6d4",
+        BlockSocketType.IndicatorSeries => "#67e8f9",
+        BlockSocketType.MLSignal        => "#a855f7",
+        BlockSocketType.MLProbabilities => "#d8b4fe",
+        BlockSocketType.RiskDecision    => "#f97316",
+        BlockSocketType.TradeOrder      => "#22c55e",
+        BlockSocketType.OrderResult     => "#86efac",
+        BlockSocketType.ArbitrageOpportunity => "#eab308",
+        BlockSocketType.PathUpdate      => "#fde047",
+        BlockSocketType.DeFiSignal      => "#14b8a6",
+        BlockSocketType.HealthFactorUpdate => "#2dd4bf",
+        BlockSocketType.TrainingStatus  => "#ec4899",
+        BlockSocketType.FeatureVector   => "#f9a8d4",
+        _                               => "#6b7280",
+    };
+
+    // View models are defined in DesignerModels.cs (public)
+}

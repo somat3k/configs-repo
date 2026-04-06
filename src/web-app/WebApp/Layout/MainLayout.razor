@@ -1,0 +1,110 @@
+@inherits LayoutComponentBase
+@inject WindowManager WM
+
+<FluentDesignTheme Mode="DesignThemeModes.Dark" />
+
+<div class="mls-shell">
+    <FluentNavMenu Width="220" Collapsible="true" Collapsed="@_navCollapsed" class="mls-nav">
+        <FluentNavLink Href="/" Match="NavLinkMatch.All"
+                      >
+            Dashboard
+        </FluentNavLink>
+
+        <FluentNavGroup Title="Trading"
+                       >
+            <FluentNavLink @onclick='() => WM.OpenPanel("TradingTerminal", "Trading Terminal")'>
+                Terminal
+            </FluentNavLink>
+            <FluentNavLink @onclick='() => WM.OpenPanel("TradingChart", "Chart")'>
+                Chart
+            </FluentNavLink>
+        </FluentNavGroup>
+
+        <FluentNavGroup Title="Arbitrage"
+                       >
+            <FluentNavLink @onclick='() => WM.OpenPanel("ArbitrageScanner", "Arbitrage Scanner")'>
+                Scanner
+            </FluentNavLink>
+            <FluentNavLink @onclick='() => WM.OpenPanel("PathVisualization", "Path Graph")'>
+                Path Graph
+            </FluentNavLink>
+        </FluentNavGroup>
+
+        <FluentNavGroup Title="DeFi"
+                       >
+            <FluentNavLink @onclick='() => WM.OpenPanel("DeFiPositions", "DeFi Positions")'>
+                Positions
+            </FluentNavLink>
+            <FluentNavLink @onclick='() => WM.OpenPanel("HealthMonitor", "Health Monitor")'>
+                Health Monitor
+            </FluentNavLink>
+        </FluentNavGroup>
+
+        <FluentNavGroup Title="Designer"
+                       >
+            <FluentNavLink @onclick='() => WM.OpenPanel("DesignerCanvas", "Strategy Designer")'>
+                Canvas
+            </FluentNavLink>
+        </FluentNavGroup>
+
+        <FluentNavGroup Title="ML"
+                       >
+            <FluentNavLink Href="/ml">
+                Model Registry
+            </FluentNavLink>
+        </FluentNavGroup>
+    </FluentNavMenu>
+
+    <main class="mls-main">
+        <CanvasHost />
+    </main>
+</div>
+
+<FluentToastProvider />
+<FluentDialogProvider />
+<FluentMessageBarProvider />
+<FluentTooltipProvider />
+
+<style>
+    .mls-shell {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+        background: #0d1117;
+    }
+
+    .mls-nav {
+        flex-shrink: 0;
+        border-right: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .mls-main {
+        flex: 1;
+        overflow: hidden;
+        position: relative;
+        min-width: 0;
+    }
+</style>
+
+@code {
+    private bool _navCollapsed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // Auto-collapse nav on smaller viewports
+        try
+        {
+            var width = await JS!.InvokeAsync<double>("eval", "window.innerWidth")
+                .ConfigureAwait(false);
+            if (width < 1024)
+            {
+                _navCollapsed = true;
+                StateHasChanged();
+            }
+        }
+        catch { /* non-critical */ }
+    }
+
+    [Inject] private IJSRuntime? JS { get; set; }
+}

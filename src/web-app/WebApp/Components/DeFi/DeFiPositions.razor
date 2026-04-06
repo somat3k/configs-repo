@@ -1,0 +1,328 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="defi-positions">
+    <div class="dp-header">
+        <span class="dp-title">DeFi Positions</span>
+        <div class="dp-totals">
+            <span class="dt-item">
+                <span class="dt-label">Supplied</span>
+                <span class="dt-value positive">$@_totalSupplied.ToString("N2")</span>
+            </span>
+            <span class="dt-item">
+                <span class="dt-label">Borrowed</span>
+                <span class="dt-value negative">$@_totalBorrowed.ToString("N2")</span>
+            </span>
+            <span class="dt-item">
+                <span class="dt-label">Net APY</span>
+                <span class="dt-value">@_netApy.ToString("F2")%</span>
+            </span>
+        </div>
+    </div>
+
+    <div class="dp-body">
+        @* Supply positions *@
+        @if (_supplyPositions.Any())
+        {
+            <div class="dp-section-label">Supply Positions</div>
+            <table class="dp-table">
+                <thead>
+                    <tr>
+                        <th>Protocol</th>
+                        <th>Asset</th>
+                        <th>Amount</th>
+                        <th>USD Value</th>
+                        <th>APY</th>
+                        <th>Collateral</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var pos in _supplyPositions.Values)
+                    {
+                        <tr @key="@($"supply-{pos.Protocol}-{pos.Asset}")">
+                            <td><span class="protocol-badge">@pos.Protocol</span></td>
+                            <td class="asset-cell">@pos.Asset</td>
+                            <td>@pos.Amount.ToString("F4")</td>
+                            <td>$@pos.UsdValue.ToString("N2")</td>
+                            <td class="apy-cell positive">@pos.Apy.ToString("F2")%</td>
+                            <td>
+                                @if (pos.IsCollateral)
+                                {
+                                    <FluentBadge Appearance="Appearance.Accent">Collateral</FluentBadge>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @* Borrow positions *@
+        @if (_borrowPositions.Any())
+        {
+            <div class="dp-section-label" style="margin-top:12px">Borrow Positions</div>
+            <table class="dp-table">
+                <thead>
+                    <tr>
+                        <th>Protocol</th>
+                        <th>Asset</th>
+                        <th>Amount</th>
+                        <th>USD Value</th>
+                        <th>Borrow Rate</th>
+                        <th>Health Factor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var pos in _borrowPositions.Values)
+                    {
+                        <tr @key="@($"borrow-{pos.Protocol}-{pos.Asset}")"
+                            class="@(pos.HealthFactor < 1.2 ? "row-critical" : pos.HealthFactor < 1.5 ? "row-warning" : "")">
+                            <td><span class="protocol-badge">@pos.Protocol</span></td>
+                            <td class="asset-cell">@pos.Asset</td>
+                            <td>@pos.Amount.ToString("F4")</td>
+                            <td>$@pos.UsdValue.ToString("N2")</td>
+                            <td class="apy-cell negative">@pos.BorrowRate.ToString("F2")%</td>
+                            <td>
+                                <span class="@GetHfClass(pos.HealthFactor)">
+                                    @pos.HealthFactor.ToString("F3")
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (!_supplyPositions.Any() && !_borrowPositions.Any())
+        {
+            <div class="dp-empty">No DeFi positions. Connect to a protocol to start.</div>
+        }
+    </div>
+</div>
+
+<style>
+    .defi-positions {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #0d1117;
+        overflow: hidden;
+    }
+
+    .dp-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        background: var(--neutral-layer-2, #161b22);
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+
+    .dp-title {
+        font-weight: 600;
+        font-size: 0.82rem;
+        color: #e6edf3;
+    }
+
+    .dp-totals {
+        display: flex;
+        gap: 16px;
+        margin-left: auto;
+        flex-wrap: wrap;
+    }
+
+    .dt-item { display: flex; gap: 5px; align-items: baseline; }
+    .dt-label { font-size: 0.62rem; color: #484f58; text-transform: uppercase; letter-spacing: 0.4px; }
+    .dt-value { font-size: 0.78rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: #8b949e; }
+
+    .dp-body { flex: 1; overflow-y: auto; padding: 8px; }
+
+    .dp-section-label {
+        font-size: 0.65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #484f58;
+        padding: 0 4px 4px;
+    }
+
+    .dp-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.71rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        margin-bottom: 4px;
+    }
+
+    .dp-table th {
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        color: #484f58;
+        padding: 4px 6px;
+        text-align: left;
+        font-weight: 600;
+        font-family: system-ui, sans-serif;
+        letter-spacing: 0.3px;
+    }
+
+    .dp-table td {
+        padding: 3px 6px;
+        color: #8b949e;
+        border-bottom: 1px solid rgba(255,255,255,0.03);
+        white-space: nowrap;
+    }
+
+    .dp-table tr:hover td { background: rgba(255,255,255,0.03); }
+    .row-critical td { background: rgba(248,81,73,0.06) !important; }
+    .row-warning  td { background: rgba(240,136,62,0.05) !important; }
+
+    .protocol-badge {
+        font-size: 0.6rem;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: rgba(0,212,255,0.12);
+        color: #00d4ff;
+        font-family: system-ui, sans-serif;
+        font-weight: 700;
+    }
+
+    .asset-cell { color: #e6edf3; font-weight: 600; }
+    .positive { color: #2ea043; }
+    .negative { color: #f85149; }
+    .apy-cell { font-weight: 600; }
+
+    .hf-healthy  { color: #2ea043; font-weight: 700; }
+    .hf-warning  { color: #f0883e; font-weight: 700; }
+    .hf-critical { color: #f85149; font-weight: 700; animation: blink 0.8s ease-in-out infinite; }
+
+    @@keyframes blink {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.4; }
+    }
+
+    .dp-empty {
+        padding: 20px;
+        text-align: center;
+        color: #484f58;
+        font-style: italic;
+        font-size: 0.78rem;
+    }
+</style>
+
+@code {
+    private sealed class SupplyPosition
+    {
+        public string Protocol { get; set; } = "";
+        public string Asset { get; set; } = "";
+        public double Amount { get; set; }
+        public double UsdValue { get; set; }
+        public double Apy { get; set; }
+        public bool IsCollateral { get; set; }
+    }
+
+    private sealed class BorrowPosition
+    {
+        public string Protocol { get; set; } = "";
+        public string Asset { get; set; } = "";
+        public double Amount { get; set; }
+        public double UsdValue { get; set; }
+        public double BorrowRate { get; set; }
+        public double HealthFactor { get; set; }
+    }
+
+    private readonly Dictionary<string, SupplyPosition> _supplyPositions = new();
+    private readonly Dictionary<string, BorrowPosition> _borrowPositions = new();
+    private double _totalSupplied;
+    private double _totalBorrowed;
+    private double _netApy;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["DEFI_SUPPLY_UPDATE", "DEFI_BORROW_UPDATE", "HEALTH_FACTOR_UPDATE"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            switch (envelope.Type)
+            {
+                case "DEFI_SUPPLY_UPDATE":
+                    UpdateSupply(envelope.Payload);
+                    break;
+                case "DEFI_BORROW_UPDATE":
+                    UpdateBorrow(envelope.Payload);
+                    break;
+                case "HEALTH_FACTOR_UPDATE":
+                    UpdateHealthFactor(envelope.Payload);
+                    break;
+            }
+
+            RecalcTotals();
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private void UpdateSupply(System.Text.Json.JsonElement payload)
+    {
+        var protocolKey = payload.TryGetProperty("protocol", out var prK) ? (prK.GetString() ?? "") : "";
+        var assetKey    = payload.TryGetProperty("asset",    out var asK) ? (asK.GetString() ?? "") : "";
+        var key = $"{protocolKey}:{assetKey}";
+        var pos = _supplyPositions.GetValueOrDefault(key) ?? new SupplyPosition();
+        if (payload.TryGetProperty("protocol",     out var p))   pos.Protocol     = p.GetString()  ?? "";
+        if (payload.TryGetProperty("asset",        out var a))   pos.Asset        = a.GetString()  ?? "";
+        if (payload.TryGetProperty("amount",       out var amt)) pos.Amount       = amt.GetDouble();
+        if (payload.TryGetProperty("usd_value",    out var usd)) pos.UsdValue     = usd.GetDouble();
+        if (payload.TryGetProperty("apy",          out var apy)) pos.Apy          = apy.GetDouble();
+        if (payload.TryGetProperty("is_collateral",out var col)) pos.IsCollateral = col.GetBoolean();
+        _supplyPositions[key] = pos;
+    }
+
+    private void UpdateBorrow(System.Text.Json.JsonElement payload)
+    {
+        var protocolKey = payload.TryGetProperty("protocol", out var prK) ? (prK.GetString() ?? "") : "";
+        var assetKey    = payload.TryGetProperty("asset",    out var asK) ? (asK.GetString() ?? "") : "";
+        var key = $"{protocolKey}:{assetKey}";
+        var pos = _borrowPositions.GetValueOrDefault(key) ?? new BorrowPosition();
+        if (payload.TryGetProperty("protocol",    out var p))    pos.Protocol   = p.GetString()  ?? "";
+        if (payload.TryGetProperty("asset",       out var a))    pos.Asset      = a.GetString()  ?? "";
+        if (payload.TryGetProperty("amount",      out var amt))  pos.Amount     = amt.GetDouble();
+        if (payload.TryGetProperty("usd_value",   out var usd))  pos.UsdValue   = usd.GetDouble();
+        if (payload.TryGetProperty("borrow_rate", out var br))   pos.BorrowRate = br.GetDouble();
+        if (payload.TryGetProperty("health_factor",out var hf))  pos.HealthFactor = hf.GetDouble();
+        _borrowPositions[key] = pos;
+    }
+
+    private void UpdateHealthFactor(System.Text.Json.JsonElement payload)
+    {
+        if (!payload.TryGetProperty("health_factor", out var hf)) return;
+        var hfValue = hf.GetDouble();
+        var protocol = payload.TryGetProperty("protocol", out var pr) ? pr.GetString() : "";
+        foreach (var pos in _borrowPositions.Values.Where(p => p.Protocol == protocol))
+            pos.HealthFactor = hfValue;
+    }
+
+    private void RecalcTotals()
+    {
+        _totalSupplied = _supplyPositions.Values.Sum(p => p.UsdValue);
+        _totalBorrowed = _borrowPositions.Values.Sum(p => p.UsdValue);
+        var supplyApy  = _supplyPositions.Values.Any()
+            ? _supplyPositions.Values.Average(p => p.Apy) : 0;
+        var borrowRate = _borrowPositions.Values.Any()
+            ? _borrowPositions.Values.Average(p => p.BorrowRate) : 0;
+        _netApy = supplyApy - borrowRate;
+    }
+
+    private static string GetHfClass(double hf) =>
+        hf < 1.2 ? "hf-critical" : hf < 1.5 ? "hf-warning" : "hf-healthy";
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

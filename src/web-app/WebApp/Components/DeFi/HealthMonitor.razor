@@ -1,0 +1,343 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="health-monitor" id="hm-@_gaugeId">
+    <div class="hm-header">
+        <span class="hm-title">Health Factor Monitor</span>
+        <div class="hm-protocol">
+            <FluentSelect TOption="string" @bind-Value="_protocol">
+                <FluentOption TOption="string" Value="morpho">Morpho</FluentOption>
+                <FluentOption TOption="string" Value="balancer">Balancer</FluentOption>
+                <FluentOption TOption="string" Value="all">All Protocols</FluentOption>
+            </FluentSelect>
+        </div>
+    </div>
+
+    <div class="hm-gauge-area">
+        @* SVG arc gauge *@
+        <svg class="hf-gauge" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+            @* Background arc *@
+            <path d="M 10 50 A 40 40 0 0 1 90 50"
+                  fill="none"
+                  stroke="rgba(255,255,255,0.08)"
+                  stroke-width="8"
+                  stroke-linecap="round" />
+
+            @* Value arc (circumference ≈ 125.66 for r=40 half-circle) *@
+            <path d="M 10 50 A 40 40 0 0 1 90 50"
+                  fill="none"
+                  stroke="@GetHfColor(_healthFactor)"
+                  stroke-width="8"
+                  stroke-linecap="round"
+                  stroke-dasharray="125.66"
+                  stroke-dashoffset="@GetDashOffset(_healthFactor)"
+                  class="hf-arc"
+                  style="transition: stroke-dashoffset 0.6s ease, stroke 0.6s ease;" />
+
+            @* Threshold markers *@
+            <line x1="31.7" y1="18.3" x2="35.5" y2="22.1"
+                  stroke="#f85149" stroke-width="1.5" opacity="0.7" />
+            <line x1="19.6" y1="31.7" x2="24.1" y2="34.4"
+                  stroke="#f0883e" stroke-width="1.5" opacity="0.7" />
+
+            @* Center value display *@
+            <text x="50" y="47" text-anchor="middle"
+                  class="hf-value"
+                  fill="@GetHfColor(_healthFactor)"
+                  font-size="13"
+                  font-weight="700"
+                  font-family="'JetBrains Mono', monospace">
+                @_healthFactor.ToString("F3")
+            </text>
+            <text x="50" y="58" text-anchor="middle"
+                  fill="#484f58"
+                  font-size="5"
+                  font-family="system-ui">
+                HEALTH FACTOR
+            </text>
+        </svg>
+
+        <div class="hm-status @GetStatusClass(_healthFactor)">
+            @GetStatusLabel(_healthFactor)
+        </div>
+    </div>
+
+    <div class="hm-metrics">
+        <div class="hm-metric">
+            <span class="hm-metric-label">LTV</span>
+            <span class="hm-metric-value @(_ltv > 0.75 ? "negative" : "")">
+                @(_ltv * 100).ToString("F1")%
+            </span>
+        </div>
+        <div class="hm-metric">
+            <span class="hm-metric-label">Liq. Distance</span>
+            <span class="hm-metric-value">@_liqDistance.ToString("F2")%</span>
+        </div>
+        <div class="hm-metric">
+            <span class="hm-metric-label">Borrow Rate</span>
+            <span class="hm-metric-value">@_borrowRate.ToString("F2")%</span>
+        </div>
+    </div>
+
+    @* Alert banner — shown when HF < 1.2 *@
+    @if (_healthFactor > 0 && _healthFactor < 1.2)
+    {
+        <div class="hm-alert hm-alert-critical">
+            
+            <span>CRITICAL: Health factor @_healthFactor.ToString("F3") — liquidation imminent!</span>
+        </div>
+    }
+    else if (_healthFactor > 0 && _healthFactor < 1.5)
+    {
+        <div class="hm-alert hm-alert-warning">
+            
+            <span>WARNING: Health factor @_healthFactor.ToString("F3") — approaching liquidation threshold</span>
+        </div>
+    }
+
+    <div class="hm-history">
+        <div class="hm-section-label">History</div>
+        <div class="hm-sparkline">
+            @* Mini SVG sparkline of last 30 HF readings *@
+            @if (_history.Count >= 2)
+            {
+                <svg viewBox="0 0 200 30" preserveAspectRatio="none">
+                    <polyline points="@GetSparklinePoints()"
+                              fill="none"
+                              stroke="@GetHfColor(_healthFactor)"
+                              stroke-width="1.5" />
+                    @* Danger threshold line at HF = 1.2 *@
+                    <line x1="0" y1="@GetSparklineY(1.2)" x2="200" y2="@GetSparklineY(1.2)"
+                          stroke="#f85149" stroke-width="0.5" stroke-dasharray="3 2" opacity="0.5" />
+                </svg>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .health-monitor {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #0d1117;
+        overflow-y: auto;
+    }
+
+    .hm-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        background: var(--neutral-layer-2, #161b22);
+        flex-shrink: 0;
+    }
+
+    .hm-title {
+        font-weight: 600;
+        font-size: 0.82rem;
+        color: #e6edf3;
+        flex: 1;
+    }
+
+    .hm-gauge-area {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px;
+        gap: 8px;
+    }
+
+    .hf-gauge {
+        width: 180px;
+        height: 110px;
+    }
+
+    .hm-status {
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 12px;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+
+    .status-healthy  { background: rgba(46,160,67,0.15);  color: #2ea043; }
+    .status-warning  { background: rgba(240,136,62,0.15); color: #f0883e; }
+    .status-critical { background: rgba(248,81,73,0.15);  color: #f85149;
+                       animation: status-pulse 1s ease-in-out infinite; }
+    .status-liquidatable { background: rgba(248,81,73,0.3); color: #f85149;
+                            animation: status-pulse 0.5s ease-in-out infinite; }
+
+    @@keyframes status-pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.5; }
+    }
+
+    .hm-metrics {
+        display: flex;
+        justify-content: space-around;
+        padding: 8px 12px;
+        border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .hm-metric {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .hm-metric-label {
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        color: #484f58;
+        letter-spacing: 0.4px;
+    }
+
+    .hm-metric-value {
+        font-size: 0.82rem;
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
+        color: #8b949e;
+    }
+
+    .hm-alert {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 8px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+
+    .hm-alert-critical {
+        background: rgba(248,81,73,0.15);
+        border: 1px solid rgba(248,81,73,0.4);
+        color: #f85149;
+        animation: alert-flash 1s ease-in-out infinite;
+    }
+
+    .hm-alert-warning {
+        background: rgba(240,136,62,0.12);
+        border: 1px solid rgba(240,136,62,0.3);
+        color: #f0883e;
+    }
+
+    @@keyframes alert-flash {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.6; }
+    }
+
+    .hm-history { padding: 4px 12px 12px; }
+
+    .hm-section-label {
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        color: #484f58;
+        letter-spacing: 0.4px;
+        margin-bottom: 4px;
+    }
+
+    .hm-sparkline svg {
+        width: 100%;
+        height: 30px;
+        display: block;
+    }
+
+    .negative { color: #f85149; }
+</style>
+
+@code {
+    private readonly string _gaugeId = Guid.NewGuid().ToString("N")[..8];
+    private string _protocol = "all";
+    private double _healthFactor;
+    private double _ltv;
+    private double _liqDistance;
+    private double _borrowRate;
+    private readonly List<double> _history = new(30);
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["HEALTH_FACTOR_UPDATE", "DEFI_HEALTH_WARNING"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            var payload = envelope.Payload;
+
+            if (_protocol != "all" &&
+                payload.TryGetProperty("protocol", out var pr) &&
+                pr.GetString() != _protocol) continue;
+
+            if (payload.TryGetProperty("health_factor",   out var hf))   _healthFactor = hf.GetDouble();
+            if (payload.TryGetProperty("ltv",             out var ltv))  _ltv = ltv.GetDouble();
+            if (payload.TryGetProperty("liq_distance",    out var ld))   _liqDistance = ld.GetDouble();
+            if (payload.TryGetProperty("borrow_rate",     out var br))   _borrowRate = br.GetDouble();
+
+            // Track history
+            if (_history.Count >= 30) _history.RemoveAt(0);
+            if (_healthFactor > 0) _history.Add(_healthFactor);
+
+            // Targeted JS gauge update (no Blazor re-render for the gauge arc)
+            await JS.InvokeVoidAsync("updateHealthFactor", $"hm-{_gaugeId}", _healthFactor)
+                .ConfigureAwait(false);
+
+            // Full render needed for alert banner visibility
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private static string GetHfColor(double hf) =>
+        hf <= 0 ? "#484f58" : hf < 1.2 ? "#f85149" : hf < 1.5 ? "#f0883e" : "#2ea043";
+
+    private static string GetStatusClass(double hf) =>
+        hf <= 0 ? "" : hf < 1.0 ? "status-liquidatable" : hf < 1.2 ? "status-critical" : hf < 1.5 ? "status-warning" : "status-healthy";
+
+    private static string GetStatusLabel(double hf) =>
+        hf <= 0 ? "Awaiting data" : hf < 1.0 ? "LIQUIDATABLE" : hf < 1.2 ? "CRITICAL" : hf < 1.5 ? "WARNING" : "Healthy";
+
+    // Arc: half-circle, r=40, circumference ≈ 125.66
+    private static double GetDashOffset(double hf)
+    {
+        const double c = 125.66;
+        if (hf <= 0) return c;
+        var pct = Math.Min(1.0, hf / 3.0);
+        return c * (1 - pct);
+    }
+
+    private string GetSparklinePoints()
+    {
+        if (_history.Count < 2) return "";
+        var min = Math.Max(0.8, _history.Min() - 0.1);
+        var max = Math.Max(min + 0.1, _history.Max() + 0.1);
+        var step = 200.0 / (_history.Count - 1);
+        var points = _history.Select((v, i) =>
+        {
+            var x = i * step;
+            var y = 30 - (v - min) / (max - min) * 28 - 1;
+            return $"{x:F1},{y:F1}";
+        });
+        return string.Join(" ", points);
+    }
+
+    private double GetSparklineY(double hf)
+    {
+        if (_history.Count < 2) return 15;
+        var min = Math.Max(0.8, _history.Min() - 0.1);
+        var max = Math.Max(min + 0.1, _history.Max() + 0.1);
+        return 30 - (hf - min) / (max - min) * 28 - 1;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

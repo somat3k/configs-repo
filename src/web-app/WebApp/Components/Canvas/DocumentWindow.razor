@@ -1,0 +1,199 @@
+@using Microsoft.AspNetCore.Components.Web
+
+@* ── Positioned absolutely; z-index, position, size come from WindowState ── *@
+<div class="document-window @(State.IsMaximized ? "maximized" : "") @(State.IsMinimized ? "minimized" : "")"
+     style="left:@(State.X)px; top:@(State.Y)px;
+            width:@(State.IsMaximized ? "100%" : $"{State.Width}px");
+            height:@(State.IsMaximized ? "100%" : $"{State.Height}px");
+            z-index:@State.ZIndex;"
+     @onmousedown="() => OnFocus.InvokeAsync()">
+
+    @* ── Title bar ──────────────────────────────────────────────────────── *@
+    <div class="window-titlebar"
+         @onmousedown:preventDefault
+         @onmousedown="OnTitleBarMouseDown">
+
+        <span class="window-title">@State.Title</span>
+
+        <div class="window-controls">
+            <button class="wc-btn wc-minimize" title="Minimise"
+                    @onclick:stopPropagation
+                    @onclick="() => OnMinimize.InvokeAsync()">
+                <svg width="10" height="1" viewBox="0 0 10 1">
+                    <line x1="0" y1="0.5" x2="10" y2="0.5" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+            </button>
+
+            <button class="wc-btn wc-maximize" title="@(State.IsMaximized ? "Restore" : "Maximise")"
+                    @onclick:stopPropagation
+                    @onclick="() => OnMaximize.InvokeAsync()">
+                @if (State.IsMaximized)
+                {
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <rect x="2" y="0" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                        <rect x="0" y="2" width="8" height="8" fill="var(--neutral-layer-2,#161b22)" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                }
+                else
+                {
+                    <svg width="10" height="10" viewBox="0 0 10 10">
+                        <rect x="0" y="0" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                }
+            </button>
+
+            <button class="wc-btn wc-close" title="Close"
+                    @onclick:stopPropagation
+                    @onclick="() => OnClose.InvokeAsync()">
+                <svg width="10" height="10" viewBox="0 0 10 10">
+                    <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" stroke-width="1.5"/>
+                    <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    @* ── Content area ────────────────────────────────────────────────────── *@
+    <div class="window-content">
+        @ChildContent
+    </div>
+
+    @* ── Eight resize handles ────────────────────────────────────────────── *@
+    @if (!State.IsMaximized)
+    {
+        @foreach (var dir in Enum.GetValues<ResizeDirection>())
+        {
+            var captured = dir;
+            <div class="resize-handle rh-@dir.ToString().ToLowerInvariant()"
+                 @onmousedown:preventDefault
+                 @onmousedown="(args) => OnResizeStart.InvokeAsync((captured, args))">
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .document-window {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        background: var(--neutral-layer-2, #161b22);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+        overflow: hidden;
+        animation: panel-enter 180ms ease-out;
+        user-select: none;
+    }
+
+    .document-window.maximized {
+        left: 0 !important;
+        top: 0 !important;
+        border-radius: 0;
+        border: none;
+    }
+
+    @@keyframes panel-enter {
+        from { transform: translateY(16px); opacity: 0; }
+        to   { transform: translateY(0);   opacity: 1; }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .document-window { animation: none; }
+    }
+
+    .window-titlebar {
+        display: flex;
+        align-items: center;
+        height: 32px;
+        padding: 0 8px 0 12px;
+        background: var(--neutral-layer-3, #1c2128);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        cursor: grab;
+        flex-shrink: 0;
+        gap: 8px;
+    }
+
+    .window-titlebar:active { cursor: grabbing; }
+
+    .window-title {
+        flex: 1;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--neutral-foreground-rest, #e6edf3);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .window-controls {
+        display: flex;
+        gap: 4px;
+        cursor: default;
+    }
+
+    .wc-btn {
+        width: 22px;
+        height: 22px;
+        border: none;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--neutral-foreground-hint, #8b949e);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s, color 0.15s;
+        flex-shrink: 0;
+    }
+
+    .wc-btn:hover { background: rgba(255,255,255,0.08); color: #e6edf3; }
+    .wc-close:hover { background: rgba(248,81,73,0.25); color: #f85149; }
+
+    .window-content {
+        flex: 1;
+        overflow: auto;
+        position: relative;
+        min-height: 0;
+    }
+
+    /* ── Resize handles ────────────────────────────────────────────────────── */
+    .resize-handle {
+        position: absolute;
+        z-index: 10;
+    }
+
+    .rh-n  { top: -3px;  left: 8px;    right: 8px;  height: 6px;  cursor: n-resize; }
+    .rh-s  { bottom: -3px; left: 8px;  right: 8px;  height: 6px;  cursor: s-resize; }
+    .rh-e  { top: 8px;   right: -3px;  bottom: 8px; width: 6px;   cursor: e-resize; }
+    .rh-w  { top: 8px;   left: -3px;   bottom: 8px; width: 6px;   cursor: w-resize; }
+    .rh-ne { top: -3px;  right: -3px;  width: 12px; height: 12px; cursor: ne-resize; }
+    .rh-nw { top: -3px;  left: -3px;   width: 12px; height: 12px; cursor: nw-resize; }
+    .rh-se { bottom: -3px; right: -3px; width: 12px; height: 12px; cursor: se-resize; }
+    .rh-sw { bottom: -3px; left: -3px;  width: 12px; height: 12px; cursor: sw-resize; }
+</style>
+
+@code {
+    /// <summary>Current window layout state.</summary>
+    [Parameter, EditorRequired] public WindowState State { get; set; } = default!;
+
+    /// <summary>Child content rendered inside the window body.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnMinimize { get; set; }
+    [Parameter] public EventCallback OnMaximize { get; set; }
+    [Parameter] public EventCallback OnFocus { get; set; }
+
+    /// <summary>Fired when the user starts dragging the title bar.</summary>
+    [Parameter] public EventCallback<MouseEventArgs> OnDragStart { get; set; }
+
+    /// <summary>Fired when the user starts resizing; tuple of direction + mouse args.</summary>
+    [Parameter] public EventCallback<(ResizeDirection Direction, MouseEventArgs Args)> OnResizeStart { get; set; }
+
+    private void OnTitleBarMouseDown(MouseEventArgs args)
+    {
+        if (args.Button == 0)
+            OnDragStart.InvokeAsync(args);
+    }
+}

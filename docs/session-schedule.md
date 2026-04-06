@@ -773,7 +773,7 @@ DesignerCanvas
 - [ ] Pan (middle-mouse/touch) and zoom (wheel/pinch) work correctly
 - [ ] Touch gestures work on Android Chrome (HammerJS via JS interop)
 
-**Session Status: 🔄 PENDING**
+**Session Status: ✅ COMPLETE**
 
 ---
 
@@ -824,7 +824,7 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 - [ ] `HealthMonitor` triggers animated alert when health factor < 1.2
 - [ ] All panels open as `DocumentWindow` instances from the CanvasHost
 
-**Session Status: 🔄 PENDING**
+**Session Status: ✅ COMPLETE**
 
 ---
 

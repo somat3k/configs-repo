@@ -1,0 +1,206 @@
+@using Microsoft.AspNetCore.Components.Web
+@using MLS.WebApp.Components.Trading
+@using MLS.WebApp.Components.Arbitrage
+@using MLS.WebApp.Components.DeFi
+@using MLS.WebApp.Components.Designer
+@inject WindowManager WM
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="canvas-host"
+     @onmousemove="OnMouseMove"
+     @onmouseup="OnMouseUp"
+     @onmouseleave="OnMouseUp">
+
+    <div class="window-container">
+        @foreach (var win in WM.Windows.Where(w => !w.IsMinimized).OrderBy(w => w.ZIndex))
+        {
+            <DocumentWindow State="win"
+                            OnClose="() => WM.Close(win.WindowId)"
+                            OnMinimize="() => WM.Minimize(win.WindowId)"
+                            OnMaximize="() => WM.Maximize(win.WindowId)"
+                            OnFocus="() => WM.BringToFront(win.WindowId)"
+                            OnDragStart="(args) => WM.StartDrag(win.WindowId, args.ClientX, args.ClientY)"
+                            OnResizeStart="(t) => WM.StartResize(win.WindowId, t.Direction, t.Args.ClientX, t.Args.ClientY)">
+                @GetPanelContent(win)
+            </DocumentWindow>
+        }
+    </div>
+
+    @* ── Taskbar: minimised windows ───────────────────────────────────────── *@
+    @if (WM.Windows.Any(w => w.IsMinimized))
+    {
+        <div class="window-taskbar">
+            @foreach (var win in WM.Windows.Where(w => w.IsMinimized))
+            {
+                <FluentButton Appearance="Appearance.Stealth"
+                              class="taskbar-item"
+                              @onclick="() => WM.Restore(win.WindowId)">
+                    
+                    @win.Title
+                </FluentButton>
+            }
+        </div>
+    }
+
+    @* ── Quick-open FAB ───────────────────────────────────────────────────── *@
+    <div class="canvas-fab">
+        <FluentButton Appearance="Appearance.Accent"
+                     
+                      @onclick="TogglePanelMenu"
+                      title="Open panel">
+        </FluentButton>
+
+        @if (_showPanelMenu)
+        {
+            <div class="fab-menu">
+                @foreach (var panel in _availablePanels)
+                {
+                    <FluentButton Appearance="Appearance.Stealth"
+                                  @onclick="() => OpenPanel(panel.Key)">
+                        @panel.Label
+                    </FluentButton>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .canvas-host {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--neutral-layer-1, #0d1117);
+        container-type: inline-size;
+        container-name: canvas;
+    }
+
+    .window-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .window-taskbar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 36px;
+        background: rgba(13, 17, 23, 0.9);
+        border-top: 1px solid rgba(255,255,255,0.08);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 8px;
+        z-index: 10000;
+        backdrop-filter: blur(8px);
+    }
+
+    .taskbar-item {
+        font-size: 0.75rem;
+        gap: 4px;
+    }
+
+    .canvas-fab {
+        position: absolute;
+        bottom: 52px;
+        right: 16px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column-reverse;
+        align-items: flex-end;
+        gap: 8px;
+    }
+
+    .fab-menu {
+        display: flex;
+        flex-direction: column;
+        background: var(--neutral-layer-2, #161b22);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 8px;
+        padding: 4px;
+        gap: 2px;
+        min-width: 180px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+
+    @@container canvas (max-width: 768px) {
+        .document-window {
+            position: relative !important;
+            width: 100% !important;
+            height: auto !important;
+            transform: none !important;
+            left: 0 !important;
+            top: 0 !important;
+        }
+    }
+</style>
+
+@code {
+    private bool _showPanelMenu;
+    private CancellationTokenSource _cts = new();
+
+    private record PanelEntry(string Key, string Label);
+
+    private static readonly PanelEntry[] _availablePanels =
+    [
+        new("TradingTerminal",   "Trading Terminal"),
+        new("ArbitrageScanner",  "Arbitrage Scanner"),
+        new("DeFiPositions",     "DeFi Positions"),
+        new("HealthMonitor",     "Health Monitor"),
+        new("DesignerCanvas",    "Strategy Designer"),
+    ];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        WM.OnLayoutChanged += LayoutChanged;
+        await WM.RestoreLayoutAsync(_cts.Token).ConfigureAwait(false);
+    }
+
+    private void LayoutChanged() => InvokeAsync(StateHasChanged);
+
+    private void OpenPanel(string panelType)
+    {
+        WM.OpenPanel(panelType);
+        _showPanelMenu = false;
+        _ = WM.SaveLayoutAsync(_cts.Token);
+    }
+
+    private void TogglePanelMenu() => _showPanelMenu = !_showPanelMenu;
+
+    private void OnMouseMove(MouseEventArgs args)
+    {
+        WM.ContinueDrag(args.ClientX, args.ClientY);
+        WM.ContinueResize(args.ClientX, args.ClientY);
+    }
+
+    private void OnMouseUp(MouseEventArgs args)
+    {
+        WM.EndDrag();
+        WM.EndResize();
+        _ = WM.SaveLayoutAsync(_cts.Token);
+    }
+
+    private RenderFragment GetPanelContent(WindowState win) => win.PanelType switch
+    {
+        "TradingTerminal"  => @<TradingTerminal />,
+        "TradingChart"     => @<TradingChart Symbol="BTC-USD" />,
+        "ArbitrageScanner" => @<ArbitrageScanner />,
+        "DeFiPositions"    => @<DeFiPositions />,
+        "HealthMonitor"    => @<HealthMonitor />,
+        "DesignerCanvas"   => @<DesignerCanvas />,
+        "PathVisualization"=> @<PathVisualization />,
+        _                  => @<div class="panel-placeholder">@win.PanelType</div>,
+    };
+
+    public void Dispose()
+    {
+        WM.OnLayoutChanged -= LayoutChanged;
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

@@ -1,0 +1,81 @@
+@using MLS.Core.Designer
+
+@* SVG bezier-curve renderer for block connections *@
+<g class="connections-layer">
+    @foreach (var conn in Connections)
+    {
+        var from = Blocks.FirstOrDefault(b => b.BlockId == conn.FromBlockId);
+        var to   = Blocks.FirstOrDefault(b => b.BlockId == conn.ToBlockId);
+        if (from is null || to is null) continue;
+
+        var fromSocket = from.OutputSockets.FirstOrDefault(s => s.SocketId == conn.FromSocketId);
+        var toSocket   = to.InputSockets.FirstOrDefault(s => s.SocketId == conn.ToSocketId);
+        if (fromSocket is null || toSocket is null) continue;
+
+        var fromIdx = from.OutputSockets.IndexOf(fromSocket);
+        var toIdx   = to.InputSockets.IndexOf(toSocket);
+
+        // Anchor points at socket dot positions
+        double x1 = from.X + 180;                  // right edge
+        double y1 = from.Y + 40 + fromIdx * 22 + 11;
+        double x2 = to.X;                           // left edge
+        double y2 = to.Y + 40 + toIdx * 22 + 11;
+
+        // Bezier control points: horizontal tangent proportional to distance
+        double cx = Math.Abs(x2 - x1) * 0.45;
+        string path = $"M {x1} {y1} C {x1 + cx} {y1}, {x2 - cx} {y2}, {x2} {y2}";
+
+        string color = GetSocketColor(fromSocket.SocketType);
+
+        <g @key="conn.ConnectionId">
+            @* Glow shadow *@
+            <path d="@path"
+                  fill="none"
+                  stroke="@color"
+                  stroke-width="4"
+                  stroke-opacity="0.15"
+                  stroke-linecap="round" />
+            @* Main wire *@
+            <path d="@path"
+                  fill="none"
+                  stroke="@color"
+                  stroke-width="1.8"
+                  stroke-opacity="0.85"
+                  stroke-linecap="round" />
+
+            @* Socket endpoints *@
+            <circle cx="@x1" cy="@y1" r="3.5" fill="@color" opacity="0.9" />
+            <circle cx="@x2" cy="@y2" r="3.5" fill="@color" opacity="0.9" />
+        </g>
+    }
+</g>
+
+@code {
+    [Parameter, EditorRequired] public List<ConnectionViewModel> Connections { get; set; } = [];
+    [Parameter, EditorRequired] public List<BlockViewModel> Blocks { get; set; } = [];
+
+    private static string GetSocketColor(BlockSocketType type) => type switch
+    {
+        BlockSocketType.CandleStream         => "#3b82f6",
+        BlockSocketType.OrderBookUpdate      => "#1d4ed8",
+        BlockSocketType.TradeTickStream      => "#2563eb",
+        BlockSocketType.OnChainEvent         => "#4338ca",
+        BlockSocketType.IndicatorValue       => "#06b6d4",
+        BlockSocketType.IndicatorSeries      => "#67e8f9",
+        BlockSocketType.MLSignal             => "#a855f7",
+        BlockSocketType.MLProbabilities      => "#d8b4fe",
+        BlockSocketType.RiskDecision         => "#f97316",
+        BlockSocketType.ExposureUpdate       => "#fb923c",
+        BlockSocketType.TradeOrder           => "#22c55e",
+        BlockSocketType.OrderResult          => "#86efac",
+        BlockSocketType.ArbitrageOpportunity => "#eab308",
+        BlockSocketType.PathUpdate           => "#fde047",
+        BlockSocketType.DeFiSignal           => "#14b8a6",
+        BlockSocketType.HealthFactorUpdate   => "#2dd4bf",
+        BlockSocketType.TrainingStatus       => "#ec4899",
+        BlockSocketType.FeatureVector        => "#f9a8d4",
+        BlockSocketType.ChartData            => "#f8fafc",
+        BlockSocketType.ReportData           => "#cbd5e1",
+        _                                    => "#6b7280",
+    };
+}

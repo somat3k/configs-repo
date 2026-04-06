@@ -1,0 +1,60 @@
+/* MLS Trading Platform — Web App Styles */
+
+:root {
+    --mls-bg: #0d1117;
+    --mls-surface: #161b22;
+    --mls-surface-alt: #1c2128;
+    --mls-border: rgba(255, 255, 255, 0.08);
+    --mls-accent: #00d4ff;
+    --mls-positive: #2ea043;
+    --mls-negative: #f85149;
+    --mls-warning: #f0883e;
+    --mls-text: #e6edf3;
+    --mls-text-muted: #8b949e;
+    --mls-text-faint: #484f58;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--mls-bg);
+    color: var(--mls-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* FluentUI overrides for dark theme */
+fluent-button[appearance="accent"] {
+    --accent-fill-rest: var(--mls-accent);
+}
+
+/* Monospace data font */
+.mono { font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; }
+
+/* Panel placeholder */
+.panel-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--mls-text-faint);
+    font-size: 0.875rem;
+}
+
+/* Value flash animation (JS-driven) */
+@keyframes value-flash {
+    0%   { background-color: rgba(0, 212, 255, 0.2); }
+    100% { background-color: transparent; }
+}
+.value-flash { animation: value-flash 500ms ease-out; }
