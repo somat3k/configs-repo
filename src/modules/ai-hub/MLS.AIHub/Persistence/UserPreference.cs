@@ -30,6 +30,13 @@ public sealed class UserPreference
     /// <summary>UTC timestamp of the last update.</summary>
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// Per-provider configuration JSON (model IDs, endpoints).
+    /// Stored as a TEXT column; does NOT contain API keys (those are env vars).
+    /// Example: <c>{"openai":{"model":"gpt-4o","endpoint":""},"local":{"model":"llama3.2","endpoint":"http://localhost:11434"}}</c>
+    /// </summary>
+    public string ProviderConfigsJson { get; set; } = "{}";
+
     /// <summary>Fallback chain parsed from <see cref="FallbackChainRaw"/>.</summary>
     public IReadOnlyList<string> FallbackChain =>
         FallbackChainRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

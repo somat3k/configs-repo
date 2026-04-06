@@ -28,6 +28,9 @@ builder.Services.AddSingleton<IBlockControllerHub, BlockControllerHub>();
 builder.Services.AddScoped<IWindowLayoutService, WindowLayoutService>();
 builder.Services.AddScoped<WindowManager>();
 
+// ── AI Canvas Service (scoped — per circuit, connects directly to ai-hub) ────
+builder.Services.AddScoped<IAICanvasService, AICanvasService>();
+
 // ── Block Controller registration + heartbeat (background) ───────────────────
 builder.Services.AddHttpClient<BlockControllerClient>(client =>
 {

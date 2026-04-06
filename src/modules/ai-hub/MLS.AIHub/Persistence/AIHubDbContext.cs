@@ -22,6 +22,7 @@ public sealed class AIHubDbContext(DbContextOptions<AIHubDbContext> options) : D
             e.Property(p => p.PrimaryProviderId).HasMaxLength(64).IsRequired();
             e.Property(p => p.PreferredModelId).HasMaxLength(128).IsRequired();
             e.Property(p => p.FallbackChainRaw).HasMaxLength(512).IsRequired();
+            e.Property(p => p.ProviderConfigsJson).HasColumnType("text").IsRequired().HasDefaultValue("{}");
         });
     }
 }

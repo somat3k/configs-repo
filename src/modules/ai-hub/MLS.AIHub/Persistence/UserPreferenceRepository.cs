@@ -29,10 +29,11 @@ public sealed class UserPreferenceRepository(AIHubDbContext _db) : IUserPreferen
         }
         else
         {
-            existing.PrimaryProviderId = preference.PrimaryProviderId;
-            existing.PreferredModelId  = preference.PreferredModelId;
-            existing.FallbackChainRaw  = preference.FallbackChainRaw;
-            existing.UpdatedAt         = preference.UpdatedAt;
+            existing.PrimaryProviderId  = preference.PrimaryProviderId;
+            existing.PreferredModelId   = preference.PreferredModelId;
+            existing.FallbackChainRaw   = preference.FallbackChainRaw;
+            existing.ProviderConfigsJson = preference.ProviderConfigsJson;
+            existing.UpdatedAt          = preference.UpdatedAt;
         }
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);

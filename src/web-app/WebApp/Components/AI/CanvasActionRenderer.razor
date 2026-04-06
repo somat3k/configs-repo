@@ -1,0 +1,133 @@
+@inject WindowManager WM
+
+@if (Action is not null)
+{
+    <div class="canvas-action canvas-action--@Action.ActionType.ToLowerInvariant()">
+        <span class="canvas-action-icon" aria-hidden="true">@GetIcon(Action.ActionType)</span>
+
+        <div class="canvas-action-body">
+            <span class="canvas-action-type">@FormatActionType(Action.ActionType)</span>
+            @if (Action.PanelType is not null)
+            {
+                <span class="canvas-action-panel">@(Action.Title ?? Action.PanelType)</span>
+            }
+        </div>
+
+        @if (Action.WindowId.HasValue)
+        {
+            <button class="canvas-action-focus"
+                    @onclick="FocusPanel"
+                    title="Focus this panel">
+                ↗
+            </button>
+        }
+
+        <span class="canvas-action-time">@Action.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+    </div>
+}
+
+<style>
+    .canvas-action {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        background: rgba(0,212,255,0.04);
+        border: 1px solid rgba(0,212,255,0.1);
+        margin: 4px 0;
+        font-size: 0.72rem;
+        animation: action-slide-in 200ms ease-out;
+    }
+
+    @@keyframes action-slide-in {
+        from { opacity: 0; transform: translateX(-8px); }
+        to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .canvas-action-icon {
+        font-size: 0.9rem;
+        flex-shrink: 0;
+        color: var(--mls-cyan, #00d4ff);
+    }
+
+    .canvas-action-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .canvas-action-type {
+        color: var(--mls-text-muted, #64748b);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 0.65rem;
+    }
+
+    .canvas-action-panel {
+        color: var(--mls-cyan, #00d4ff);
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .canvas-action-focus {
+        padding: 2px 6px;
+        background: rgba(0,212,255,0.08);
+        border: 1px solid rgba(0,212,255,0.2);
+        border-radius: 4px;
+        color: var(--mls-cyan, #00d4ff);
+        font-size: 0.7rem;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.12s;
+        font-family: inherit;
+    }
+
+    .canvas-action-focus:hover {
+        background: rgba(0,212,255,0.16);
+    }
+
+    .canvas-action-time {
+        font-size: 0.6rem;
+        color: var(--mls-text-faint, #334155);
+        flex-shrink: 0;
+    }
+</style>
+
+@code {
+    /// <summary>The canvas action to render.</summary>
+    [Parameter, EditorRequired] public required CanvasActionRecord Action { get; set; }
+
+    private void FocusPanel()
+    {
+        if (Action.WindowId.HasValue)
+            WM.BringToFront(Action.WindowId.Value);
+    }
+
+    private static string GetIcon(string actionType) => actionType switch
+    {
+        "OpenPanel"          => "◈",
+        "UpdateChart"        => "◬",
+        "HighlightBlock"     => "◉",
+        "ShowDiagram"        => "◫",
+        "AddAnnotation"      => "◎",
+        "OpenDesignerGraph"  => "◫",
+        _                    => "◦",
+    };
+
+    private static string FormatActionType(string actionType) => actionType switch
+    {
+        "OpenPanel"         => "Opened panel",
+        "UpdateChart"       => "Updated chart",
+        "HighlightBlock"    => "Highlighted block",
+        "ShowDiagram"       => "Diagram",
+        "AddAnnotation"     => "Annotation",
+        "OpenDesignerGraph" => "Designer graph",
+        _                   => actionType,
+    };
+}

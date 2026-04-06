@@ -512,4 +512,10 @@
     `;
     document.head.appendChild(style);
 
+// ── AI Chat helpers ──────────────────────────────────────────────────────────
+
+window.scrollElementToBottom = function (el) {
+    if (el) el.scrollTop = el.scrollHeight;
+};
+
 })();
