@@ -3,6 +3,8 @@
 @using MLS.WebApp.Components.Arbitrage
 @using MLS.WebApp.Components.DeFi
 @using MLS.WebApp.Components.Designer
+@using MLS.WebApp.Components.AI
+@using MLS.WebApp.Components.DataLayer
 @inject WindowManager WM
 @inject IJSRuntime JS
 @implements IDisposable
@@ -256,6 +258,8 @@
     .icon--arb      { color: #f59e0b; }
     .icon--defi     { color: #7c3aed; }
     .icon--designer { color: #00d4ff; }
+    .icon--ai       { color: #a78bfa; }
+    .icon--data     { color: #f59e0b; }
 
     @@container canvas (max-width: 768px) {
         .document-window {
@@ -282,6 +286,9 @@
         new("DeFiPositions",     "DeFi Positions",     "◉", "icon--defi"),
         new("HealthMonitor",     "Health Monitor",     "◎", "icon--defi"),
         new("DesignerCanvas",    "Strategy Designer",  "◫", "icon--designer"),
+        new("AIChatPanel",       "AI Assistant",       "◈", "icon--ai"),
+        new("DataFeedManager",   "Data Feed Manager",  "◬", "icon--data"),
+        new("ProviderSettings",  "AI Provider Settings","⚙","icon--ai"),
     ];
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -324,6 +331,9 @@
         "HealthMonitor"     => @<HealthMonitor />,
         "DesignerCanvas"    => @<DesignerCanvas />,
         "PathVisualization" => @<PathVisualization />,
+        "AIChatPanel"       => @<AIChatPanel />,
+        "DataFeedManager"   => @<DataFeedManager />,
+        "ProviderSettings"  => @<ProviderSettings />,
         _                   => @<div class="panel-placeholder">@win.PanelType</div>,
     };
 

@@ -1,0 +1,302 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="msg-bubble msg-bubble--@(Message.Role)">
+    <div class="msg-avatar" aria-hidden="true">
+        @(Message.Role == "user" ? "U" : "AI")
+    </div>
+
+    <div class="msg-body">
+        <div class="msg-meta">
+            <span class="msg-role">@(Message.Role == "user" ? "You" : "Assistant")</span>
+            <span class="msg-time">@Message.Timestamp.ToLocalTime().ToString("HH:mm")</span>
+        </div>
+
+        <div class="msg-content">
+            @foreach (var segment in _segments)
+            {
+                @if (segment.Kind == SegmentKind.Text)
+                {
+                    <span class="msg-text">@segment.Content</span>
+                }
+                else if (segment.Kind == SegmentKind.Code)
+                {
+                    <pre class="msg-code"><code class="lang-@segment.Language">@segment.Content</code></pre>
+                }
+                else if (segment.Kind == SegmentKind.Mermaid)
+                {
+                    <div class="msg-mermaid" id="@segment.DiagramId">@segment.Content</div>
+                }
+            }
+            @if (Message.IsStreaming)
+            {
+                <span class="msg-cursor" aria-hidden="true"></span>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .msg-bubble {
+        display: flex;
+        gap: 10px;
+        padding: 4px 0;
+        animation: msg-enter 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @@keyframes msg-enter {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg-bubble--user {
+        flex-direction: row-reverse;
+    }
+
+    .msg-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.62rem;
+        font-weight: 700;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    .msg-bubble--user .msg-avatar {
+        background: linear-gradient(135deg, rgba(0,212,255,0.25), rgba(124,58,237,0.25));
+        border: 1px solid rgba(0,212,255,0.3);
+        color: var(--mls-cyan, #00d4ff);
+    }
+
+    .msg-bubble--assistant .msg-avatar {
+        background: linear-gradient(135deg, rgba(124,58,237,0.25), rgba(236,72,153,0.2));
+        border: 1px solid rgba(124,58,237,0.3);
+        color: #a78bfa;
+    }
+
+    .msg-body {
+        max-width: 80%;
+        min-width: 0;
+    }
+
+    .msg-bubble--user .msg-body {
+        align-items: flex-end;
+    }
+
+    .msg-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+
+    .msg-bubble--user .msg-meta {
+        flex-direction: row-reverse;
+    }
+
+    .msg-role {
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--mls-text-faint, #334155);
+    }
+
+    .msg-time {
+        font-size: 0.6rem;
+        color: var(--mls-text-faint, #334155);
+    }
+
+    .msg-content {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.82rem;
+        line-height: 1.6;
+        color: var(--mls-text, #e2e8f0);
+        word-break: break-word;
+    }
+
+    .msg-bubble--user .msg-content {
+        background: rgba(0,212,255,0.06);
+        border-color: rgba(0,212,255,0.12);
+    }
+
+    .msg-text {
+        white-space: pre-wrap;
+    }
+
+    .msg-code {
+        background: rgba(0,0,0,0.35);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin: 6px 0;
+        overflow-x: auto;
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: #7dd3fc;
+        display: block;
+    }
+
+    .msg-mermaid {
+        background: rgba(0,0,0,0.25);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 8px;
+        padding: 12px;
+        margin: 6px 0;
+        overflow-x: auto;
+    }
+
+    .msg-mermaid svg {
+        max-width: 100%;
+        height: auto;
+    }
+
+    /* Streaming cursor blink */
+    .msg-cursor {
+        display: inline-block;
+        width: 2px;
+        height: 0.85em;
+        background: var(--mls-cyan, #00d4ff);
+        border-radius: 1px;
+        margin-left: 2px;
+        vertical-align: text-bottom;
+        animation: cursor-blink 900ms step-end infinite;
+    }
+
+    @@keyframes cursor-blink {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0; }
+    }
+</style>
+
+@code {
+    /// <summary>The chat message to render.</summary>
+    [Parameter, EditorRequired] public required ChatMessage Message { get; set; }
+
+    private List<ContentSegment> _segments = [];
+    private bool _mermaidPending;
+
+    protected override void OnParametersSet() => ParseContent(Message.Content);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_mermaidPending) return;
+        _mermaidPending = false;
+
+        foreach (var seg in _segments.Where(s => s.Kind == SegmentKind.Mermaid))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("renderMermaidDiagram", seg.DiagramId, seg.Content)
+                    .ConfigureAwait(false);
+            }
+            catch (JSException ex)
+            {
+                // Mermaid may not be loaded yet; non-fatal.
+                _ = ex;
+            }
+        }
+    }
+
+    // ── Content parser ────────────────────────────────────────────────────────────
+
+    private void ParseContent(string content)
+    {
+        _segments.Clear();
+        _mermaidPending = false;
+
+        if (string.IsNullOrEmpty(content))
+            return;
+
+        var remaining = content.AsSpan();
+        var textBuffer = new System.Text.StringBuilder();
+
+        while (!remaining.IsEmpty)
+        {
+            var fenceIdx = remaining.IndexOf("```");
+            if (fenceIdx < 0)
+            {
+                textBuffer.Append(remaining);
+                break;
+            }
+
+            // Flush text before fence.
+            if (fenceIdx > 0)
+                textBuffer.Append(remaining[..fenceIdx]);
+
+            if (textBuffer.Length > 0)
+            {
+                _segments.Add(new ContentSegment(SegmentKind.Text, textBuffer.ToString()));
+                textBuffer.Clear();
+            }
+
+            remaining = remaining[(fenceIdx + 3)..];
+
+            // Extract optional language hint (up to first newline).
+            var nlIdx = remaining.IndexOf('\n');
+            string lang;
+            if (nlIdx >= 0)
+            {
+                lang = remaining[..nlIdx].Trim().ToString();
+                remaining = remaining[(nlIdx + 1)..];
+            }
+            else
+            {
+                lang = "";
+            }
+
+            // Find closing fence.
+            var closeIdx = remaining.IndexOf("```");
+            string blockContent;
+            if (closeIdx >= 0)
+            {
+                blockContent = remaining[..closeIdx].ToString().TrimEnd();
+                remaining = remaining[(closeIdx + 3)..];
+                if (!remaining.IsEmpty && remaining[0] == '\n')
+                    remaining = remaining[1..];
+            }
+            else
+            {
+                // Unclosed fence — treat rest as code (streaming in progress).
+                blockContent = remaining.ToString();
+                remaining = ReadOnlySpan<char>.Empty;
+            }
+
+            if (string.Equals(lang, "mermaid", StringComparison.OrdinalIgnoreCase))
+            {
+                var diagramId = $"mmd-{Guid.NewGuid():N}";
+                _segments.Add(new ContentSegment(SegmentKind.Mermaid, blockContent, lang, diagramId));
+                _mermaidPending = true;
+            }
+            else
+            {
+                _segments.Add(new ContentSegment(SegmentKind.Code, blockContent, lang));
+            }
+        }
+
+        if (textBuffer.Length > 0)
+            _segments.Add(new ContentSegment(SegmentKind.Text, textBuffer.ToString()));
+    }
+
+    // ── Disposal ──────────────────────────────────────────────────────────────────
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    // ── Types ─────────────────────────────────────────────────────────────────────
+
+    private enum SegmentKind { Text, Code, Mermaid }
+
+    private sealed record ContentSegment(
+        SegmentKind Kind,
+        string Content,
+        string Language = "",
+        string DiagramId = "");
+}

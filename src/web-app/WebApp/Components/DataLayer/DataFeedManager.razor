@@ -1,0 +1,592 @@
+@using MLS.Core.Constants
+@using MLS.Core.Contracts
+@using MLS.Core.Contracts.Designer
+@using System.Text.Json
+@inject IBlockControllerHub Hub
+@implements IAsyncDisposable
+
+<div class="dfm-panel">
+
+    <div class="dfm-header">
+        <span class="dfm-title-icon" aria-hidden="true">◬</span>
+        <span class="dfm-title">Data Feed Manager</span>
+        <div class="dfm-summary">
+            <span class="dfm-pill dfm-pill--ok">@_feeds.Values.Count(f => f.Status == FeedStatus.Active) Active</span>
+            @if (_feeds.Values.Any(f => f.Status == FeedStatus.GapDetected))
+            {
+                <span class="dfm-pill dfm-pill--warn">@_feeds.Values.Count(f => f.Status == FeedStatus.GapDetected) Gap</span>
+            }
+            @if (_feeds.Values.Any(f => f.Status == FeedStatus.Backfilling))
+            {
+                <span class="dfm-pill dfm-pill--info">@_feeds.Values.Count(f => f.Status == FeedStatus.Backfilling) Filling</span>
+            }
+        </div>
+    </div>
+
+    <div class="dfm-table-wrap">
+        @if (_feeds.Count == 0)
+        {
+            <div class="dfm-empty">
+                <span class="dfm-empty-icon" aria-hidden="true">◬</span>
+                <p>No active data feeds.</p>
+                <p class="dfm-empty-sub">Start a data collection job from the Designer canvas.</p>
+            </div>
+        }
+        else
+        {
+            <table class="dfm-table">
+                <thead>
+                    <tr>
+                        <th>Exchange</th>
+                        <th>Symbol</th>
+                        <th>TF</th>
+                        <th>Status</th>
+                        <th>Last Update</th>
+                        <th>Latency</th>
+                        <th>Gap</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var feed in _feeds.Values.OrderBy(f => f.Exchange).ThenBy(f => f.Symbol))
+                    {
+                        <tr class="dfm-row dfm-row--@feed.Status.ToString().ToLowerInvariant()">
+                            <td class="dfm-cell dfm-cell--exchange">@feed.Exchange</td>
+                            <td class="dfm-cell dfm-cell--symbol">@feed.Symbol</td>
+                            <td class="dfm-cell dfm-cell--tf">@feed.Timeframe</td>
+                            <td class="dfm-cell">
+                                <span class="dfm-status-badge dfm-status--@feed.Status.ToString().ToLowerInvariant()">
+                                    <span class="dfm-status-dot"></span>
+                                    @FormatStatus(feed.Status)
+                                </span>
+                            </td>
+                            <td class="dfm-cell dfm-cell--muted">
+                                @FormatAge(feed.LastUpdate)
+                            </td>
+                            <td class="dfm-cell dfm-cell--latency @GetLatencyClass(feed.LatencyMs)">
+                                @(feed.LatencyMs > 0 ? $"{feed.LatencyMs}ms" : "—")
+                            </td>
+                            <td class="dfm-cell">
+                                @if (feed.Status == FeedStatus.GapDetected && feed.GapInfo is not null)
+                                {
+                                    <span class="dfm-gap-info" title="@feed.GapInfo.FullDescription">
+                                        @feed.GapInfo.ShortDescription
+                                    </span>
+                                }
+                                else if (feed.Status == FeedStatus.Backfilling && feed.GapInfo is not null)
+                                {
+                                    <div class="dfm-progress">
+                                        <div class="dfm-progress-bar"></div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="dfm-cell--muted">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @if (_recentEvents.Count > 0)
+    {
+        <div class="dfm-events">
+            <div class="dfm-events-title">Recent Events</div>
+            @foreach (var evt in _recentEvents.TakeLast(8).Reverse())
+            {
+                <div class="dfm-event dfm-event--@evt.Kind">
+                    <span class="dfm-event-icon" aria-hidden="true">@GetEventIcon(evt.Kind)</span>
+                    <span class="dfm-event-text">@evt.Description</span>
+                    <span class="dfm-event-time">@evt.Time.ToLocalTime().ToString("HH:mm:ss")</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .dfm-panel {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--mls-bg, #07080c);
+        overflow: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    .dfm-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+
+    .dfm-title-icon {
+        color: #f59e0b;
+        font-size: 1rem;
+    }
+
+    .dfm-title {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--mls-text, #e2e8f0);
+        flex: 1;
+    }
+
+    .dfm-summary {
+        display: flex;
+        gap: 6px;
+    }
+
+    .dfm-pill {
+        font-size: 0.62rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .dfm-pill--ok {
+        background: rgba(34,197,94,0.08);
+        border: 1px solid rgba(34,197,94,0.2);
+        color: #22c55e;
+    }
+
+    .dfm-pill--warn {
+        background: rgba(245,158,11,0.08);
+        border: 1px solid rgba(245,158,11,0.2);
+        color: #f59e0b;
+    }
+
+    .dfm-pill--info {
+        background: rgba(0,212,255,0.08);
+        border: 1px solid rgba(0,212,255,0.15);
+        color: var(--mls-cyan, #00d4ff);
+    }
+
+    /* ── Table ─────────────────────────────────────────────────────────────── */
+    .dfm-table-wrap {
+        flex: 1;
+        overflow: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.06) transparent;
+    }
+
+    .dfm-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.76rem;
+    }
+
+    .dfm-table thead {
+        position: sticky;
+        top: 0;
+        background: rgba(7,8,12,0.95);
+        backdrop-filter: blur(8px);
+        z-index: 1;
+    }
+
+    .dfm-table th {
+        text-align: left;
+        padding: 8px 12px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--mls-text-faint, #334155);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        white-space: nowrap;
+    }
+
+    .dfm-row {
+        border-bottom: 1px solid rgba(255,255,255,0.025);
+        transition: background 0.12s;
+    }
+
+    .dfm-row:hover {
+        background: rgba(255,255,255,0.02);
+    }
+
+    .dfm-row--gapdetected {
+        background: rgba(245,158,11,0.03);
+    }
+
+    .dfm-row--backfilling {
+        background: rgba(0,212,255,0.03);
+    }
+
+    .dfm-cell {
+        padding: 7px 12px;
+        color: var(--mls-text, #e2e8f0);
+        white-space: nowrap;
+    }
+
+    .dfm-cell--exchange {
+        font-weight: 600;
+        color: var(--mls-text-muted, #64748b);
+        text-transform: uppercase;
+        font-size: 0.65rem;
+    }
+
+    .dfm-cell--symbol {
+        font-weight: 700;
+        color: var(--mls-cyan, #00d4ff);
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .dfm-cell--tf {
+        color: var(--mls-text-muted, #64748b);
+        font-family: monospace;
+    }
+
+    .dfm-cell--muted {
+        color: var(--mls-text-faint, #334155);
+        font-size: 0.7rem;
+    }
+
+    .dfm-cell--latency {
+        font-family: monospace;
+        font-size: 0.72rem;
+    }
+
+    .latency--fast  { color: #22c55e; }
+    .latency--med   { color: #f59e0b; }
+    .latency--slow  { color: #f85149; }
+
+    /* Status badge */
+    .dfm-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 2px 7px;
+        border-radius: 4px;
+    }
+
+    .dfm-status-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .dfm-status--active {
+        background: rgba(34,197,94,0.08);
+        color: #22c55e;
+        border: 1px solid rgba(34,197,94,0.15);
+    }
+
+    .dfm-status--active .dfm-status-dot {
+        animation: dot-live 2s ease-in-out infinite;
+        box-shadow: 0 0 3px currentColor;
+    }
+
+    @@keyframes dot-live {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+
+    .dfm-status--gapdetected {
+        background: rgba(245,158,11,0.1);
+        color: #f59e0b;
+        border: 1px solid rgba(245,158,11,0.2);
+    }
+
+    .dfm-status--backfilling {
+        background: rgba(0,212,255,0.08);
+        color: var(--mls-cyan, #00d4ff);
+        border: 1px solid rgba(0,212,255,0.15);
+    }
+
+    .dfm-status--stale {
+        background: rgba(100,116,139,0.08);
+        color: var(--mls-text-faint, #334155);
+        border: 1px solid rgba(100,116,139,0.1);
+    }
+
+    /* Gap info */
+    .dfm-gap-info {
+        font-size: 0.68rem;
+        color: #f59e0b;
+        cursor: help;
+        border-bottom: 1px dashed rgba(245,158,11,0.3);
+    }
+
+    /* Backfill progress bar */
+    .dfm-progress {
+        height: 3px;
+        background: rgba(0,212,255,0.1);
+        border-radius: 2px;
+        overflow: hidden;
+        width: 60px;
+    }
+
+    .dfm-progress-bar {
+        height: 100%;
+        background: var(--mls-cyan, #00d4ff);
+        border-radius: 2px;
+        animation: dfm-fill 2s ease-in-out infinite;
+        width: 40%;
+    }
+
+    @@keyframes dfm-fill {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(250%); }
+    }
+
+    /* Empty state */
+    .dfm-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 48px 24px;
+        text-align: center;
+        gap: 6px;
+        color: var(--mls-text-muted, #64748b);
+        font-size: 0.8rem;
+    }
+
+    .dfm-empty-icon {
+        font-size: 2rem;
+        color: rgba(245,158,11,0.2);
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .dfm-empty-sub {
+        font-size: 0.7rem;
+        color: var(--mls-text-faint, #334155);
+        margin: 0;
+    }
+
+    /* ── Events log ─────────────────────────────────────────────────────────── */
+    .dfm-events {
+        border-top: 1px solid rgba(255,255,255,0.05);
+        padding: 8px 14px;
+        flex-shrink: 0;
+        max-height: 140px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.06) transparent;
+    }
+
+    .dfm-events-title {
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--mls-text-faint, #334155);
+        margin-bottom: 6px;
+    }
+
+    .dfm-event {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 0;
+        font-size: 0.7rem;
+    }
+
+    .dfm-event-icon {
+        flex-shrink: 0;
+        width: 14px;
+        text-align: center;
+    }
+
+    .dfm-event--gap .dfm-event-icon    { color: #f59e0b; }
+    .dfm-event--filled .dfm-event-icon { color: #22c55e; }
+    .dfm-event--start .dfm-event-icon  { color: var(--mls-cyan, #00d4ff); }
+
+    .dfm-event-text {
+        flex: 1;
+        color: var(--mls-text-muted, #64748b);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .dfm-event-time {
+        font-size: 0.62rem;
+        color: var(--mls-text-faint, #334155);
+        flex-shrink: 0;
+        font-family: monospace;
+    }
+</style>
+
+@code {
+    private readonly Dictionary<string, FeedState> _feeds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<FeedEvent> _recentEvents = [];
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Hub.ConnectAsync(_cts.Token).ConfigureAwait(false);
+        _ = ConsumeEnvelopesAsync(_cts.Token);
+    }
+
+    private async Task ConsumeEnvelopesAsync(CancellationToken ct)
+    {
+        var topics = new[]
+        {
+            MessageTypes.DataCollectionStart,
+            MessageTypes.DataGapDetected,
+            MessageTypes.DataGapFilled,
+        };
+
+        try
+        {
+            await foreach (var env in Hub.GetEnvelopeStreamAsync(topics, ct).ConfigureAwait(false))
+            {
+                switch (env.Type)
+                {
+                    case MessageTypes.DataCollectionStart:
+                        var start = env.Payload.Deserialize<DataCollectionStartPayload>(JsonOpts);
+                        if (start is not null) HandleCollectionStart(start);
+                        break;
+
+                    case MessageTypes.DataGapDetected:
+                        var gap = env.Payload.Deserialize<DataGapDetectedPayload>(JsonOpts);
+                        if (gap is not null) HandleGapDetected(gap);
+                        break;
+
+                    case MessageTypes.DataGapFilled:
+                        var filled = env.Payload.Deserialize<DataGapFilledPayload>(JsonOpts);
+                        if (filled is not null) HandleGapFilled(filled);
+                        break;
+                }
+
+                await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) { /* expected on dispose */ }
+    }
+
+    private void HandleCollectionStart(DataCollectionStartPayload p)
+    {
+        var key = FeedKey(p.Exchange, p.Symbol, p.Timeframe);
+        _feeds[key] = new FeedState(p.Exchange, p.Symbol, p.Timeframe)
+        {
+            Status = FeedStatus.Active,
+            LastUpdate = DateTimeOffset.UtcNow,
+        };
+        AddEvent("start", $"Feed started: {p.Exchange} {p.Symbol} {p.Timeframe}");
+    }
+
+    private void HandleGapDetected(DataGapDetectedPayload p)
+    {
+        var key = FeedKey(p.Exchange, p.Symbol, p.Timeframe);
+        if (!_feeds.TryGetValue(key, out var feed))
+        {
+            feed = new FeedState(p.Exchange, p.Symbol, p.Timeframe);
+            _feeds[key] = feed;
+        }
+
+        feed.Status = FeedStatus.GapDetected;
+        feed.LastUpdate = DateTimeOffset.UtcNow;
+        feed.GapInfo = new GapInfo(
+            ShortDescription: $"{p.MissingCandles} candles missing",
+            FullDescription: $"Gap from {p.GapStart:g} to {p.GapEnd:g} ({p.MissingCandles} candles)");
+
+        AddEvent("gap", $"Gap detected: {p.Exchange} {p.Symbol} {p.Timeframe} — {p.MissingCandles} candles");
+    }
+
+    private void HandleGapFilled(DataGapFilledPayload p)
+    {
+        var key = FeedKey(p.Exchange, p.Symbol, p.Timeframe);
+        if (_feeds.TryGetValue(key, out var feed))
+        {
+            feed.Status = FeedStatus.Active;
+            feed.LatencyMs = (int)p.DurationMs;
+            feed.LastUpdate = DateTimeOffset.UtcNow;
+            feed.GapInfo = null;
+        }
+
+        AddEvent("filled", $"Gap filled: {p.Exchange} {p.Symbol} {p.Timeframe} ({p.CandlesInserted} candles in {p.DurationMs}ms)");
+    }
+
+    private void AddEvent(string kind, string description)
+    {
+        _recentEvents.Add(new FeedEvent(kind, description, DateTimeOffset.UtcNow));
+        if (_recentEvents.Count > 50)
+            _recentEvents.RemoveAt(0);
+    }
+
+    private static string FeedKey(string exchange, string symbol, string tf)
+        => $"{exchange.ToLowerInvariant()}:{symbol.ToUpperInvariant()}:{tf}";
+
+    private static string FormatStatus(FeedStatus s) => s switch
+    {
+        FeedStatus.Active       => "Active",
+        FeedStatus.GapDetected  => "Gap",
+        FeedStatus.Backfilling  => "Filling",
+        FeedStatus.Stale        => "Stale",
+        _                       => s.ToString(),
+    };
+
+    private static string FormatAge(DateTimeOffset t)
+    {
+        var age = DateTimeOffset.UtcNow - t;
+        return age.TotalSeconds < 60
+            ? $"{(int)age.TotalSeconds}s ago"
+            : age.TotalMinutes < 60
+                ? $"{(int)age.TotalMinutes}m ago"
+                : $"{t.ToLocalTime():HH:mm}";
+    }
+
+    private static string GetLatencyClass(int ms) => ms switch
+    {
+        0       => "",
+        < 100   => "latency--fast",
+        < 500   => "latency--med",
+        _       => "latency--slow",
+    };
+
+    private static string GetEventIcon(string kind) => kind switch
+    {
+        "gap"    => "⚠",
+        "filled" => "✓",
+        "start"  => "▶",
+        _        => "•",
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+
+    // ── JSON options ──────────────────────────────────────────────────────────────
+
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    // ── Models ────────────────────────────────────────────────────────────────────
+
+    private enum FeedStatus { Active, GapDetected, Backfilling, Stale }
+
+    private sealed class FeedState(string exchange, string symbol, string timeframe)
+    {
+        public string Exchange { get; } = exchange;
+        public string Symbol { get; } = symbol;
+        public string Timeframe { get; } = timeframe;
+        public FeedStatus Status { get; set; } = FeedStatus.Active;
+        public DateTimeOffset LastUpdate { get; set; } = DateTimeOffset.UtcNow;
+        public int LatencyMs { get; set; }
+        public GapInfo? GapInfo { get; set; }
+    }
+
+    private sealed record GapInfo(string ShortDescription, string FullDescription);
+
+    private sealed record FeedEvent(string Kind, string Description, DateTimeOffset Time);
+}
