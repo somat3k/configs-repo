@@ -25,6 +25,7 @@
                 <option value="google">Google</option>
                 <option value="groq">Groq</option>
                 <option value="openrouter">OpenRouter</option>
+                <option value="vercel">Vercel AI</option>
                 <option value="local">Local / Ollama</option>
             </select>
 
@@ -450,6 +451,10 @@
         _inputText = "";
         _errorMessage = null;
 
+        // Build history from prior completed turns BEFORE adding the current user message
+        // so the query is not duplicated (AI Hub appends query.Query as the final user turn).
+        var history = BuildHistory();
+
         var userMsg = new ChatMessage(
             Id: Guid.NewGuid(),
             Role: "user",
@@ -473,7 +478,7 @@
         StateHasChanged();
         await ScrollToBottomAsync();
 
-        _ = StreamResponseAsync(assistantMsg, BuildHistory(), query);
+        _ = StreamResponseAsync(assistantMsg, history, query);
     }
 
     private async Task StreamResponseAsync(
@@ -525,8 +530,14 @@
 
     private async Task OnKeyDown(KeyboardEventArgs args)
     {
-        if (args.Key == "Enter" && !args.ShiftKey)
-            await SendAsync();
+        if (args.Key != "Enter" || args.ShiftKey)
+            return;
+
+        // Strip any trailing newline the browser may have already inserted before the
+        // keydown event propagated (the query is also trimmed in SendAsync, but stripping
+        // here prevents a brief stale newline in the bound textarea).
+        _inputText = _inputText.TrimEnd('\r', '\n');
+        await SendAsync();
     }
 
     private void ClearHistory()
@@ -540,9 +551,10 @@
 
     private IReadOnlyList<System.Text.Json.JsonElement> BuildHistory()
     {
-        // Include the last 10 completed messages as history context.
-        var completed = _messages
-            .Where(m => !m.IsStreaming && m.Id != _activeMessageId)
+        // Return the last 10 completed turns. Called before the current user message is
+        // added to _messages, so the current query is not duplicated in history.
+        return _messages
+            .Where(m => !m.IsStreaming)
             .TakeLast(10)
             .Select(m => System.Text.Json.JsonSerializer.SerializeToElement(new
             {
@@ -550,7 +562,6 @@
                 content = m.Content,
             }))
             .ToList();
-        return completed;
     }
 
     private async Task ScrollToBottomAsync()

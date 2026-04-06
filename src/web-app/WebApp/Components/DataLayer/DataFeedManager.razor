@@ -24,6 +24,13 @@
     </div>
 
     <div class="dfm-table-wrap">
+        @if (_feedError is not null)
+        {
+            <div class="dfm-stream-error" role="alert">
+                <span>⚠ @_feedError</span>
+                <button @onclick="() => _feedError = null">✕</button>
+            </div>
+        }
         @if (_feeds.Count == 0)
         {
             <div class="dfm-empty">
@@ -42,8 +49,8 @@
                         <th>TF</th>
                         <th>Status</th>
                         <th>Last Update</th>
-                        <th>Latency</th>
-                        <th>Gap</th>
+                        <th>Backfill</th>
+                        <th>Gap / Progress</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -62,20 +69,19 @@
                             <td class="dfm-cell dfm-cell--muted">
                                 @FormatAge(feed.LastUpdate)
                             </td>
-                            <td class="dfm-cell dfm-cell--latency @GetLatencyClass(feed.LatencyMs)">
-                                @(feed.LatencyMs > 0 ? $"{feed.LatencyMs}ms" : "—")
+                            <td class="dfm-cell dfm-cell--latency @GetLatencyClass(feed.BackfillMs)">
+                                @(feed.BackfillMs > 0 ? $"{feed.BackfillMs}ms" : "—")
                             </td>
                             <td class="dfm-cell">
-                                @if (feed.Status == FeedStatus.GapDetected && feed.GapInfo is not null)
+                                @if (feed.Status == FeedStatus.Backfilling && feed.GapInfo is not null)
                                 {
-                                    <span class="dfm-gap-info" title="@feed.GapInfo.FullDescription">
-                                        @feed.GapInfo.ShortDescription
-                                    </span>
-                                }
-                                else if (feed.Status == FeedStatus.Backfilling && feed.GapInfo is not null)
-                                {
-                                    <div class="dfm-progress">
-                                        <div class="dfm-progress-bar"></div>
+                                    <div class="dfm-gap-progress">
+                                        <span class="dfm-gap-info" title="@feed.GapInfo.FullDescription">
+                                            @feed.GapInfo.ShortDescription
+                                        </span>
+                                        <div class="dfm-progress">
+                                            <div class="dfm-progress-bar"></div>
+                                        </div>
                                     </div>
                                 }
                                 else
@@ -312,6 +318,13 @@
         border: 1px solid rgba(100,116,139,0.1);
     }
 
+    /* Gap info + progress combined */
+    .dfm-gap-progress {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
     /* Gap info */
     .dfm-gap-info {
         font-size: 0.68rem;
@@ -388,6 +401,31 @@
         margin-bottom: 6px;
     }
 
+    /* Feed stream error banner */
+    .dfm-stream-error {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: rgba(248,81,73,0.08);
+        border: 1px solid rgba(248,81,73,0.2);
+        border-radius: 6px;
+        color: #f85149;
+        font-size: 0.75rem;
+        margin: 8px 12px;
+    }
+
+    .dfm-stream-error button {
+        margin-left: auto;
+        background: none;
+        border: none;
+        color: inherit;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.75rem;
+        padding: 0 2px;
+    }
+
     .dfm-event {
         display: flex;
         align-items: center;
@@ -426,11 +464,13 @@
     private readonly Dictionary<string, FeedState> _feeds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<FeedEvent> _recentEvents = [];
     private CancellationTokenSource _cts = new();
+    private Task _consumeTask = Task.CompletedTask;
+    private string? _feedError;
 
     protected override async Task OnInitializedAsync()
     {
         await Hub.ConnectAsync(_cts.Token).ConfigureAwait(false);
-        _ = ConsumeEnvelopesAsync(_cts.Token);
+        _consumeTask = ConsumeEnvelopesAsync(_cts.Token);
     }
 
     private async Task ConsumeEnvelopesAsync(CancellationToken ct)
@@ -468,6 +508,12 @@
             }
         }
         catch (OperationCanceledException) { /* expected on dispose */ }
+        catch (Exception ex)
+        {
+            // Surface envelope processing errors in the UI rather than silently halting updates.
+            _feedError = $"Feed stream error: {ex.Message}";
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
     }
 
     private void HandleCollectionStart(DataCollectionStartPayload p)
@@ -490,7 +536,9 @@
             _feeds[key] = feed;
         }
 
-        feed.Status = FeedStatus.GapDetected;
+        // Gap detection automatically triggers backfill in the data layer;
+        // transition directly to Backfilling so the progress bar is shown.
+        feed.Status = FeedStatus.Backfilling;
         feed.LastUpdate = DateTimeOffset.UtcNow;
         feed.GapInfo = new GapInfo(
             ShortDescription: $"{p.MissingCandles} candles missing",
@@ -505,7 +553,7 @@
         if (_feeds.TryGetValue(key, out var feed))
         {
             feed.Status = FeedStatus.Active;
-            feed.LatencyMs = (int)p.DurationMs;
+            feed.BackfillMs = (int)p.DurationMs;
             feed.LastUpdate = DateTimeOffset.UtcNow;
             feed.GapInfo = null;
         }
@@ -562,6 +610,8 @@
     {
         await _cts.CancelAsync().ConfigureAwait(false);
         _cts.Dispose();
+        try { await _consumeTask.ConfigureAwait(false); }
+        catch (OperationCanceledException) { /* expected */ }
     }
 
     // ── JSON options ──────────────────────────────────────────────────────────────
@@ -582,7 +632,8 @@
         public string Timeframe { get; } = timeframe;
         public FeedStatus Status { get; set; } = FeedStatus.Active;
         public DateTimeOffset LastUpdate { get; set; } = DateTimeOffset.UtcNow;
-        public int LatencyMs { get; set; }
+        /// <summary>Wall-clock duration of the last backfill operation in milliseconds.</summary>
+        public int BackfillMs { get; set; }
         public GapInfo? GapInfo { get; set; }
     }
 

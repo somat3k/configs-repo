@@ -107,11 +107,20 @@ public sealed class AICanvasService(
             .WithAutomaticReconnect()
             .Build();
 
-        _connection.On<EnvelopePayload>("ReceiveEnvelope", HandleEnvelope);
+        _connection.On<EnvelopePayload>("ReceiveEnvelope",
+            async env => await HandleEnvelopeAsync(env).ConfigureAwait(false));
+
+        _connection.Reconnecting += ex =>
+        {
+            logger.LogWarning(ex, "AIHub hub reconnecting (clientId={ClientId})", _clientId);
+            OnStateChanged?.Invoke();
+            return Task.CompletedTask;
+        };
 
         _connection.Reconnected += _ =>
         {
             logger.LogInformation("AIHub hub reconnected (clientId={ClientId})", _clientId);
+            OnStateChanged?.Invoke();
             return Task.CompletedTask;
         };
 
@@ -177,7 +186,7 @@ public sealed class AICanvasService(
 
     // ── Envelope handler ──────────────────────────────────────────────────────────
 
-    private void HandleEnvelope(EnvelopePayload envelope)
+    private async Task HandleEnvelopeAsync(EnvelopePayload envelope)
     {
         switch (envelope.Type)
         {
@@ -187,7 +196,8 @@ public sealed class AICanvasService(
                 {
                     Channel<AiResponseChunkPayload> target;
                     lock (_lock) { target = _chunks; }
-                    target.Writer.TryWrite(chunk);
+                    // WriteAsync provides backpressure (Wait mode) — preserves chunk ordering.
+                    await target.Writer.WriteAsync(chunk).ConfigureAwait(false);
                     if (chunk.IsFinal)
                         target.Writer.TryComplete();
                 }
@@ -215,13 +225,7 @@ public sealed class AICanvasService(
 
         if (action.ActionType == "OpenPanel" && action.PanelType is not null)
         {
-            windowId = windowManager.OpenPanel(
-                action.PanelType,
-                action.Title,
-                x: 120,
-                y: 80,
-                width: 860,
-                height: 560);
+            windowId = windowManager.OpenPanel(action.PanelType, action.Title);
 
             logger.LogDebug(
                 "AI canvas: opened panel {PanelType} (winId={WinId})",
@@ -254,7 +258,7 @@ public sealed class AICanvasService(
     private static Channel<AiResponseChunkPayload> CreateResponseChannel()
         => Channel.CreateBounded<AiResponseChunkPayload>(new BoundedChannelOptions(1024)
         {
-            FullMode = BoundedChannelFullMode.DropOldest,
+            FullMode = BoundedChannelFullMode.Wait,
             SingleWriter = true,
             AllowSynchronousContinuations = false,
         });

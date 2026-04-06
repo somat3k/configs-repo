@@ -1,6 +1,7 @@
 @inject IConfiguration Configuration
+@inject IJSRuntime JS
 @inject ILogger<ProviderSettings> Logger
-@implements IDisposable
+@implements IAsyncDisposable
 
 <div class="provider-settings">
 
@@ -55,11 +56,10 @@
                         {
                             <div class="ps-field">
                                 <label class="ps-field-label">API Key</label>
-                                <input class="ps-input"
-                                       type="password"
-                                       placeholder="sk-…"
-                                       @bind="provider.ApiKey"
-                                       autocomplete="off" />
+                                <p class="ps-env-note">
+                                    Set via environment variable
+                                    <code class="ps-env-code">@provider.ApiKeyEnvVar</code>
+                                </p>
                             </div>
                         }
                         else
@@ -74,7 +74,7 @@
                         }
 
                         <div class="ps-field">
-                            <label class="ps-field-label">Default Model</label>
+                            <label class="ps-field-label">Model</label>
                             <input class="ps-input"
                                    type="text"
                                    placeholder="@provider.DefaultModelHint"
@@ -338,6 +338,24 @@
         border-color: rgba(0,212,255,0.3);
     }
 
+    /* API key env-var note */
+    .ps-env-note {
+        font-size: 0.68rem;
+        color: var(--mls-text-muted, #64748b);
+        margin: 2px 0 0;
+        line-height: 1.4;
+    }
+
+    .ps-env-code {
+        background: rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.68rem;
+        color: #7dd3fc;
+    }
+
     .ps-fallback-info {
         font-size: 0.72rem;
         color: var(--mls-text-muted, #64748b);
@@ -408,21 +426,35 @@
     private bool _saving;
     private bool _saved;
     private string? _errorMessage;
+    private Guid _userId = Guid.NewGuid();
     private System.Threading.CancellationTokenSource _cts = new();
 
     private List<ProviderEntry> _providers = [];
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Persist a stable client-side user ID in localStorage (no auth system yet).
+        try
+        {
+            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "mls-pref-user-id")
+                .ConfigureAwait(false);
+            if (Guid.TryParse(stored, out var uid))
+                _userId = uid;
+            else
+                await JS.InvokeVoidAsync("localStorage.setItem", "mls-pref-user-id", _userId.ToString())
+                    .ConfigureAwait(false);
+        }
+        catch (JSException) { /* non-fatal — use generated ID */ }
+
         _providers =
         [
-            new("openai",      "OpenAI",         "◈", false, "gpt-4o"),
-            new("anthropic",   "Anthropic",       "◉", false, "claude-3-5-sonnet-20241022"),
-            new("google",      "Google Gemini",   "◎", false, "gemini-1.5-pro"),
-            new("groq",        "Groq",            "⚡", false, "llama-3.1-70b-versatile"),
-            new("openrouter",  "OpenRouter",      "◬", false, "openai/gpt-4o"),
-            new("vercel",      "Vercel AI",       "△", false, "gpt-4o"),
-            new("local",       "Local / Ollama",  "⬡", true,  "llama3.2"),
+            new("openai",      "OpenAI",         "◈", false, "gpt-4o",                        "OPENAI_API_KEY"),
+            new("anthropic",   "Anthropic",       "◉", false, "claude-3-5-sonnet-20241022",    "ANTHROPIC_API_KEY"),
+            new("google",      "Google Gemini",   "◎", false, "gemini-1.5-pro",                "GOOGLE_API_KEY"),
+            new("groq",        "Groq",            "⚡", false, "llama-3.1-70b-versatile",       "GROQ_API_KEY"),
+            new("openrouter",  "OpenRouter",      "◬", false, "openai/gpt-4o",                 "OPENROUTER_API_KEY"),
+            new("vercel",      "Vercel AI",       "△", false, "gpt-4o",                        "VERCEL_AI_API_KEY"),
+            new("local",       "Local / Ollama",  "⬡", true,  "llama3.2",                      ""),
         ];
     }
 
@@ -440,13 +472,29 @@
             http.BaseAddress = new Uri(aiHubUrl);
             http.Timeout = TimeSpan.FromSeconds(10);
 
+            // Build per-provider configs (model IDs + endpoints) — excludes API keys (env vars only).
+            var providerConfigs = _providers
+                .Where(p => p.Enabled)
+                .ToDictionary(
+                    p => p.Id,
+                    p => new
+                    {
+                        model    = string.IsNullOrWhiteSpace(p.ModelId) ? p.DefaultModelHint : p.ModelId,
+                        endpoint = p.Endpoint,
+                    });
+
             var body = new
             {
-                primary_provider_id    = _primaryProviderId ?? "openai",
-                preferred_model_id     = _providers.FirstOrDefault(p => p.Id == _primaryProviderId)?.ModelId ?? "",
-                fallback_chain         = _providers.Where(p => p.Enabled && p.Id != _primaryProviderId)
-                                                   .Select(p => p.Id)
-                                                   .ToArray(),
+                user_id                = _userId,
+                primary_provider_id   = _primaryProviderId ?? "openai",
+                preferred_model_id    = _providers.FirstOrDefault(p => p.Id == _primaryProviderId) is { } primary
+                                            ? (string.IsNullOrWhiteSpace(primary.ModelId) ? primary.DefaultModelHint : primary.ModelId)
+                                            : "",
+                fallback_chain        = _providers
+                                            .Where(p => p.Enabled && p.Id != _primaryProviderId)
+                                            .Select(p => p.Id)
+                                            .ToArray(),
+                provider_configs_json = System.Text.Json.JsonSerializer.Serialize(providerConfigs),
             };
 
             var response = await http.PostAsJsonAsync("/api/preferences", body, _cts.Token)
@@ -473,7 +521,6 @@
     {
         foreach (var p in _providers)
         {
-            p.ApiKey = "";
             p.ModelId = "";
             p.Enabled = false;
         }
@@ -483,9 +530,9 @@
         _errorMessage = null;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _cts.Cancel();
+        await _cts.CancelAsync().ConfigureAwait(false);
         _cts.Dispose();
     }
 
@@ -496,16 +543,17 @@
         string displayName,
         string icon,
         bool isLocal,
-        string defaultModelHint)
+        string defaultModelHint,
+        string apiKeyEnvVar)
     {
-        public string Id             { get; } = id;
-        public string DisplayName    { get; } = displayName;
-        public string Icon           { get; } = icon;
-        public bool IsLocal          { get; } = isLocal;
+        public string Id              { get; } = id;
+        public string DisplayName     { get; } = displayName;
+        public string Icon            { get; } = icon;
+        public bool IsLocal           { get; } = isLocal;
         public string DefaultModelHint { get; } = defaultModelHint;
+        public string ApiKeyEnvVar    { get; } = apiKeyEnvVar;
 
         public bool Enabled   { get; set; } = id is "openai" or "local";
-        public string ApiKey  { get; set; } = "";
         public string ModelId { get; set; } = "";
         public string Endpoint { get; set; } = isLocal ? "http://localhost:11434" : "";
     }
