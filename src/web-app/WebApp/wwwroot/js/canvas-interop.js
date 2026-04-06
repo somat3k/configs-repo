@@ -441,7 +441,7 @@
         const top = pairs.slice(0, 15);
 
         const chart = new ApexCharts(container, {
-            series: [{ name: 'SHAP', data: top.map(d => parseFloat(d.value.toFixed(4))) }],
+            series: [{ name: 'SHAP', data: top.map(d => d.value) }],
             chart: {
                 type: 'bar',
                 height: '100%',

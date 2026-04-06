@@ -305,7 +305,9 @@
             _regexError = null;
         }
 
-        return result.Reverse().ToList();
+        var list = result.ToList();
+        list.Reverse();
+        return list;
     }
 
     private void ToggleCategory(string category)
