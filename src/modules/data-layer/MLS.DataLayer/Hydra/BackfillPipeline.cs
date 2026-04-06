@@ -138,7 +138,10 @@ public sealed class BackfillPipeline : BackgroundService
             {
                 _logger.LogWarning(ex,
                     "BackfillPipeline: fetch error for [{Exchange}/{Symbol}/{Timeframe}] at {ChunkStart}",
-                    gap.Key.Exchange, gap.Key.Symbol, gap.Key.Timeframe, chunkStart);
+                    HydraUtils.SanitiseFeedId(gap.Key.Exchange),
+                    HydraUtils.SanitiseFeedId(gap.Key.Symbol),
+                    HydraUtils.SanitiseFeedId(gap.Key.Timeframe),
+                    chunkStart);
                 break;
             }
 
@@ -146,7 +149,7 @@ public sealed class BackfillPipeline : BackgroundService
 
             inserted   += await repository.UpsertBatchAsync(batch, ct).ConfigureAwait(false);
             chunkStart  = batch[^1].OpenTime.AddSeconds(
-                GapDetector.TimeframeToSeconds(gap.Key.Timeframe));
+                HydraUtils.TimeframeToSeconds(gap.Key.Timeframe));
         }
 
         sw.Stop();
@@ -154,7 +157,9 @@ public sealed class BackfillPipeline : BackgroundService
         _logger.LogInformation(
             "BackfillPipeline: filled [{Exchange}/{Symbol}/{Timeframe}] " +
             "inserted={Inserted} duration={Duration}ms",
-            gap.Key.Exchange, gap.Key.Symbol, gap.Key.Timeframe,
+            HydraUtils.SanitiseFeedId(gap.Key.Exchange),
+            HydraUtils.SanitiseFeedId(gap.Key.Symbol),
+            HydraUtils.SanitiseFeedId(gap.Key.Timeframe),
             inserted, sw.ElapsedMilliseconds);
 
         // Emit DATA_GAP_FILLED envelope
@@ -187,8 +192,8 @@ public sealed class BackfillPipeline : BackgroundService
     private async Task<IReadOnlyList<CandleEntity>> FetchHyperliquidChunkAsync(
         FeedKey key, DateTimeOffset from, DateTimeOffset to, int limit, CancellationToken ct)
     {
-        var coin     = DeriveCoin(key.Symbol);
-        var interval = NormaliseHlInterval(key.Timeframe);
+        var coin     = HydraUtils.DeriveHyperliquidCoin(key.Symbol);
+        var interval = HydraUtils.NormaliseHyperliquidInterval(key.Timeframe);
 
         var body = JsonSerializer.Serialize(new
         {
@@ -268,18 +273,21 @@ public sealed class BackfillPipeline : BackgroundService
 
         var periodStart = from.ToUnixTimeSeconds();
         var periodEnd   = to.ToUnixTimeSeconds();
-        var poolId      = key.Symbol.ToLowerInvariant().Replace("-", "").Replace("/", "");
 
-        var query = $$"""
-            {
-              "query": "{ poolHourDatas(first: {{limit}}, orderBy: periodStartUnix, orderDirection: asc,
-                where: { pool_: { token0_: {symbol_contains_nocase: \"{{poolId}}\" } }, periodStartUnix_gte: {{periodStart}}, periodStartUnix_lt: {{periodEnd}} }) {
-                  periodStartUnix high low open close volumeToken0 volumeToken1
-              } }"
-            }
-            """;
+        // Sanitise symbol before embedding in the GraphQL query
+        var rawSymbol = key.Symbol.ToLowerInvariant().Replace("-", "").Replace("/", "");
+        var poolId    = HydraUtils.SanitiseFeedId(rawSymbol);
 
-        using var content  = new StringContent(query, Encoding.UTF8, "application/json");
+        var queryBody = new
+        {
+            query = $"{{ poolHourDatas(first: {limit}, orderBy: periodStartUnix, orderDirection: asc," +
+                    $" where: {{ pool_: {{ token0_: {{symbol_contains_nocase: \"{poolId}\" }} }}," +
+                    $" periodStartUnix_gte: {periodStart}, periodStartUnix_lt: {periodEnd} }}) {{" +
+                    $" periodStartUnix high low open close volumeToken0 volumeToken1 }} }}"
+        };
+        var queryJson = JsonSerializer.Serialize(queryBody);
+
+        using var content  = new StringContent(queryJson, Encoding.UTF8, "application/json");
         using var response = await _http.PostAsync(SubgraphUrl, content, ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode) return [];
@@ -323,20 +331,4 @@ public sealed class BackfillPipeline : BackgroundService
 
         return result;
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static string DeriveCoin(string symbol)
-    {
-        var base_ = symbol.Split('-', '/')[0].ToUpperInvariant();
-        return base_.Length > 1 && base_[0] == 'W' ? base_[1..] : base_;
-    }
-
-    private static string NormaliseHlInterval(string tf) => tf switch
-    {
-        "1m"  => "1m",  "3m"  => "3m",  "5m"  => "5m",
-        "15m" => "15m", "30m" => "30m", "1h"  => "1h",
-        "2h"  => "2h",  "4h"  => "4h",  "8h"  => "8h",
-        "1d"  => "1d",  "1w"  => "1w",  _     => tf
-    };
 }

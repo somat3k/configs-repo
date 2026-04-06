@@ -35,7 +35,7 @@ public sealed class CamelotFeedCollector(
         FeedKey key,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        var pollInterval = TimeframeToInterval(key.Timeframe);
+        var pollInterval = HydraUtils.TimeframeToInterval(key.Timeframe);
         var lastSeen     = DateTimeOffset.UtcNow - pollInterval * 2; // seed to fetch current candle
 
         using var timer = new PeriodicTimer(pollInterval);
@@ -53,7 +53,8 @@ public sealed class CamelotFeedCollector(
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "CamelotFeedCollector: subgraph fetch error for {Symbol}", key.Symbol);
+                _logger.LogWarning(ex, "CamelotFeedCollector: subgraph fetch error for {Symbol}",
+                    HydraUtils.SanitiseFeedId(key.Symbol));
                 yield break; // triggers reconnect via FeedCollector base backoff
             }
 
@@ -71,20 +72,24 @@ public sealed class CamelotFeedCollector(
     private async Task<IReadOnlyList<CandleEntity>> FetchCandlesAsync(
         FeedKey key, DateTimeOffset since, CancellationToken ct)
     {
-        // Camelot V3 subgraph: query poolDayData / poolHourData
+        // Camelot V3 subgraph: query poolHourData
         var periodStart = since.ToUnixTimeSeconds();
-        var poolId      = key.Symbol.ToLowerInvariant().Replace("-", "").Replace("/", "");
 
-        var query = $$"""
-            {
-              "query": "{ poolHourDatas(first: 200, orderBy: periodStartUnix, orderDirection: asc,
-                where: { pool_: { token0_: {symbol_contains_nocase: \"{{poolId}}\" } }, periodStartUnix_gt: {{periodStart}} }) {
-                  periodStartUnix high low open close volumeToken0 volumeToken1
-              } }"
-            }
-            """;
+        // Sanitise symbol before embedding in the GraphQL query (strip non-alphanumeric chars)
+        var rawSymbol = key.Symbol.ToLowerInvariant().Replace("-", "").Replace("/", "");
+        var poolId    = HydraUtils.SanitiseFeedId(rawSymbol);
 
-        using var content  = new StringContent(query, Encoding.UTF8, "application/json");
+        // Build via JsonSerializer to avoid any interpolation injection
+        var queryBody = new
+        {
+            query = $"{{ poolHourDatas(first: 200, orderBy: periodStartUnix, orderDirection: asc," +
+                    $" where: {{ pool_: {{ token0_: {{symbol_contains_nocase: \"{poolId}\" }} }}," +
+                    $" periodStartUnix_gt: {periodStart} }}) {{" +
+                    $" periodStartUnix high low open close volumeToken0 volumeToken1 }} }}"
+        };
+        var queryJson = System.Text.Json.JsonSerializer.Serialize(queryBody);
+
+        using var content  = new StringContent(queryJson, Encoding.UTF8, "application/json");
         using var response = await _http.PostAsync(SubgraphUrl, content, ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
@@ -137,19 +142,4 @@ public sealed class CamelotFeedCollector(
 
         return result;
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static TimeSpan TimeframeToInterval(string tf) => tf switch
-    {
-        "1m"  => TimeSpan.FromMinutes(1),
-        "3m"  => TimeSpan.FromMinutes(3),
-        "5m"  => TimeSpan.FromMinutes(5),
-        "15m" => TimeSpan.FromMinutes(15),
-        "30m" => TimeSpan.FromMinutes(30),
-        "1h"  => TimeSpan.FromHours(1),
-        "4h"  => TimeSpan.FromHours(4),
-        "1d"  => TimeSpan.FromDays(1),
-        _     => TimeSpan.FromMinutes(1),
-    };
 }

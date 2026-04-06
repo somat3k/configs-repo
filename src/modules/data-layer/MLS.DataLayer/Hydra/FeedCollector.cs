@@ -39,11 +39,15 @@ public abstract class FeedCollector(ILogger _logger)
     {
         var attempt = 0;
 
+        var safeExchange  = HydraUtils.SanitiseFeedId(key.Exchange);
+        var safeSymbol    = HydraUtils.SanitiseFeedId(key.Symbol);
+        var safeTimeframe = HydraUtils.SanitiseFeedId(key.Timeframe);
+
         while (!ct.IsCancellationRequested)
         {
             _logger.LogInformation(
                 "FeedCollector [{Exchange}/{Symbol}/{Timeframe}] connecting (attempt {N})",
-                key.Exchange, key.Symbol, key.Timeframe, attempt + 1);
+                safeExchange, safeSymbol, safeTimeframe, attempt + 1);
 
             bool connected = false;
             try
@@ -56,7 +60,7 @@ public abstract class FeedCollector(ILogger _logger)
                         attempt   = 0; // reset backoff on successful first yield
                         _logger.LogInformation(
                             "FeedCollector [{Exchange}/{Symbol}/{Timeframe}] stream active",
-                            key.Exchange, key.Symbol, key.Timeframe);
+                            safeExchange, safeSymbol, safeTimeframe);
                     }
 
                     await repository.UpsertBatchAsync([candle], ct).ConfigureAwait(false);
@@ -71,7 +75,7 @@ public abstract class FeedCollector(ILogger _logger)
             {
                 _logger.LogWarning(ex,
                     "FeedCollector [{Exchange}/{Symbol}/{Timeframe}] stream error (attempt {N})",
-                    key.Exchange, key.Symbol, key.Timeframe, attempt + 1);
+                    safeExchange, safeSymbol, safeTimeframe, attempt + 1);
             }
 
             if (ct.IsCancellationRequested) return;
@@ -79,7 +83,7 @@ public abstract class FeedCollector(ILogger _logger)
             var delay = GetBackoff(attempt++);
             _logger.LogInformation(
                 "FeedCollector [{Exchange}/{Symbol}/{Timeframe}] reconnecting in {Delay}",
-                key.Exchange, key.Symbol, key.Timeframe, delay);
+                safeExchange, safeSymbol, safeTimeframe, delay);
 
             await Task.Delay(delay, ct).ConfigureAwait(false);
         }

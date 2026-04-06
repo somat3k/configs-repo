@@ -96,7 +96,7 @@ public sealed class GapDetector(
         }
 
         var elapsed         = now - latestStored.Value;
-        var tfSeconds       = TimeframeToSeconds(key.Timeframe);
+        var tfSeconds       = HydraUtils.TimeframeToSeconds(key.Timeframe);
         var expectedCount   = (int)(elapsed.TotalSeconds / tfSeconds);
 
         if (expectedCount <= 0) return; // feed is current
@@ -116,13 +116,15 @@ public sealed class GapDetector(
         if (ratio >= (1.0 - GapTolerance)) return; // no significant gap
 
         var missingCount = Math.Max(0, expectedCount - actualCount);
-        var gapStart     = FindLastContinuousCandle(latestStored.Value, tfSeconds);
+        var gapStart     = CalculateGapStart(latestStored.Value, tfSeconds);
         var gapEnd       = now;
 
         _logger.LogWarning(
             "GapDetector: gap detected [{Exchange}/{Symbol}/{Timeframe}] " +
             "expected={Expected} actual={Actual} missing={Missing} start={GapStart} end={GapEnd}",
-            key.Exchange, key.Symbol, key.Timeframe,
+            HydraUtils.SanitiseFeedId(key.Exchange),
+            HydraUtils.SanitiseFeedId(key.Symbol),
+            HydraUtils.SanitiseFeedId(key.Timeframe),
             expectedCount, actualCount, missingCount, gapStart, gapEnd);
 
         // Broadcast DATA_GAP_DETECTED envelope to Block Controller
@@ -147,26 +149,9 @@ public sealed class GapDetector(
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Returns the gap start as the last known continuous candle boundary.
-    /// Conservatively steps back one timeframe from <paramref name="latestStored"/>.
+    /// Calculates the start of the gap — the first missing candle time,
+    /// which is one timeframe interval after the last stored candle.
     /// </summary>
-    private static DateTimeOffset FindLastContinuousCandle(DateTimeOffset latestStored, double tfSeconds)
-        => latestStored.AddSeconds(tfSeconds); // the candle immediately after latest is where the gap begins
-
-    /// <summary>Converts a timeframe string to total seconds.</summary>
-    internal static double TimeframeToSeconds(string tf) => tf switch
-    {
-        "1m"  => 60,
-        "3m"  => 180,
-        "5m"  => 300,
-        "15m" => 900,
-        "30m" => 1_800,
-        "1h"  => 3_600,
-        "2h"  => 7_200,
-        "4h"  => 14_400,
-        "8h"  => 28_800,
-        "1d"  => 86_400,
-        "1w"  => 604_800,
-        _     => 60,
-    };
+    private static DateTimeOffset CalculateGapStart(DateTimeOffset latestStored, double tfSeconds)
+        => latestStored.AddSeconds(tfSeconds);
 }

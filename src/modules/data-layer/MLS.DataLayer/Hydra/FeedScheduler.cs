@@ -28,10 +28,14 @@ public sealed class FeedScheduler(
     /// a job for this key was already active.</returns>
     public bool StartFeed(FeedKey key)
     {
+        var safeExchange  = HydraUtils.SanitiseFeedId(key.Exchange);
+        var safeSymbol    = HydraUtils.SanitiseFeedId(key.Symbol);
+        var safeTimeframe = HydraUtils.SanitiseFeedId(key.Timeframe);
+
         if (_jobs.ContainsKey(key))
         {
             _logger.LogDebug("Feed [{Exchange}/{Symbol}/{Timeframe}] already active — skipping start",
-                key.Exchange, key.Symbol, key.Timeframe);
+                safeExchange, safeSymbol, safeTimeframe);
             return false;
         }
 
@@ -40,7 +44,7 @@ public sealed class FeedScheduler(
 
         if (collector is null)
         {
-            _logger.LogWarning("No collector registered for exchange '{Exchange}'", key.Exchange);
+            _logger.LogWarning("No collector registered for exchange '{Exchange}'", safeExchange);
             cts.Dispose();
             return false;
         }
@@ -50,7 +54,7 @@ public sealed class FeedScheduler(
         if (_jobs.TryAdd(key, new FeedJob(task, cts)))
         {
             _logger.LogInformation("Feed [{Exchange}/{Symbol}/{Timeframe}] started",
-                key.Exchange, key.Symbol, key.Timeframe);
+                safeExchange, safeSymbol, safeTimeframe);
             return true;
         }
 
@@ -75,7 +79,9 @@ public sealed class FeedScheduler(
         finally { job.Cts.Dispose(); }
 
         _logger.LogInformation("Feed [{Exchange}/{Symbol}/{Timeframe}] stopped",
-            key.Exchange, key.Symbol, key.Timeframe);
+            HydraUtils.SanitiseFeedId(key.Exchange),
+            HydraUtils.SanitiseFeedId(key.Symbol),
+            HydraUtils.SanitiseFeedId(key.Timeframe));
     }
 
     /// <summary>Returns a snapshot of all currently active feed keys.</summary>

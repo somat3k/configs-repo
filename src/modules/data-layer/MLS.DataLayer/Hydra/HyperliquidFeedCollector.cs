@@ -42,8 +42,8 @@ public sealed class HyperliquidFeedCollector(
         var wsUri = new Uri(opts.HyperliquidWsUrl);
 
         // Derive coin name: strip leading 'W' (e.g. WBTC→BTC) and normalise
-        var coin     = DeriveHyperliquidCoin(key.Symbol);
-        var interval = NormaliseInterval(key.Timeframe);
+        var coin     = HydraUtils.DeriveHyperliquidCoin(key.Symbol);
+        var interval = HydraUtils.NormaliseHyperliquidInterval(key.Timeframe);
 
         using var ws = new ClientWebSocket();
 
@@ -71,7 +71,8 @@ public sealed class HyperliquidFeedCollector(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogWarning(ex, "HyperliquidFeedCollector: receive error on {Symbol}", key.Symbol);
+                var safeSymbol = HydraUtils.SanitiseFeedId(key.Symbol);
+        _logger.LogWarning(ex, "HyperliquidFeedCollector: receive error on {Symbol}", safeSymbol);
                 yield break;
             }
 
@@ -89,29 +90,6 @@ public sealed class HyperliquidFeedCollector(
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static string DeriveHyperliquidCoin(string symbol)
-    {
-        var base_ = symbol.Split('-', '/')[0].ToUpperInvariant();
-        return base_.Length > 1 && base_[0] == 'W' ? base_[1..] : base_;
-    }
-
-    /// <summary>Maps MLS timeframe strings to HYPERLIQUID interval strings.</summary>
-    private static string NormaliseInterval(string tf) => tf switch
-    {
-        "1m"  => "1m",
-        "3m"  => "3m",
-        "5m"  => "5m",
-        "15m" => "15m",
-        "30m" => "30m",
-        "1h"  => "1h",
-        "2h"  => "2h",
-        "4h"  => "4h",
-        "8h"  => "8h",
-        "1d"  => "1d",
-        "1w"  => "1w",
-        _     => tf
-    };
 
     private static CandleEntity? ParseCandle(ReadOnlyMemory<byte> data, FeedKey key)
     {

@@ -37,7 +37,9 @@ public sealed class FeedController(
         }
 
         _logger.LogInformation("FeedController: started [{Exchange}/{Symbol}/{Timeframe}]",
-            request.Exchange, request.Symbol, request.Timeframe);
+            HydraUtils.SanitiseFeedId(request.Exchange),
+            HydraUtils.SanitiseFeedId(request.Symbol),
+            HydraUtils.SanitiseFeedId(request.Timeframe));
 
         return Accepted(new { message = "Feed started", key });
     }
@@ -58,7 +60,9 @@ public sealed class FeedController(
         await _scheduler.StopFeedAsync(key).ConfigureAwait(false);
 
         _logger.LogInformation("FeedController: stopped [{Exchange}/{Symbol}/{Timeframe}]",
-            exchange, symbol, timeframe);
+            HydraUtils.SanitiseFeedId(exchange),
+            HydraUtils.SanitiseFeedId(symbol),
+            HydraUtils.SanitiseFeedId(timeframe));
 
         return Ok(new { message = "Feed stopped", key });
     }
