@@ -1,0 +1,320 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="train-progress" id="tp-@_id">
+
+    @* ── Header ─────────────────────────────────────────────────────────── *@
+    <div class="tp-header">
+        <div class="tp-header-left">
+            <span class="tp-icon" style="color:#7c3aed">⊞</span>
+            <span class="tp-title">Train Progress</span>
+            @if (_isTraining)
+            {
+                <span class="tp-live-badge">LIVE</span>
+            }
+        </div>
+        <div class="tp-meta">
+            @if (_modelType is not null)
+            {
+                <span class="tp-model-badge">@_modelType.ToUpperInvariant()</span>
+            }
+            @if (_totalEpochs > 0)
+            {
+                <span class="tp-epoch-counter mono">@_currentEpoch / @_totalEpochs</span>
+            }
+        </div>
+    </div>
+
+    <div class="tp-accent-bar"></div>
+
+    @* ── KPI strip ───────────────────────────────────────────────────────── *@
+    @if (_currentEpoch > 0)
+    {
+        <div class="tp-kpi-strip">
+            <div class="tp-kpi">
+                <span class="tp-kpi-val mono">@_trainLoss.ToString("F4")</span>
+                <span class="tp-kpi-lbl">Train Loss</span>
+            </div>
+            <div class="tp-kpi">
+                <span class="tp-kpi-val mono">@_valLoss.ToString("F4")</span>
+                <span class="tp-kpi-lbl">Val Loss</span>
+            </div>
+            <div class="tp-kpi">
+                <span class="tp-kpi-val mono positive">@_accuracy.ToString("P2")</span>
+                <span class="tp-kpi-lbl">Accuracy</span>
+            </div>
+            <div class="tp-kpi">
+                <span class="tp-kpi-val mono">@_elapsed</span>
+                <span class="tp-kpi-lbl">Elapsed</span>
+            </div>
+        </div>
+    }
+
+    @* ── Epoch progress bar ──────────────────────────────────────────────── *@
+    @if (_totalEpochs > 0)
+    {
+        var pct = (double)_currentEpoch / _totalEpochs * 100;
+        <div class="tp-progress-bar-wrap">
+            <div class="tp-progress-bar" style="width:@(pct.ToString("F1"))%"></div>
+        </div>
+    }
+
+    @* ── Loss chart (ApexCharts via JS interop) ───────────────────────────── *@
+    <div class="tp-section-label">Loss Curves</div>
+    <div id="tp-loss-@_id" class="tp-chart"></div>
+
+    @* ── Accuracy chart ──────────────────────────────────────────────────── *@
+    <div class="tp-section-label">Accuracy</div>
+    <div id="tp-accuracy-@_id" class="tp-chart tp-chart--sm"></div>
+
+    @* ── Confusion matrix (shown on complete) ────────────────────────────── *@
+    @if (_isComplete)
+    {
+        <div class="tp-section-label">Confusion Matrix</div>
+        <div id="tp-confusion-@_id" class="tp-chart"></div>
+
+        <div class="tp-section-label">SHAP Feature Importance</div>
+        <div id="tp-shap-@_id" class="tp-chart tp-chart--sm"></div>
+    }
+
+    @* ── Idle / waiting state ────────────────────────────────────────────── *@
+    @if (_currentEpoch == 0 && !_isTraining)
+    {
+        <div class="tp-idle">
+            <span class="tp-idle-icon">◎</span>
+            <span class="tp-idle-text">Waiting for training job…</span>
+        </div>
+    }
+</div>
+
+<style>
+    .train-progress {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--mls-surface, #0e1018);
+        overflow-y: auto;
+    }
+
+    .tp-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 14px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+    .tp-header-left { display: flex; align-items: center; gap: 7px; }
+    .tp-meta { display: flex; align-items: center; gap: 8px; }
+    .tp-icon { font-size: 0.85rem; }
+    .tp-title { font-weight: 700; font-size: 0.82rem; color: var(--mls-text, #e2e8f0); }
+
+    .tp-live-badge {
+        padding: 1px 7px;
+        border-radius: 10px;
+        background: rgba(244,63,94,0.15);
+        border: 1px solid rgba(244,63,94,0.3);
+        color: #f43f5e;
+        font-size: 0.58rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        animation: live-pulse 1s ease-in-out infinite;
+    }
+    .tp-model-badge {
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: rgba(124,58,237,0.12);
+        border: 1px solid rgba(124,58,237,0.25);
+        color: #a78bfa;
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+    }
+    .tp-epoch-counter {
+        font-size: 0.72rem;
+        color: rgba(255,255,255,0.4);
+    }
+
+    .tp-accent-bar {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(124,58,237,0.4), rgba(0,212,255,0.3), transparent);
+        flex-shrink: 0;
+    }
+
+    .tp-kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        padding: 8px 12px;
+        flex-shrink: 0;
+    }
+    .tp-kpi {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        background: rgba(255,255,255,0.025);
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 8px;
+        padding: 6px 4px;
+    }
+    .tp-kpi-val {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: #e2e8f0;
+        font-variant-numeric: tabular-nums;
+    }
+    .tp-kpi-lbl {
+        font-size: 0.57rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: rgba(255,255,255,0.25);
+        font-weight: 600;
+    }
+
+    .tp-progress-bar-wrap {
+        height: 3px;
+        background: rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+    .tp-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #7c3aed, #00d4ff);
+        transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    .tp-section-label {
+        padding: 8px 14px 3px;
+        font-size: 0.6rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255,255,255,0.2);
+        flex-shrink: 0;
+    }
+
+    .tp-chart {
+        height: 160px;
+        margin: 0 12px 8px;
+        flex-shrink: 0;
+    }
+    .tp-chart--sm { height: 100px; }
+
+    .tp-idle {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        flex: 1;
+        color: rgba(255,255,255,0.15);
+    }
+    .tp-idle-icon { font-size: 2rem; opacity: 0.3; }
+    .tp-idle-text { font-size: 0.75rem; font-style: italic; }
+
+    .positive { color: #22c55e; }
+    .mono { font-family: var(--font-mono, monospace); font-variant-numeric: tabular-nums; }
+    @@keyframes live-pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+</style>
+
+@code {
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+    private bool _isTraining;
+    private bool _isComplete;
+    private string? _modelType;
+    private int _currentEpoch;
+    private int _totalEpochs;
+    private double _trainLoss;
+    private double _valLoss;
+    private double _accuracy;
+    private string _elapsed = "00:00";
+    private DateTimeOffset _trainStart;
+    private CancellationTokenSource _cts = new();
+    private bool _chartsInitialised;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(
+                [MLS.Core.Constants.MessageTypes.TrainingJobProgress,
+                 MLS.Core.Constants.MessageTypes.TrainingJobComplete],
+                _cts.Token)
+            .ConfigureAwait(false))
+        {
+            var p = envelope.Payload;
+
+            if (envelope.Type == MLS.Core.Constants.MessageTypes.TrainingJobProgress)
+            {
+                if (!_isTraining)
+                {
+                    _isTraining  = true;
+                    _trainStart  = DateTimeOffset.UtcNow;
+                    _modelType   = p.TryGetProperty("model_type",   out var modelTypeProp) ? modelTypeProp.GetString() : null;
+                    _totalEpochs = p.TryGetProperty("total_epochs", out var te) ? te.GetInt32() : 0;
+                }
+
+                _currentEpoch = p.TryGetProperty("epoch",      out var ep) ? ep.GetInt32()    : _currentEpoch;
+                _trainLoss    = p.TryGetProperty("train_loss", out var tl) ? tl.GetDouble()   : _trainLoss;
+                _valLoss      = p.TryGetProperty("val_loss",   out var vl) ? vl.GetDouble()   : _valLoss;
+                _accuracy     = p.TryGetProperty("accuracy",   out var ac) ? ac.GetDouble()   : _accuracy;
+                _elapsed      = FormatElapsed(DateTimeOffset.UtcNow - _trainStart);
+
+                if (!_chartsInitialised)
+                {
+                    await JS.InvokeVoidAsync("initTrainCharts", $"tp-loss-{_id}", $"tp-accuracy-{_id}")
+                        .ConfigureAwait(false);
+                    _chartsInitialised = true;
+                }
+
+                await JS.InvokeVoidAsync("updateApexSeries", $"tp-loss-{_id}",
+                    "train_loss", _currentEpoch, _trainLoss).ConfigureAwait(false);
+                await JS.InvokeVoidAsync("updateApexSeries", $"tp-loss-{_id}",
+                    "val_loss", _currentEpoch, _valLoss).ConfigureAwait(false);
+                await JS.InvokeVoidAsync("updateApexSeries", $"tp-accuracy-{_id}",
+                    "accuracy", _currentEpoch, _accuracy).ConfigureAwait(false);
+            }
+            else if (envelope.Type == MLS.Core.Constants.MessageTypes.TrainingJobComplete)
+            {
+                _isTraining = false;
+                _isComplete = true;
+
+                var confusionMatrix = p.TryGetProperty("confusion_matrix", out var cm)
+                    ? cm.EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetInt32()).ToArray()).ToArray()
+                    : null;
+                var shapValues = p.TryGetProperty("shap_values", out var sv)
+                    ? sv.EnumerateArray().Select(v => v.GetDouble()).ToArray()
+                    : null;
+                var featureNames = p.TryGetProperty("feature_names", out var fn)
+                    ? fn.EnumerateArray().Select(v => v.GetString() ?? "").ToArray()
+                    : null;
+
+                await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+
+                if (confusionMatrix is not null)
+                    await JS.InvokeVoidAsync("renderConfusionMatrix", $"tp-confusion-{_id}", confusionMatrix)
+                        .ConfigureAwait(false);
+
+                if (shapValues is not null && featureNames is not null)
+                    await JS.InvokeVoidAsync("renderShapChart", $"tp-shap-{_id}", featureNames, shapValues)
+                        .ConfigureAwait(false);
+            }
+
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private static string FormatElapsed(TimeSpan ts)
+        => ts.TotalHours >= 1
+            ? $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

@@ -1,0 +1,319 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="inference-metrics" id="im-@_id">
+
+    @* ── Header ─────────────────────────────────────────────────────────── *@
+    <div class="im-header">
+        <div class="im-header-left">
+            <span class="im-icon" style="color:#00d4ff">⚡</span>
+            <span class="im-title">Inference Metrics</span>
+        </div>
+        <div class="im-tabs">
+            @foreach (var tab in new[] { "all", "model-t", "model-a", "model-d" })
+            {
+                var t = tab;
+                <button class="im-tab @(_modelFilter == t ? "im-tab--active" : "")"
+                        @onclick="() => _modelFilter = t">
+                    @t.ToUpperInvariant()
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="im-accent-bar"></div>
+
+    @* ── KPI row ─────────────────────────────────────────────────────────── *@
+    <div class="im-kpi-row">
+        <div class="im-kpi">
+            <span class="im-kpi-value mono">@_totalCount</span>
+            <span class="im-kpi-label">Total</span>
+        </div>
+        <div class="im-kpi">
+            <span class="im-kpi-value mono">@_throughput.ToString("F1")</span>
+            <span class="im-kpi-label">req/s</span>
+        </div>
+        <div class="im-kpi">
+            <span class="im-kpi-value mono @(_p50 > 10 ? "warn-value" : "")">@_p50.ToString("F1")ms</span>
+            <span class="im-kpi-label">p50</span>
+        </div>
+        <div class="im-kpi">
+            <span class="im-kpi-value mono @(_p99 > 50 ? "warn-value" : "")">@_p99.ToString("F1")ms</span>
+            <span class="im-kpi-label">p99</span>
+        </div>
+    </div>
+
+    @* ── Latency histogram ───────────────────────────────────────────────── *@
+    <div class="im-section-label">Latency Distribution</div>
+    <div class="im-histogram">
+        @foreach (var bucket in _buckets)
+        {
+            var pct = _maxBucketCount > 0 ? (double)bucket.Count / _maxBucketCount * 100 : 0;
+            <div class="im-bucket">
+                <div class="im-bucket-bar-track">
+                    <div class="im-bucket-bar" style="height:@(pct.ToString("F0"))%"></div>
+                </div>
+                <span class="im-bucket-label">@bucket.Label</span>
+                <span class="im-bucket-count">@bucket.Count</span>
+            </div>
+        }
+    </div>
+
+    @* ── Throughput sparkline ─────────────────────────────────────────────── *@
+    <div class="im-section-label">Throughput (60s)</div>
+    <div class="im-sparkline-wrap">
+        <svg viewBox="0 0 300 36" preserveAspectRatio="none" class="im-sparkline">
+            @if (_throughputHistory.Count >= 2)
+            {
+                var max = Math.Max(1, _throughputHistory.Max());
+                var step = 300.0 / (_throughputHistory.Count - 1);
+                var pts = _throughputHistory.Select((v, i) =>
+                {
+                    var x = i * step;
+                    var y = 32 - v / max * 28;
+                    return $"{x:F1},{y:F1}";
+                });
+                var pointsStr = string.Join(" ", pts);
+                <polyline points="@pointsStr"
+                          fill="none"
+                          stroke="#00d4ff"
+                          stroke-width="1.5"
+                          stroke-linejoin="round" />
+            }
+        </svg>
+    </div>
+</div>
+
+<style>
+    .inference-metrics {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--mls-surface, #0e1018);
+        overflow: hidden;
+    }
+
+    .im-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+    .im-header-left { display: flex; align-items: center; gap: 7px; }
+    .im-icon { font-size: 0.85rem; }
+    .im-title { font-weight: 700; font-size: 0.82rem; color: var(--mls-text, #e2e8f0); }
+
+    .im-tabs { display: flex; gap: 2px; }
+    .im-tab {
+        padding: 3px 9px;
+        font-size: 0.63rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        border-radius: 4px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: rgba(255,255,255,0.3);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .im-tab:hover { color: rgba(255,255,255,0.6); }
+    .im-tab--active {
+        background: rgba(0,212,255,0.1);
+        border-color: rgba(0,212,255,0.25);
+        color: #00d4ff;
+    }
+
+    .im-accent-bar {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0,212,255,0.4), transparent);
+        flex-shrink: 0;
+    }
+
+    .im-kpi-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        padding: 10px 12px;
+        flex-shrink: 0;
+    }
+    .im-kpi {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        background: rgba(255,255,255,0.025);
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 8px;
+        padding: 8px 4px;
+    }
+    .im-kpi-value {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #e2e8f0;
+        font-variant-numeric: tabular-nums;
+    }
+    .im-kpi-label {
+        font-size: 0.58rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255,255,255,0.25);
+        font-weight: 600;
+    }
+    .warn-value { color: #f59e0b; }
+    .mono { font-family: var(--font-mono, monospace); }
+
+    .im-section-label {
+        padding: 4px 14px 2px;
+        font-size: 0.6rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255,255,255,0.2);
+        flex-shrink: 0;
+    }
+
+    .im-histogram {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        padding: 4px 14px 8px;
+        height: 90px;
+        flex-shrink: 0;
+    }
+    .im-bucket { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 3px; height: 100%; }
+    .im-bucket-bar-track {
+        flex: 1;
+        width: 100%;
+        background: rgba(255,255,255,0.04);
+        border-radius: 3px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        overflow: hidden;
+    }
+    .im-bucket-bar {
+        width: 100%;
+        background: linear-gradient(180deg, #00d4ff, #0ea5e9);
+        border-radius: 3px 3px 0 0;
+        transition: height 0.5s cubic-bezier(0.4,0,0.2,1);
+        min-height: 2px;
+    }
+    .im-bucket-label {
+        font-size: 0.55rem;
+        color: rgba(255,255,255,0.2);
+        text-align: center;
+        white-space: nowrap;
+    }
+    .im-bucket-count {
+        font-size: 0.6rem;
+        font-family: var(--font-mono, monospace);
+        color: rgba(255,255,255,0.35);
+    }
+
+    .im-sparkline-wrap {
+        padding: 4px 14px 12px;
+        flex-shrink: 0;
+        background: rgba(255,255,255,0.01);
+        border-top: 1px solid rgba(255,255,255,0.04);
+    }
+    .im-sparkline { width: 100%; height: 40px; display: block; }
+</style>
+
+@code {
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+    private string _modelFilter = "all";
+
+    // KPIs
+    private long _totalCount;
+    private double _throughput;
+    private double _p50;
+    private double _p99;
+
+    // Latency histogram buckets: <1ms, 1–5ms, 5–10ms, 10–50ms, >50ms
+    private readonly LatencyBucket[] _buckets =
+    [
+        new("<1ms",  0),
+        new("1-5ms", 0),
+        new("5-10ms",0),
+        new("10-50ms",0),
+        new(">50ms", 0),
+    ];
+    private int _maxBucketCount;
+
+    // Throughput history (60 readings × 1 s)
+    private readonly List<double> _throughputHistory = new(60);
+    private int _windowCount;
+    private DateTimeOffset _windowStart = DateTimeOffset.UtcNow;
+
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync([MLS.Core.Constants.MessageTypes.InferenceResult], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            var p = envelope.Payload;
+            var modelType = p.TryGetProperty("model_type", out var modelTypeProp) ? modelTypeProp.GetString() : null;
+            if (_modelFilter != "all" && modelType != _modelFilter) continue;
+
+            if (!p.TryGetProperty("latency_ms", out var latProp)) continue;
+            var latMs = latProp.GetDouble();
+
+            _totalCount++;
+            _windowCount++;
+
+            // Bucket
+            var bucketIdx = latMs < 1 ? 0 : latMs < 5 ? 1 : latMs < 10 ? 2 : latMs < 50 ? 3 : 4;
+            _buckets[bucketIdx] = _buckets[bucketIdx] with { Count = _buckets[bucketIdx].Count + 1 };
+            _maxBucketCount = _buckets.Max(b => b.Count);
+
+            // Throughput window (1-second buckets)
+            var now = DateTimeOffset.UtcNow;
+            if ((now - _windowStart).TotalSeconds >= 1)
+            {
+                _throughput = _windowCount / (now - _windowStart).TotalSeconds;
+                if (_throughputHistory.Count >= 60) _throughputHistory.RemoveAt(0);
+                _throughputHistory.Add(_throughput);
+                _windowCount  = 0;
+                _windowStart  = now;
+            }
+
+            // p50 / p99 approximation from bucket midpoints
+            (_p50, _p99) = ComputePercentiles();
+
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private (double p50, double p99) ComputePercentiles()
+    {
+        if (_totalCount == 0) return (0, 0);
+        var total = (double)_totalCount;
+        double p50 = 0, p99 = 0;
+        var midpoints = new[] { 0.5, 3.0, 7.5, 30.0, 75.0 };
+        long cumulative = 0;
+        for (var i = 0; i < _buckets.Length; i++)
+        {
+            cumulative += _buckets[i].Count;
+            if (p50 == 0 && cumulative / total >= 0.50) p50 = midpoints[i];
+            if (p99 == 0 && cumulative / total >= 0.99) p99 = midpoints[i];
+        }
+        if (p99 == 0) p99 = midpoints[^1];
+        return (p50, p99);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+
+    private sealed record LatencyBucket(string Label, int Count);
+}

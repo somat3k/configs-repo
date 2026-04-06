@@ -1,0 +1,306 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="model-registry">
+
+    @* ── Header ─────────────────────────────────────────────────────────── *@
+    <div class="mr-header">
+        <div class="mr-header-left">
+            <span class="mr-icon" style="color:#7c3aed">⬡</span>
+            <span class="mr-title">Model Registry</span>
+        </div>
+        <div class="mr-header-right">
+            <div class="live-dot"></div>
+            <span class="mr-count">@_models.Count models</span>
+        </div>
+    </div>
+
+    <div class="mr-accent-bar"></div>
+
+    @* ── Type filter tabs ────────────────────────────────────────────────── *@
+    <div class="mr-tabs">
+        @foreach (var tab in new[] { "all", "model-t", "model-a", "model-d" })
+        {
+            var t = tab;
+            <button class="mr-tab @(_typeFilter == t ? "mr-tab--active" : "")"
+                    @onclick="() => _typeFilter = t">
+                @t.ToUpperInvariant()
+            </button>
+        }
+    </div>
+
+    @* ── Table ───────────────────────────────────────────────────────────── *@
+    <div class="mr-table-wrapper">
+        <table class="premium-table mr-table">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Type</th>
+                    <th>Version</th>
+                    <th>Accuracy</th>
+                    <th>F1 Score</th>
+                    <th>Exported</th>
+                    <th>Status</th>
+                    <th>Lineage</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var m in FilteredModels())
+                {
+                    var model = m;
+                    <tr @key="model.ModelId">
+                        <td class="mr-name-cell">
+                            <span class="mr-name">@model.Name</span>
+                        </td>
+                        <td>
+                            <span class="mr-type-badge @GetTypeBadgeClass(model.ModelType)">@model.ModelType</span>
+                        </td>
+                        <td class="mono">v@model.Version</td>
+                        <td class="@(model.Accuracy >= 0.8 ? "positive" : model.Accuracy >= 0.6 ? "" : "negative")">
+                            @(model.Accuracy.ToString("P1"))
+                        </td>
+                        <td>@model.F1Score.ToString("F3")</td>
+                        <td class="mr-date mono">@model.ExportedAt.ToString("MMM dd HH:mm")</td>
+                        <td>
+                            <span class="mr-status-badge @GetStatusClass(model.Status)">@model.Status</span>
+                        </td>
+                        <td class="mr-lineage-cell">
+                            <span class="lineage-step">Run</span>
+                            <span class="lineage-arrow">→</span>
+                            <span class="lineage-step">ONNX</span>
+                            <span class="lineage-arrow">→</span>
+                            <span class="lineage-step @(model.Status == "deployed" ? "lineage-step--active" : "")">
+                                Live
+                            </span>
+                        </td>
+                    </tr>
+                }
+                @if (!FilteredModels().Any())
+                {
+                    <tr>
+                        <td colspan="8" class="mr-empty">No models registered</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .model-registry {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--mls-surface, #0e1018);
+        overflow: hidden;
+    }
+
+    .mr-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 14px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+    .mr-header-left { display: flex; align-items: center; gap: 7px; }
+    .mr-header-right { display: flex; align-items: center; gap: 6px; }
+    .mr-icon { font-size: 0.85rem; }
+    .mr-title { font-weight: 700; font-size: 0.82rem; color: var(--mls-text, #e2e8f0); }
+    .mr-count { font-size: 0.7rem; color: rgba(255,255,255,0.3); }
+
+    .mr-accent-bar {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(124,58,237,0.4), rgba(0,212,255,0.3), transparent);
+        flex-shrink: 0;
+    }
+
+    .mr-tabs {
+        display: flex;
+        gap: 2px;
+        padding: 6px 12px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        flex-shrink: 0;
+    }
+    .mr-tab {
+        padding: 4px 12px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        border-radius: 4px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: rgba(255,255,255,0.35);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .mr-tab:hover { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.04); }
+    .mr-tab--active {
+        background: rgba(124,58,237,0.15);
+        border-color: rgba(124,58,237,0.3);
+        color: #a78bfa;
+    }
+
+    .mr-table-wrapper { flex: 1; overflow-y: auto; }
+
+    .premium-table { width: 100%; border-collapse: collapse; }
+    .premium-table thead tr {
+        background: rgba(255,255,255,0.02);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .premium-table th {
+        padding: 7px 12px;
+        font-size: 0.63rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: rgba(255,255,255,0.3);
+        text-align: left;
+        white-space: nowrap;
+    }
+    .premium-table td {
+        padding: 8px 12px;
+        font-size: 0.75rem;
+        color: var(--mls-text, #e2e8f0);
+        border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .premium-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+    .mr-name { font-weight: 600; color: #e2e8f0; }
+    .mono { font-family: var(--font-mono, monospace); font-variant-numeric: tabular-nums; }
+    .mr-date { color: rgba(255,255,255,0.35); font-size: 0.7rem; }
+    .mr-empty { text-align: center; padding: 24px; color: rgba(255,255,255,0.2); font-style: italic; }
+
+    .mr-type-badge {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+    }
+    .type-model-t { background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.25); color: #00d4ff; }
+    .type-model-a { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); color: #f59e0b; }
+    .type-model-d { background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.25);  color: #22c55e; }
+    .type-unknown  { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); }
+
+    .mr-status-badge {
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.63rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+    .status-deployed { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25); color: #22c55e; }
+    .status-staged   { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); color: #f59e0b; }
+    .status-archived { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.3); }
+
+    .mr-lineage-cell { display: flex; align-items: center; gap: 4px; }
+    .lineage-step {
+        font-size: 0.62rem;
+        color: rgba(255,255,255,0.25);
+        padding: 1px 5px;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 3px;
+    }
+    .lineage-step--active { color: #22c55e; border-color: rgba(34,197,94,0.3); }
+    .lineage-arrow { color: rgba(255,255,255,0.15); font-size: 0.65rem; }
+
+    .positive { color: #22c55e; }
+    .negative { color: #f43f5e; }
+
+    .live-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: #22c55e;
+        animation: live-pulse 2s ease-in-out infinite;
+    }
+    @@keyframes live-pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+</style>
+
+@code {
+    private string _typeFilter = "all";
+    private readonly List<ModelEntry> _models = [];
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(
+                [MLS.Core.Constants.MessageTypes.TrainingJobComplete,
+                 MLS.Core.Constants.MessageTypes.InferenceResult],
+                _cts.Token)
+            .ConfigureAwait(false))
+        {
+            var p = envelope.Payload;
+            if (envelope.Type == MLS.Core.Constants.MessageTypes.TrainingJobComplete)
+            {
+                var entry = new ModelEntry(
+                    ModelId: p.TryGetProperty("model_id",    out var modelIdProp)   ? modelIdProp.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString(),
+                    Name:    p.TryGetProperty("model_key",   out var mk) ? mk.GetString() ?? "unknown" : "unknown",
+                    ModelType: p.TryGetProperty("model_type", out var modelTypeProp) ? modelTypeProp.GetString() ?? "unknown" : "unknown",
+                    Version: p.TryGetProperty("version",     out var v)  ? v.GetInt32() : 1,
+                    Accuracy: p.TryGetProperty("accuracy",   out var ac) ? ac.GetDouble() : 0,
+                    F1Score:  p.TryGetProperty("f1_score",   out var f1) ? f1.GetDouble() : 0,
+                    ExportedAt: DateTimeOffset.UtcNow,
+                    Status: "staged");
+
+                var existing = _models.FindIndex(m => m.ModelId == entry.ModelId);
+                if (existing >= 0) _models[existing] = entry;
+                else _models.Add(entry);
+            }
+            else if (envelope.Type == MLS.Core.Constants.MessageTypes.InferenceResult)
+            {
+                var modelId = p.TryGetProperty("model_id", out var mid) ? mid.GetString() : null;
+                var status  = p.TryGetProperty("status",   out var st)  ? st.GetString() ?? "deployed" : "deployed";
+                if (modelId is not null)
+                {
+                    var idx = _models.FindIndex(m => m.ModelId == modelId);
+                    if (idx >= 0) _models[idx] = _models[idx] with { Status = status };
+                }
+            }
+
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private IEnumerable<ModelEntry> FilteredModels() =>
+        _typeFilter == "all" ? _models : _models.Where(m => m.ModelType == _typeFilter);
+
+    private static string GetTypeBadgeClass(string type) => type switch
+    {
+        "model-t" => "type-model-t",
+        "model-a" => "type-model-a",
+        "model-d" => "type-model-d",
+        _         => "type-unknown",
+    };
+
+    private static string GetStatusClass(string status) => status switch
+    {
+        "deployed" => "status-deployed",
+        "staged"   => "status-staged",
+        "archived" => "status-archived",
+        _          => "",
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+
+    private sealed record ModelEntry(
+        string ModelId,
+        string Name,
+        string ModelType,
+        int Version,
+        double Accuracy,
+        double F1Score,
+        DateTimeOffset ExportedAt,
+        string Status);
+}

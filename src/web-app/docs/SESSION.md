@@ -15,4 +15,7 @@
 - [SESSION-7.md — SignalR Hub (Web App Server-Side)](sessions/SESSION-7.md)
 - [SESSION-8.md — Configuration](sessions/SESSION-8.md)
 - [SESSION-9.md — Skills to Apply](sessions/SESSION-9.md)
+- [SESSION-11.md — Window Manager + DesignerCanvas Core](sessions/SESSION-11.md)
+- [SESSION-12.md — Trading + Arbitrage + DeFi Panels](sessions/SESSION-12.md)
+- [SESSION-13.md — ML Runtime Panel + Observatory + Envelope Viewer](sessions/SESSION-13.md)
 
