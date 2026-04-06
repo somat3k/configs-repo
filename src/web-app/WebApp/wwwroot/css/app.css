@@ -1,17 +1,47 @@
-/* MLS Trading Platform — Web App Styles */
+/* MLS Trading Platform — Premium Ultra-Rare UI */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
+/* ── Design Tokens ────────────────────────────────────────────────────────── */
 :root {
-    --mls-bg: #0d1117;
-    --mls-surface: #161b22;
-    --mls-surface-alt: #1c2128;
-    --mls-border: rgba(255, 255, 255, 0.08);
-    --mls-accent: #00d4ff;
-    --mls-positive: #2ea043;
-    --mls-negative: #f85149;
-    --mls-warning: #f0883e;
-    --mls-text: #e6edf3;
-    --mls-text-muted: #8b949e;
-    --mls-text-faint: #484f58;
+    /* Backgrounds */
+    --mls-bg:           #07080c;
+    --mls-surface:      #0e1018;
+    --mls-surface-2:    #131620;
+    --mls-surface-3:    #191d28;
+    --mls-glass:        rgba(14, 16, 24, 0.72);
+    --mls-glass-border: rgba(255, 255, 255, 0.06);
+
+    /* Accents */
+    --mls-cyan:         #00d4ff;
+    --mls-cyan-dim:     rgba(0, 212, 255, 0.18);
+    --mls-cyan-glow:    0 0 16px rgba(0, 212, 255, 0.35);
+    --mls-purple:       #7c3aed;
+    --mls-purple-dim:   rgba(124, 58, 237, 0.18);
+    --mls-gold:         #f59e0b;
+    --mls-gold-dim:     rgba(245, 158, 11, 0.18);
+
+    /* Semantic */
+    --mls-positive:     #22c55e;
+    --mls-positive-dim: rgba(34, 197, 94, 0.15);
+    --mls-negative:     #f43f5e;
+    --mls-negative-dim: rgba(244, 63, 94, 0.15);
+    --mls-warning:      #fb923c;
+    --mls-warning-dim:  rgba(251, 146, 60, 0.15);
+
+    /* Text */
+    --mls-text:         #e2e8f0;
+    --mls-text-muted:   #64748b;
+    --mls-text-faint:   #334155;
+
+    /* Typography */
+    --font-ui:    'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-mono:  'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+    /* Radius */
+    --r-sm:  4px;
+    --r-md:  8px;
+    --r-lg:  12px;
+    --r-xl:  16px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -23,38 +53,116 @@ html, body {
     overflow: hidden;
     background: var(--mls-bg);
     color: var(--mls-text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    font-size: 14px;
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbars */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* ── Premium Scrollbars ───────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-
-/* FluentUI overrides for dark theme */
-fluent-button[appearance="accent"] {
-    --accent-fill-rest: var(--mls-accent);
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(0,212,255,0.2), rgba(124,58,237,0.2));
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(0,212,255,0.4), rgba(124,58,237,0.4));
 }
 
-/* Monospace data font */
-.mono { font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; }
+/* ── FluentUI Dark Overrides ─────────────────────────────────────────────── */
+fluent-button[appearance="accent"] { --accent-fill-rest: var(--mls-cyan); }
 
-/* Panel placeholder */
+/* ── Utility ─────────────────────────────────────────────────────────────── */
+.mono { font-family: var(--font-mono); }
+
 .panel-placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
     color: var(--mls-text-faint);
-    font-size: 0.875rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
 }
 
-/* Value flash animation (JS-driven) */
+/* ── Glow chip / badge ───────────────────────────────────────────────────── */
+.glow-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 20px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+}
+
+/* ── Value flash animation (JS-driven) ───────────────────────────────────── */
 @keyframes value-flash {
-    0%   { background-color: rgba(0, 212, 255, 0.2); }
+    0%   { background-color: rgba(0, 212, 255, 0.22); }
     100% { background-color: transparent; }
 }
-.value-flash { animation: value-flash 500ms ease-out; }
+.value-flash { animation: value-flash 600ms cubic-bezier(0.4,0,0.2,1); }
+
+/* ── Gradient text utility ───────────────────────────────────────────────── */
+.grad-text-cyan {
+    background: linear-gradient(135deg, #00d4ff, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* ── Section divider ──────────────────────────────────────────────────────── */
+.section-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,212,255,0.15), transparent);
+    flex-shrink: 0;
+}
+
+/* ── Live pulse dot ──────────────────────────────────────────────────────── */
+@keyframes live-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.8); }
+}
+.live-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--mls-positive);
+    box-shadow: 0 0 6px var(--mls-positive);
+    animation: live-pulse 1.5s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+/* ── Table base ──────────────────────────────────────────────────────────── */
+.premium-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.71rem;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.premium-table th {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--mls-text-faint);
+    padding: 5px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-family: var(--font-ui);
+    position: sticky; top: 0;
+    background: var(--mls-surface-2);
+    border-bottom: 1px solid var(--mls-glass-border);
+}
+.premium-table td {
+    padding: 4px 8px;
+    color: var(--mls-text-muted);
+    border-bottom: 1px solid rgba(255,255,255,0.025);
+    white-space: nowrap;
+}
+.premium-table tr:hover td { background: rgba(255,255,255,0.025); }
+.positive { color: var(--mls-positive); }
+.negative { color: var(--mls-negative); }

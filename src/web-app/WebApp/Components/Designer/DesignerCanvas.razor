@@ -71,7 +71,7 @@
             {
                 var b = block;
                 <div class="block-node @(b.BlockId == _selectedBlockId ? "selected" : "")"
-                     style="left:@(b.X)px; top:@(b.Y)px;"
+                     style="left:@(b.X)px; top:@(b.Y)px; --block-accent:@GetBlockColor(b.BlockType);"
                      @key="b.BlockId"
                      @onmousedown="(args) => OnBlockMouseDown(args, b)"
                      @onclick="() => SelectBlock(b.BlockId)">
@@ -142,27 +142,43 @@
         display: flex;
         flex-direction: column;
         height: 100%;
-        background: #0d1117;
+        background: var(--mls-surface, #0e1018);
         position: relative;
         overflow: hidden;
     }
 
+    /* ── Toolbar ──────────────────────────────────────────────────────────── */
     .designer-toolbar {
         display: flex;
         align-items: center;
         gap: 4px;
-        padding: 4px 8px;
-        background: var(--neutral-layer-3, #1c2128);
-        border-bottom: 1px solid rgba(255,255,255,0.07);
+        padding: 4px 10px;
+        background: var(--mls-surface-3, #191d28);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
         flex-shrink: 0;
-        height: 40px;
+        height: 42px;
+        position: relative;
     }
 
+    /* Gradient accent line under toolbar */
+    .designer-toolbar::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0,212,255,0.3), rgba(124,58,237,0.2), transparent);
+        pointer-events: none;
+    }
+
+    /* ── Canvas ────────────────────────────────────────────────────────────── */
     .designer-canvas {
         flex: 1;
         position: relative;
         overflow: hidden;
         cursor: default;
+        /* Dot-grid background */
+        background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+        background-size: 24px 24px;
     }
 
     .connections-svg {
@@ -181,65 +197,101 @@
         z-index: 2;
     }
 
+    /* ── Block node ────────────────────────────────────────────────────────── */
     .block-node {
         position: absolute;
-        min-width: 180px;
-        background: var(--neutral-layer-2, #161b22);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 8px;
+        min-width: 186px;
+        background: var(--mls-surface-2, #131620);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
         cursor: grab;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        box-shadow:
+            0 0 0 1px rgba(0,0,0,0.4),
+            0 4px 20px rgba(0, 0, 0, 0.5);
         transition: border-color 0.15s, box-shadow 0.15s;
+        overflow: hidden;
     }
 
     .block-node:active { cursor: grabbing; }
+
     .block-node.selected {
-        border-color: #00d4ff;
-        box-shadow: 0 0 0 2px rgba(0,212,255,0.25), 0 2px 12px rgba(0,0,0,0.4);
+        border-color: rgba(0,212,255,0.5);
+        box-shadow:
+            0 0 0 1px rgba(0,212,255,0.15),
+            0 0 16px rgba(0,212,255,0.12),
+            0 4px 20px rgba(0, 0, 0, 0.5);
     }
 
+    .block-node:hover:not(.selected) {
+        border-color: rgba(255,255,255,0.14);
+        box-shadow:
+            0 0 0 1px rgba(0,0,0,0.4),
+            0 6px 24px rgba(0, 0, 0, 0.55);
+    }
+
+    /* ── Block header — gradient by category color ──────────────────────── */
     .block-header {
         display: flex;
         align-items: center;
         gap: 6px;
-        padding: 6px 10px;
-        border-bottom: 1px solid rgba(255,255,255,0.07);
+        padding: 7px 10px;
+        background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        position: relative;
+    }
+
+    /* Left accent stripe using CSS var injected via style attribute */
+    .block-header::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: var(--block-accent, #00d4ff);
+        opacity: 0.7;
+        border-radius: 0 0 0 10px;
     }
 
     .block-badge {
-        font-size: 0.6rem;
+        font-size: 0.58rem;
         padding: 2px 5px;
         border-radius: 3px;
         font-weight: 700;
-        color: #fff;
+        color: rgba(255,255,255,0.9);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.06em;
+        opacity: 0.85;
     }
 
     .block-name {
-        font-size: 0.75rem;
+        font-size: 0.73rem;
         font-weight: 600;
-        color: #e6edf3;
+        color: var(--mls-text, #e2e8f0);
         white-space: nowrap;
+        letter-spacing: -0.01em;
     }
 
+    /* ── Sockets ───────────────────────────────────────────────────────────── */
     .socket-column {
         display: flex;
         flex-direction: column;
-        padding: 4px 0;
+        padding: 3px 0;
     }
 
     .socket {
         display: flex;
         align-items: center;
         gap: 5px;
-        padding: 3px 8px;
-        font-size: 0.68rem;
-        color: #8b949e;
+        padding: 4px 10px;
+        font-size: 0.66rem;
+        color: var(--mls-text-muted, #64748b);
         cursor: crosshair;
+        transition: background 0.1s;
     }
-
-    .socket:hover .socket-dot { transform: scale(1.4); }
+    .socket:hover { background: rgba(255,255,255,0.025); color: var(--mls-text, #e2e8f0); }
+    .socket:hover .socket-dot {
+        transform: scale(1.5);
+        box-shadow: 0 0 8px var(--socket-color, #00d4ff);
+    }
 
     .socket-dot {
         width: 8px;
@@ -247,10 +299,11 @@
         border-radius: 50%;
         background: var(--socket-color, #00d4ff);
         flex-shrink: 0;
-        transition: transform 0.15s;
+        transition: transform 0.15s, box-shadow 0.15s;
+        box-shadow: 0 0 4px var(--socket-color, #00d4ff);
     }
 
-    .socket-label { white-space: nowrap; }
+    .socket-label { white-space: nowrap; font-family: var(--font-ui, sans-serif); }
     .socket-output { flex-direction: row-reverse; }
 </style>
 

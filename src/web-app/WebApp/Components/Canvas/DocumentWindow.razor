@@ -8,49 +8,51 @@
             z-index:@State.ZIndex;"
      @onmousedown="() => OnFocus.InvokeAsync()">
 
+    @* ── Gradient border glow (inactive) / active border (focused) ── *@
+    <div class="window-glow-border"></div>
+
     @* ── Title bar ──────────────────────────────────────────────────────── *@
     <div class="window-titlebar"
          @onmousedown:preventDefault
          @onmousedown="OnTitleBarMouseDown">
 
-        <span class="window-title">@State.Title</span>
-
+        @* Traffic-light controls (macOS-inspired but futuristic) *@
         <div class="window-controls">
+            <button class="wc-btn wc-close" title="Close"
+                    @onclick:stopPropagation
+                    @onclick="() => OnClose.InvokeAsync()">
+                <svg width="8" height="8" viewBox="0 0 8 8">
+                    <line x1="1" y1="1" x2="7" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="7" y1="1" x2="1" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </button>
             <button class="wc-btn wc-minimize" title="Minimise"
                     @onclick:stopPropagation
                     @onclick="() => OnMinimize.InvokeAsync()">
-                <svg width="10" height="1" viewBox="0 0 10 1">
-                    <line x1="0" y1="0.5" x2="10" y2="0.5" stroke="currentColor" stroke-width="1.5"/>
+                <svg width="8" height="2" viewBox="0 0 8 2">
+                    <line x1="0" y1="1" x2="8" y2="1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                 </svg>
             </button>
-
             <button class="wc-btn wc-maximize" title="@(State.IsMaximized ? "Restore" : "Maximise")"
                     @onclick:stopPropagation
                     @onclick="() => OnMaximize.InvokeAsync()">
                 @if (State.IsMaximized)
                 {
-                    <svg width="10" height="10" viewBox="0 0 10 10">
-                        <rect x="2" y="0" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
-                        <rect x="0" y="2" width="8" height="8" fill="var(--neutral-layer-2,#161b22)" stroke="currentColor" stroke-width="1.5"/>
+                    <svg width="9" height="9" viewBox="0 0 9 9">
+                        <rect x="2.5" y="0.5" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.2" rx="1"/>
+                        <rect x="0.5" y="2.5" width="6" height="6" fill="var(--mls-surface-2,#131620)" stroke="currentColor" stroke-width="1.2" rx="1"/>
                     </svg>
                 }
                 else
                 {
-                    <svg width="10" height="10" viewBox="0 0 10 10">
-                        <rect x="0" y="0" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                    <svg width="9" height="9" viewBox="0 0 9 9">
+                        <rect x="0.5" y="0.5" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2" rx="1"/>
                     </svg>
                 }
             </button>
-
-            <button class="wc-btn wc-close" title="Close"
-                    @onclick:stopPropagation
-                    @onclick="() => OnClose.InvokeAsync()">
-                <svg width="10" height="10" viewBox="0 0 10 10">
-                    <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" stroke-width="1.5"/>
-                    <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" stroke-width="1.5"/>
-                </svg>
-            </button>
         </div>
+
+        <span class="window-title">@State.Title</span>
     </div>
 
     @* ── Content area ────────────────────────────────────────────────────── *@
@@ -77,13 +79,26 @@
         position: absolute;
         display: flex;
         flex-direction: column;
-        background: var(--neutral-layer-2, #161b22);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+        background: var(--mls-surface, #0e1018);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: var(--r-lg, 12px);
+        box-shadow:
+            0 0 0 1px rgba(0, 212, 255, 0.06),
+            0 20px 60px rgba(0, 0, 0, 0.7),
+            0 4px 16px rgba(0, 0, 0, 0.5);
         overflow: hidden;
-        animation: panel-enter 180ms ease-out;
+        animation: panel-enter 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
         user-select: none;
+        backdrop-filter: blur(2px);
+    }
+
+    .document-window:focus-within,
+    .document-window:hover {
+        border-color: rgba(0, 212, 255, 0.15);
+        box-shadow:
+            0 0 0 1px rgba(0, 212, 255, 0.12),
+            0 24px 70px rgba(0, 0, 0, 0.75),
+            0 4px 20px rgba(0, 0, 0, 0.5);
     }
 
     .document-window.maximized {
@@ -91,24 +106,36 @@
         top: 0 !important;
         border-radius: 0;
         border: none;
+        box-shadow: none;
+    }
+
+    @* Top-edge glow accent *@
+    .window-glow-border {
+        position: absolute;
+        top: 0; left: 20%; right: 20%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0,212,255,0.5), rgba(124,58,237,0.4), transparent);
+        pointer-events: none;
+        z-index: 10;
     }
 
     @@keyframes panel-enter {
-        from { transform: translateY(16px); opacity: 0; }
-        to   { transform: translateY(0);   opacity: 1; }
+        from { transform: translateY(12px) scale(0.98); opacity: 0; }
+        to   { transform: translateY(0)    scale(1);    opacity: 1; }
     }
 
     @@media (prefers-reduced-motion: reduce) {
         .document-window { animation: none; }
     }
 
+    /* ── Title bar ─────────────────────────────────────────────────────────── */
     .window-titlebar {
         display: flex;
         align-items: center;
-        height: 32px;
-        padding: 0 8px 0 12px;
-        background: var(--neutral-layer-3, #1c2128);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        height: 34px;
+        padding: 0 10px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         cursor: grab;
         flex-shrink: 0;
         gap: 8px;
@@ -116,40 +143,49 @@
 
     .window-titlebar:active { cursor: grabbing; }
 
-    .window-title {
-        flex: 1;
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: var(--neutral-foreground-rest, #e6edf3);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
+    /* ── Traffic-light style controls ──────────────────────────────────────── */
     .window-controls {
         display: flex;
-        gap: 4px;
+        gap: 5px;
         cursor: default;
+        flex-shrink: 0;
     }
 
     .wc-btn {
-        width: 22px;
-        height: 22px;
+        width: 14px;
+        height: 14px;
         border: none;
-        border-radius: 4px;
-        background: transparent;
-        color: var(--neutral-foreground-hint, #8b949e);
+        border-radius: 50%;
+        background: rgba(255,255,255,0.06);
+        color: transparent;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.15s, color 0.15s;
+        transition: background 0.15s, color 0.15s, transform 0.1s;
         flex-shrink: 0;
+        padding: 0;
     }
 
-    .wc-btn:hover { background: rgba(255,255,255,0.08); color: #e6edf3; }
-    .wc-close:hover { background: rgba(248,81,73,0.25); color: #f85149; }
+    .document-window:hover .wc-close    { background: #f43f5e; color: #7f1d1d; }
+    .document-window:hover .wc-minimize { background: #f59e0b; color: #78350f; }
+    .document-window:hover .wc-maximize { background: #22c55e; color: #14532d; }
 
+    .wc-btn:hover { transform: scale(1.15); }
+    .wc-btn:active { transform: scale(0.9); }
+
+    .window-title {
+        flex: 1;
+        font-size: 0.72rem;
+        font-weight: 500;
+        color: var(--mls-text-muted, #64748b);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        letter-spacing: 0.02em;
+    }
+
+    /* ── Content ───────────────────────────────────────────────────────────── */
     .window-content {
         flex: 1;
         overflow: auto;
@@ -157,38 +193,26 @@
         min-height: 0;
     }
 
-    /* ── Resize handles ────────────────────────────────────────────────────── */
-    .resize-handle {
-        position: absolute;
-        z-index: 10;
-    }
-
-    .rh-n  { top: -3px;  left: 8px;    right: 8px;  height: 6px;  cursor: n-resize; }
-    .rh-s  { bottom: -3px; left: 8px;  right: 8px;  height: 6px;  cursor: s-resize; }
-    .rh-e  { top: 8px;   right: -3px;  bottom: 8px; width: 6px;   cursor: e-resize; }
-    .rh-w  { top: 8px;   left: -3px;   bottom: 8px; width: 6px;   cursor: w-resize; }
-    .rh-ne { top: -3px;  right: -3px;  width: 12px; height: 12px; cursor: ne-resize; }
-    .rh-nw { top: -3px;  left: -3px;   width: 12px; height: 12px; cursor: nw-resize; }
-    .rh-se { bottom: -3px; right: -3px; width: 12px; height: 12px; cursor: se-resize; }
-    .rh-sw { bottom: -3px; left: -3px;  width: 12px; height: 12px; cursor: sw-resize; }
+    /* ── Resize handles ──────────────────────────────────────────────────── */
+    .resize-handle { position: absolute; z-index: 10; }
+    .rh-n  { top: -4px;  left: 10px;   right: 10px;  height: 8px;   cursor: n-resize; }
+    .rh-s  { bottom: -4px; left: 10px; right: 10px;  height: 8px;   cursor: s-resize; }
+    .rh-e  { top: 10px;  right: -4px;  bottom: 10px; width: 8px;    cursor: e-resize; }
+    .rh-w  { top: 10px;  left: -4px;   bottom: 10px; width: 8px;    cursor: w-resize; }
+    .rh-ne { top: -4px;  right: -4px;  width: 14px;  height: 14px;  cursor: ne-resize; }
+    .rh-nw { top: -4px;  left: -4px;   width: 14px;  height: 14px;  cursor: nw-resize; }
+    .rh-se { bottom: -4px; right: -4px; width: 14px; height: 14px;  cursor: se-resize; }
+    .rh-sw { bottom: -4px; left: -4px;  width: 14px; height: 14px;  cursor: sw-resize; }
 </style>
 
 @code {
-    /// <summary>Current window layout state.</summary>
     [Parameter, EditorRequired] public WindowState State { get; set; } = default!;
-
-    /// <summary>Child content rendered inside the window body.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
-
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnMinimize { get; set; }
     [Parameter] public EventCallback OnMaximize { get; set; }
     [Parameter] public EventCallback OnFocus { get; set; }
-
-    /// <summary>Fired when the user starts dragging the title bar.</summary>
     [Parameter] public EventCallback<MouseEventArgs> OnDragStart { get; set; }
-
-    /// <summary>Fired when the user starts resizing; tuple of direction + mouse args.</summary>
     [Parameter] public EventCallback<(ResizeDirection Direction, MouseEventArgs Args)> OnResizeStart { get; set; }
 
     private void OnTitleBarMouseDown(MouseEventArgs args)

@@ -3,40 +3,70 @@
 @implements IAsyncDisposable
 
 <div class="trading-terminal">
+
+    @* ── Header ─────────────────────────────────────────────────────────── *@
     <div class="tt-header">
-        <div class="tt-symbol-picker">
-            <FluentSelect TOption="string" @bind-Value="_symbol" @bind-Value:after="OnSymbolChanged">
-                @foreach (var sym in _symbols)
-                {
-                    <FluentOption TOption="string" Value="@sym">@sym</FluentOption>
-                }
-            </FluentSelect>
-            <FluentSelect TOption="string" @bind-Value="_timeframe" @bind-Value:after="OnTimeframeChanged">
-                <FluentOption TOption="string" Value="1m">1m</FluentOption>
-                <FluentOption TOption="string" Value="5m">5m</FluentOption>
-                <FluentOption TOption="string" Value="15m">15m</FluentOption>
-                <FluentOption TOption="string" Value="1h">1h</FluentOption>
-                <FluentOption TOption="string" Value="4h">4h</FluentOption>
-                <FluentOption TOption="string" Value="1D">1D</FluentOption>
-            </FluentSelect>
+        <div class="tt-symbol-row">
+            <div class="tt-symbol-chip">
+                <FluentSelect TOption="string" @bind-Value="_symbol" @bind-Value:after="OnSymbolChanged"
+                              class="tt-select">
+                    @foreach (var sym in _symbols)
+                    {
+                        <FluentOption TOption="string" Value="@sym">@sym</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+            <div class="tt-tf-chip">
+                <FluentSelect TOption="string" @bind-Value="_timeframe" @bind-Value:after="OnTimeframeChanged"
+                              class="tt-select">
+                    <FluentOption TOption="string" Value="1m">1m</FluentOption>
+                    <FluentOption TOption="string" Value="5m">5m</FluentOption>
+                    <FluentOption TOption="string" Value="15m">15m</FluentOption>
+                    <FluentOption TOption="string" Value="1h">1h</FluentOption>
+                    <FluentOption TOption="string" Value="4h">4h</FluentOption>
+                    <FluentOption TOption="string" Value="1D">1D</FluentOption>
+                </FluentSelect>
+            </div>
+
+            @* Live price strip *@
+            <div class="tt-price-strip">
+                <span class="tt-price" id="price-@_symbol">@_lastPrice.ToString("F4")</span>
+                <span class="tt-change @(_priceChange >= 0 ? "tt-change--up" : "tt-change--down")">
+                    @(_priceChange >= 0 ? "▲" : "▼") @(Math.Abs(_priceChange).ToString("F2"))%
+                </span>
+            </div>
+
+            <div class="tt-header-spacer"></div>
+
+            <div class="live-dot" title="Live data"></div>
         </div>
-        <div class="tt-price-strip">
-            <span class="tt-price" id="price-@_symbol">@_lastPrice.ToString("F4")</span>
-            <span class="tt-change @(_priceChange >= 0 ? "positive" : "negative")">
-                @(_priceChange >= 0 ? "+" : "")@_priceChange.ToString("F2")%
-            </span>
-        </div>
+
+        @* Gradient accent bar *@
+        <div class="tt-accent-bar"></div>
     </div>
 
+    @* ── Body ───────────────────────────────────────────────────────────── *@
     <div class="tt-body">
         <TradingChart Symbol="@_symbol" Timeframe="@_timeframe" />
 
         <div class="tt-sidebar">
-            <div class="tt-section-label">Order Book</div>
-            <OrderBook Symbol="@_symbol" />
+            <div class="tt-sidebar-section">
+                <div class="tt-section-label">
+                    <span class="tt-section-icon" style="color:#00d4ff">≡</span>
+                    Order Book
+                </div>
+                <OrderBook Symbol="@_symbol" />
+            </div>
 
-            <div class="tt-section-label">Positions</div>
-            <PositionsGrid Symbol="@_symbol" />
+            <div class="sidebar-divider"></div>
+
+            <div class="tt-sidebar-section">
+                <div class="tt-section-label">
+                    <span class="tt-section-icon" style="color:#22c55e">⬡</span>
+                    Positions
+                </div>
+                <PositionsGrid Symbol="@_symbol" />
+            </div>
         </div>
     </div>
 </div>
@@ -46,73 +76,107 @@
         display: flex;
         flex-direction: column;
         height: 100%;
-        background: #0d1117;
+        background: var(--mls-surface, #0e1018);
         overflow: hidden;
     }
 
+    /* ── Header ──────────────────────────────────────────────────────────── */
     .tt-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 6px 12px;
-        border-bottom: 1px solid rgba(255,255,255,0.07);
-        background: var(--neutral-layer-2, #161b22);
         flex-shrink: 0;
+        background: var(--mls-surface-2, #131620);
     }
 
-    .tt-symbol-picker {
+    .tt-symbol-row {
         display: flex;
-        gap: 6px;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
     }
+
+    .tt-symbol-chip,
+    .tt-tf-chip {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .tt-select { --border-radius: 0; }
 
     .tt-price-strip {
         display: flex;
         align-items: baseline;
         gap: 6px;
-        margin-left: auto;
+        margin-left: 8px;
     }
 
     .tt-price {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 1.1rem;
+        font-family: var(--font-mono, monospace);
+        font-size: 1.15rem;
         font-weight: 700;
-        color: #e6edf3;
+        color: var(--mls-text, #e2e8f0);
         font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
     }
 
     .tt-change {
-        font-size: 0.78rem;
-        font-weight: 600;
-        font-family: 'JetBrains Mono', monospace;
+        font-family: var(--font-mono, monospace);
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+        letter-spacing: 0.02em;
     }
-    .tt-change.positive { color: #2ea043; }
-    .tt-change.negative { color: #f85149; }
+    .tt-change--up   { color: #22c55e; background: rgba(34,197,94,0.12); }
+    .tt-change--down { color: #f43f5e; background: rgba(244,63,94,0.12); }
 
+    .tt-header-spacer { flex: 1; }
+
+    .tt-accent-bar {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0,212,255,0.3), rgba(34,197,94,0.2), transparent);
+    }
+
+    /* ── Body ────────────────────────────────────────────────────────────── */
     .tt-body {
         display: flex;
         flex: 1;
         overflow: hidden;
-        gap: 0;
     }
 
+    /* ── Sidebar ─────────────────────────────────────────────────────────── */
     .tt-sidebar {
         width: 220px;
         flex-shrink: 0;
-        border-left: 1px solid rgba(255,255,255,0.07);
+        border-left: 1px solid rgba(255,255,255,0.05);
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        padding: 4px 0;
+        background: var(--mls-surface-2, #131620);
+    }
+
+    .tt-sidebar-section { display: flex; flex-direction: column; }
+
+    .sidebar-divider {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0,212,255,0.12), transparent);
+        flex-shrink: 0;
+        margin: 2px 0;
     }
 
     .tt-section-label {
-        font-size: 0.65rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.6rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #484f58;
-        padding: 6px 10px 2px;
+        letter-spacing: 0.08em;
+        color: var(--mls-text-faint, #334155);
+        padding: 8px 10px 4px;
     }
+
+    .tt-section-icon { font-size: 0.7rem; }
 </style>
 
 @code {

@@ -12,6 +12,9 @@
      @onmouseup="OnMouseUp"
      @onmouseleave="OnMouseUp">
 
+    @* ── Dot-grid background ─────────────────────────────────────────────── *@
+    <div class="canvas-bg-grid" aria-hidden="true"></div>
+
     <div class="window-container">
         @foreach (var win in WM.Windows.Where(w => !w.IsMinimized).OrderBy(w => w.ZIndex))
         {
@@ -33,33 +36,47 @@
         <div class="window-taskbar">
             @foreach (var win in WM.Windows.Where(w => w.IsMinimized))
             {
-                <FluentButton Appearance="Appearance.Stealth"
-                              class="taskbar-item"
-                              @onclick="() => WM.Restore(win.WindowId)">
-                    
+                <button class="taskbar-item" @onclick="() => WM.Restore(win.WindowId)">
+                    <span class="taskbar-dot"></span>
                     @win.Title
-                </FluentButton>
+                </button>
             }
         </div>
     }
 
-    @* ── Quick-open FAB ───────────────────────────────────────────────────── *@
+    @* ── Premium FAB ──────────────────────────────────────────────────────── *@
     <div class="canvas-fab">
-        <FluentButton Appearance="Appearance.Accent"
-                     
-                      @onclick="TogglePanelMenu"
-                      title="Open panel">
-        </FluentButton>
+        <button class="fab-btn @(_showPanelMenu ? "fab-btn--active" : "")"
+                @onclick="TogglePanelMenu"
+                title="Open panel"
+                aria-label="Open panel">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                @if (_showPanelMenu)
+                {
+                    <line x1="3" y1="3" x2="15" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="15" y1="3" x2="3" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                }
+                else
+                {
+                    <rect x="2" y="2" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                    <rect x="10" y="2" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                    <rect x="2" y="10" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                    <rect x="10" y="10" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                }
+            </svg>
+        </button>
 
         @if (_showPanelMenu)
         {
             <div class="fab-menu">
+                <div class="fab-menu-header">Open Panel</div>
                 @foreach (var panel in _availablePanels)
                 {
-                    <FluentButton Appearance="Appearance.Stealth"
-                                  @onclick="() => OpenPanel(panel.Key)">
-                        @panel.Label
-                    </FluentButton>
+                    var p = panel;
+                    <button class="fab-menu-item" @onclick="() => OpenPanel(p.Key)">
+                        <span class="fab-item-icon @p.IconClass">@p.Icon</span>
+                        <span class="fab-item-label">@p.Label</span>
+                    </button>
                 }
             </div>
         }
@@ -72,60 +89,173 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background: var(--neutral-layer-1, #0d1117);
+        background: var(--mls-bg, #07080c);
         container-type: inline-size;
         container-name: canvas;
+    }
+
+    /* ── Dot-grid background ──────────────────────────────────────────────── */
+    .canvas-bg-grid {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+        background-size: 28px 28px;
+        background-position: center center;
+        mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 100%);
+        z-index: 0;
     }
 
     .window-container {
         position: relative;
         width: 100%;
         height: 100%;
+        z-index: 1;
     }
 
+    /* ── Premium taskbar ──────────────────────────────────────────────────── */
     .window-taskbar {
         position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 36px;
-        background: rgba(13, 17, 23, 0.9);
-        border-top: 1px solid rgba(255,255,255,0.08);
+        bottom: 0; left: 0; right: 0;
+        height: 40px;
+        background: rgba(7, 8, 12, 0.85);
+        border-top: 1px solid rgba(255,255,255,0.05);
         display: flex;
         align-items: center;
         gap: 4px;
-        padding: 0 8px;
+        padding: 0 12px;
         z-index: 10000;
-        backdrop-filter: blur(8px);
+        backdrop-filter: blur(16px) saturate(180%);
     }
 
     .taskbar-item {
-        font-size: 0.75rem;
-        gap: 4px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 6px;
+        color: var(--mls-text-muted, #64748b);
+        font-size: 0.7rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        font-family: inherit;
+    }
+    .taskbar-item:hover {
+        background: rgba(0,212,255,0.08);
+        border-color: rgba(0,212,255,0.2);
+        color: var(--mls-text, #e2e8f0);
+    }
+    .taskbar-dot {
+        width: 5px; height: 5px;
+        border-radius: 50%;
+        background: var(--mls-cyan, #00d4ff);
+        opacity: 0.6;
+        flex-shrink: 0;
     }
 
+    /* ── FAB button ───────────────────────────────────────────────────────── */
     .canvas-fab {
         position: absolute;
-        bottom: 52px;
-        right: 16px;
+        bottom: 56px;
+        right: 20px;
         z-index: 9999;
         display: flex;
         flex-direction: column-reverse;
         align-items: flex-end;
-        gap: 8px;
+        gap: 10px;
     }
 
+    .fab-btn {
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        border: 1px solid rgba(0, 212, 255, 0.3);
+        background: linear-gradient(135deg, rgba(0,212,255,0.12), rgba(124,58,237,0.12));
+        color: var(--mls-cyan, #00d4ff);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        box-shadow: 0 0 16px rgba(0,212,255,0.15), 0 4px 12px rgba(0,0,0,0.4);
+        backdrop-filter: blur(8px);
+    }
+    .fab-btn:hover {
+        transform: scale(1.08);
+        box-shadow: 0 0 24px rgba(0,212,255,0.35), 0 4px 16px rgba(0,0,0,0.5);
+        border-color: rgba(0, 212, 255, 0.6);
+    }
+    .fab-btn--active {
+        background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(124,58,237,0.2));
+        border-color: rgba(0, 212, 255, 0.5);
+        box-shadow: 0 0 28px rgba(0,212,255,0.4), 0 4px 16px rgba(0,0,0,0.5);
+    }
+
+    /* ── FAB menu ─────────────────────────────────────────────────────────── */
     .fab-menu {
         display: flex;
         flex-direction: column;
-        background: var(--neutral-layer-2, #161b22);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 8px;
-        padding: 4px;
+        background: rgba(13, 16, 24, 0.95);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: var(--r-lg, 12px);
+        padding: 6px;
         gap: 2px;
-        min-width: 180px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        min-width: 200px;
+        box-shadow:
+            0 0 0 1px rgba(0,212,255,0.08),
+            0 20px 60px rgba(0,0,0,0.7);
+        backdrop-filter: blur(20px) saturate(180%);
+        animation: fab-menu-enter 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+
+    @@keyframes fab-menu-enter {
+        from { opacity: 0; transform: translateY(8px) scale(0.96); }
+        to   { opacity: 1; transform: translateY(0)  scale(1); }
+    }
+
+    .fab-menu-header {
+        font-size: 0.58rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--mls-text-faint, #334155);
+        padding: 4px 8px 6px;
+    }
+
+    .fab-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: var(--r-sm, 4px);
+        background: transparent;
+        border: none;
+        color: var(--mls-text-muted, #64748b);
+        font-size: 0.78rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
+        font-family: inherit;
+        text-align: left;
+        width: 100%;
+    }
+    .fab-menu-item:hover {
+        background: rgba(255,255,255,0.05);
+        color: var(--mls-text, #e2e8f0);
+    }
+
+    .fab-item-icon {
+        font-size: 0.85rem;
+        width: 20px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    .icon--trading  { color: #22c55e; }
+    .icon--arb      { color: #f59e0b; }
+    .icon--defi     { color: #7c3aed; }
+    .icon--designer { color: #00d4ff; }
 
     @@container canvas (max-width: 768px) {
         .document-window {
@@ -143,15 +273,15 @@
     private bool _showPanelMenu;
     private CancellationTokenSource _cts = new();
 
-    private record PanelEntry(string Key, string Label);
+    private record PanelEntry(string Key, string Label, string Icon, string IconClass);
 
     private static readonly PanelEntry[] _availablePanels =
     [
-        new("TradingTerminal",   "Trading Terminal"),
-        new("ArbitrageScanner",  "Arbitrage Scanner"),
-        new("DeFiPositions",     "DeFi Positions"),
-        new("HealthMonitor",     "Health Monitor"),
-        new("DesignerCanvas",    "Strategy Designer"),
+        new("TradingTerminal",   "Trading Terminal",   "◈", "icon--trading"),
+        new("ArbitrageScanner",  "Arbitrage Scanner",  "◬", "icon--arb"),
+        new("DeFiPositions",     "DeFi Positions",     "◉", "icon--defi"),
+        new("HealthMonitor",     "Health Monitor",     "◎", "icon--defi"),
+        new("DesignerCanvas",    "Strategy Designer",  "◫", "icon--designer"),
     ];
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -187,14 +317,14 @@
 
     private RenderFragment GetPanelContent(WindowState win) => win.PanelType switch
     {
-        "TradingTerminal"  => @<TradingTerminal />,
-        "TradingChart"     => @<TradingChart Symbol="BTC-USD" />,
-        "ArbitrageScanner" => @<ArbitrageScanner />,
-        "DeFiPositions"    => @<DeFiPositions />,
-        "HealthMonitor"    => @<HealthMonitor />,
-        "DesignerCanvas"   => @<DesignerCanvas />,
-        "PathVisualization"=> @<PathVisualization />,
-        _                  => @<div class="panel-placeholder">@win.PanelType</div>,
+        "TradingTerminal"   => @<TradingTerminal />,
+        "TradingChart"      => @<TradingChart Symbol="BTC-USD" />,
+        "ArbitrageScanner"  => @<ArbitrageScanner />,
+        "DeFiPositions"     => @<DeFiPositions />,
+        "HealthMonitor"     => @<HealthMonitor />,
+        "DesignerCanvas"    => @<DesignerCanvas />,
+        "PathVisualization" => @<PathVisualization />,
+        _                   => @<div class="panel-placeholder">@win.PanelType</div>,
     };
 
     public void Dispose()
