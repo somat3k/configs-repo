@@ -1,0 +1,348 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="arbitrage-scanner">
+
+    @* ── Header ─────────────────────────────────────────────────────────── *@
+    <div class="as-header">
+        <div class="as-title-row">
+            <div class="live-dot"></div>
+            <span class="as-title">Arbitrage</span>
+            <span class="as-title-sub">Live nHOP Opportunities</span>
+        </div>
+        <div class="as-filters">
+            <div class="as-filter-input-wrap">
+                <span class="as-filter-label">Min %</span>
+                <FluentTextField @bind-Value="_minProfit" Placeholder="0.01" class="as-filter-input" />
+            </div>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="StateHasChanged" class="as-filter-btn">
+                Filter
+            </FluentButton>
+        </div>
+    </div>
+
+    @* ── Stats bar ───────────────────────────────────────────────────────── *@
+    <div class="as-stats">
+        <div class="stat-chip">
+            <span class="stat-chip-value">@_opportunities.Count</span>
+            <span class="stat-chip-label">Active</span>
+        </div>
+        <div class="stat-chip stat-chip--profit">
+            <span class="stat-chip-value">@(_bestProfit.ToString("F3"))%</span>
+            <span class="stat-chip-label">Best</span>
+        </div>
+        <div class="stat-chip">
+            <span class="stat-chip-value">@_lastUpdate</span>
+            <span class="stat-chip-label">Updated</span>
+        </div>
+    </div>
+
+    <div class="as-divider"></div>
+
+    @* ── Table ───────────────────────────────────────────────────────────── *@
+    <div class="as-table-wrapper">
+        <table class="premium-table as-table">
+            <thead>
+                <tr>
+                    <th>Path</th>
+                    <th>Exchanges</th>
+                    <th>Spread</th>
+                    <th>Gross</th>
+                    <th>Gas (USD)</th>
+                    <th>Net Profit</th>
+                    <th>Age</th>
+                    <th>Hops</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var opp in FilteredOpportunities())
+                {
+                    var o = opp;
+                    var tier = o.NetProfitPct >= 0.5 ? "tier-gold" : o.NetProfitPct >= 0.1 ? "tier-green" : "";
+                    <tr @key="o.OpportunityId" class="@tier">
+                        <td class="path-cell">
+                            <span class="path-chip">@o.TokenPath</span>
+                        </td>
+                        <td class="exchange-cell">@o.Exchanges</td>
+                        <td>@o.SpreadPct.ToString("F4")%</td>
+                        <td class="positive">+@o.GrossProfitPct.ToString("F4")%</td>
+                        <td class="gas-cell">$@o.GasUsd.ToString("F3")</td>
+                        <td class="net-profit @(o.NetProfitPct >= 0 ? "positive" : "negative")">
+                            @(o.NetProfitPct >= 0 ? "+" : "")@o.NetProfitPct.ToString("F4")%
+                        </td>
+                        <td class="age-cell mono">@FormatAge(o.DetectedAt)</td>
+                        <td>
+                            <span class="hop-badge">@o.Hops</span>
+                        </td>
+                        <td>
+                            <FluentButton Appearance="Appearance.Accent" class="execute-btn"
+                                          Disabled="@(o.NetProfitPct < 0.05)">
+                                Execute
+                            </FluentButton>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (!_opportunities.Any())
+        {
+            <div class="as-empty">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="opacity:0.2">
+                    <circle cx="16" cy="16" r="12" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"/>
+                    <path d="M16 10v6l4 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <span>Scanning for opportunities…</span>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .arbitrage-scanner {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--mls-surface, #0e1018);
+        overflow: hidden;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    .as-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 14px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+
+    .as-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .as-title {
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: var(--mls-text, #e2e8f0);
+        letter-spacing: -0.01em;
+    }
+
+    .as-title-sub {
+        font-size: 0.65rem;
+        color: var(--mls-text-muted, #64748b);
+        font-weight: 400;
+    }
+
+    .as-filters { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+    .as-filter-input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 6px;
+        padding: 0 8px;
+    }
+
+    .as-filter-label {
+        font-size: 0.6rem;
+        color: var(--mls-text-faint, #334155);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+    }
+
+    .as-filter-btn { font-size: 0.7rem; }
+
+    /* ── Stats chips ─────────────────────────────────────────────────────── */
+    .as-stats {
+        display: flex;
+        gap: 8px;
+        padding: 6px 14px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        flex-shrink: 0;
+    }
+
+    .stat-chip {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 6px;
+        padding: 4px 12px;
+        min-width: 60px;
+    }
+    .stat-chip--profit {
+        border-color: rgba(34,197,94,0.2);
+        background: rgba(34,197,94,0.04);
+    }
+    .stat-chip-value {
+        font-family: var(--font-mono, monospace);
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--mls-text, #e2e8f0);
+        font-variant-numeric: tabular-nums;
+    }
+    .stat-chip--profit .stat-chip-value { color: #22c55e; }
+    .stat-chip-label {
+        font-size: 0.55rem;
+        color: var(--mls-text-faint, #334155);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+    }
+
+    .as-divider {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(245,158,11,0.15), transparent);
+        flex-shrink: 0;
+    }
+
+    /* ── Table ───────────────────────────────────────────────────────────── */
+    .as-table-wrapper { flex: 1; overflow-y: auto; overflow-x: auto; }
+
+    /* Profit tiers */
+    .tier-gold td  { background: rgba(245,158,11,0.06) !important; }
+    .tier-green td { background: rgba(34,197,94,0.04) !important; }
+    .tier-gold .net-profit { color: #f59e0b !important; font-weight: 700; }
+
+    .path-chip {
+        display: inline-block;
+        font-family: var(--font-mono, monospace);
+        font-size: 0.66rem;
+        color: #00d4ff;
+        background: rgba(0,212,255,0.07);
+        border: 1px solid rgba(0,212,255,0.15);
+        border-radius: 4px;
+        padding: 1px 5px;
+        white-space: nowrap;
+    }
+
+    .exchange-cell { color: var(--mls-text-faint, #334155); font-size: 0.68rem; }
+    .gas-cell      { color: var(--mls-text-muted, #64748b); }
+    .age-cell      { color: var(--mls-text-faint, #334155); font-size: 0.66rem; }
+    .net-profit    { font-weight: 600; }
+
+    .hop-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px; height: 18px;
+        border-radius: 50%;
+        background: rgba(124,58,237,0.15);
+        border: 1px solid rgba(124,58,237,0.25);
+        color: #a78bfa;
+        font-size: 0.6rem;
+        font-weight: 700;
+    }
+
+    .execute-btn { font-size: 0.62rem; padding: 2px 8px; }
+
+    .as-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 40px;
+        color: var(--mls-text-faint, #334155);
+        font-size: 0.75rem;
+        letter-spacing: 0.03em;
+    }
+</style>
+
+@code {
+    private sealed class ArbOpportunity
+    {
+        public Guid OpportunityId { get; set; } = Guid.NewGuid();
+        public string TokenPath { get; set; } = "";
+        public string Exchanges { get; set; } = "";
+        public double SpreadPct { get; set; }
+        public double GrossProfitPct { get; set; }
+        public double GasUsd { get; set; }
+        public double NetProfitPct { get; set; }
+        public DateTimeOffset DetectedAt { get; set; } = DateTimeOffset.UtcNow;
+        public int Hops { get; set; }
+    }
+
+    private readonly Dictionary<Guid, ArbOpportunity> _opportunities = new();
+    private double _bestProfit;
+    private string _lastUpdate = "—";
+    private string _minProfit = "0.01";
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["ARB_PATH_FOUND", "ARB_OPPORTUNITY_EXPIRED"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            if (envelope.Type == "ARB_OPPORTUNITY_EXPIRED")
+            {
+                if (envelope.Payload.TryGetProperty("opportunity_id", out var oidEl) &&
+                    Guid.TryParse(oidEl.GetString(), out var oid))
+                    _opportunities.Remove(oid);
+            }
+            else
+            {
+                var opp = ParseOpportunity(envelope.Payload);
+                _opportunities[opp.OpportunityId] = opp;
+                _bestProfit = _opportunities.Values.Any()
+                    ? _opportunities.Values.Max(o => o.NetProfitPct) : 0;
+                _lastUpdate = DateTimeOffset.UtcNow.ToString("HH:mm:ss");
+            }
+
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private static ArbOpportunity ParseOpportunity(System.Text.Json.JsonElement payload)
+    {
+        var opp = new ArbOpportunity();
+        opp.OpportunityId  = Guid.TryParse(payload.TryGetProperty("opportunity_id", out var oidp) ? oidp.GetString() : null, out var gp) ? gp : Guid.NewGuid();
+        opp.TokenPath      = payload.TryGetProperty("token_path",       out var tp)  ? tp.GetString()  ?? "" : "";
+        opp.Exchanges      = payload.TryGetProperty("exchanges",        out var ex)  ? ex.GetString()  ?? "" : "";
+        opp.SpreadPct      = payload.TryGetProperty("spread_pct",       out var sp)  ? sp.GetDouble()      : 0;
+        opp.GrossProfitPct = payload.TryGetProperty("gross_profit_pct", out var gpp) ? gpp.GetDouble()     : 0;
+        opp.GasUsd         = payload.TryGetProperty("gas_usd",          out var gas) ? gas.GetDouble()     : 0;
+        opp.NetProfitPct   = payload.TryGetProperty("net_profit_pct",   out var np)  ? np.GetDouble()      : 0;
+        opp.Hops           = payload.TryGetProperty("hops",             out var hp)  ? hp.GetInt32()       : 0;
+        return opp;
+    }
+
+    private IEnumerable<ArbOpportunity> FilteredOpportunities()
+    {
+        if (!double.TryParse(_minProfit, out var min)) min = 0;
+        return _opportunities.Values
+            .Where(o => o.NetProfitPct >= min)
+            .OrderByDescending(o => o.NetProfitPct)
+            .Take(50);
+    }
+
+    private static string FormatAge(DateTimeOffset dt)
+    {
+        var age = DateTimeOffset.UtcNow - dt;
+        if (age.TotalSeconds < 60) return $"{(int)age.TotalSeconds}s";
+        return $"{(int)age.TotalMinutes}m";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

@@ -1,0 +1,447 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="health-monitor" id="hm-@_gaugeId">
+    @* ── Header ───────────────────────────────────────────────────────────── *@
+    <div class="hm-header">
+        <div class="hm-header-left">
+            <span class="hm-icon" style="color:#7c3aed">◉</span>
+            <span class="hm-title">Health Monitor</span>
+        </div>
+        <FluentSelect TOption="string" @bind-Value="_protocol" class="hm-proto-select">
+            <FluentOption TOption="string" Value="morpho">Morpho</FluentOption>
+            <FluentOption TOption="string" Value="balancer">Balancer</FluentOption>
+            <FluentOption TOption="string" Value="all">All Protocols</FluentOption>
+        </FluentSelect>
+    </div>
+
+    @* ── Gradient accent bar ───────────────────────────────────────────────── *@
+    <div class="hm-accent-bar"></div>
+
+    @* ── Gauge ────────────────────────────────────────────────────────────── *@
+    <div class="hm-gauge-area">
+        <svg class="hf-gauge" viewBox="0 0 140 90" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="gauge-bg-grad-@_gaugeId" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%"   stop-color="#f43f5e" stop-opacity="0.5"/>
+                    <stop offset="40%"  stop-color="#f59e0b" stop-opacity="0.5"/>
+                    <stop offset="100%" stop-color="#22c55e" stop-opacity="0.5"/>
+                </linearGradient>
+                <linearGradient id="gauge-arc-grad-@_gaugeId" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%"   stop-color="@GetHfColor(_healthFactor)"/>
+                    <stop offset="100%" stop-color="@GetHfColorTint(_healthFactor)"/>
+                </linearGradient>
+            </defs>
+
+            @* Background ring (faint gradient) *@
+            <path d="M 14 74 A 56 56 0 0 1 126 74"
+                  fill="none"
+                  stroke="url(#gauge-bg-grad-@_gaugeId)"
+                  stroke-width="10"
+                  stroke-linecap="round"
+                  opacity="0.2" />
+
+            @* Track *@
+            <path d="M 14 74 A 56 56 0 0 1 126 74"
+                  fill="none"
+                  stroke="rgba(255,255,255,0.05)"
+                  stroke-width="10"
+                  stroke-linecap="round" />
+
+            @* Value arc *@
+            <path d="M 14 74 A 56 56 0 0 1 126 74"
+                  fill="none"
+                  stroke="url(#gauge-arc-grad-@_gaugeId)"
+                  stroke-width="10"
+                  stroke-linecap="round"
+                  stroke-dasharray="175.93"
+                  stroke-dashoffset="@GetDashOffset(_healthFactor)"
+                  class="hf-arc"
+                  style="transition: stroke-dashoffset 0.7s cubic-bezier(0.4,0,0.2,1), stroke 0.7s;" />
+
+            @* Threshold tick — danger 1.0 *@
+            <line x1="14" y1="74" x2="24" y2="74"
+                  stroke="#f43f5e" stroke-width="2" opacity="0.6"
+                  transform="rotate(-60 70 74)" />
+            @* Threshold tick — warning 1.5 *@
+            <line x1="14" y1="74" x2="24" y2="74"
+                  stroke="#f59e0b" stroke-width="2" opacity="0.6"
+                  transform="rotate(-30 70 74)" />
+
+            @* Center value *@
+            <text x="70" y="67" text-anchor="middle"
+                  fill="@GetHfColor(_healthFactor)"
+                  font-size="20"
+                  font-weight="700"
+                  font-family="'JetBrains Mono', monospace"
+                  class="hf-value">
+                @_healthFactor.ToString("F3")
+            </text>
+            <text x="70" y="80" text-anchor="middle"
+                  fill="rgba(255,255,255,0.2)"
+                  font-size="6"
+                  font-family="Inter, system-ui"
+                  font-weight="600"
+                  letter-spacing="2">
+                HEALTH FACTOR
+            </text>
+        </svg>
+
+        @* Status badge *@
+        <div class="hm-status @GetStatusClass(_healthFactor)">
+            @GetStatusLabel(_healthFactor)
+        </div>
+    </div>
+
+    @* ── Metric cards ─────────────────────────────────────────────────────── *@
+    <div class="hm-metrics">
+        <div class="hm-metric-card @(_ltv > 0.75 ? "hm-metric-card--warn" : "")">
+            <span class="hm-mc-label">LTV</span>
+            <span class="hm-mc-value @(_ltv > 0.75 ? "negative" : "")">
+                @((_ltv * 100).ToString("F1"))%
+            </span>
+            <div class="hm-mc-bar-track">
+                <div class="hm-mc-bar @(_ltv > 0.75 ? "hm-mc-bar--warn" : "hm-mc-bar--ok")"
+                     style="width:@(Math.Min(100, _ltv * 100).ToString("F0"))%"></div>
+            </div>
+        </div>
+        <div class="hm-metric-card">
+            <span class="hm-mc-label">Liq. Distance</span>
+            <span class="hm-mc-value">@_liqDistance.ToString("F2")%</span>
+            <div class="hm-mc-bar-track">
+                <div class="hm-mc-bar hm-mc-bar--cyan"
+                     style="width:@(Math.Min(100, _liqDistance).ToString("F0"))%"></div>
+            </div>
+        </div>
+        <div class="hm-metric-card">
+            <span class="hm-mc-label">Borrow Rate</span>
+            <span class="hm-mc-value">@_borrowRate.ToString("F2")%</span>
+            <div class="hm-mc-bar-track">
+                <div class="hm-mc-bar hm-mc-bar--purple"
+                     style="width:@(Math.Min(100, _borrowRate * 10).ToString("F0"))%"></div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Alert banners ─────────────────────────────────────────────────────── *@
+    @if (_healthFactor > 0 && _healthFactor < 1.2)
+    {
+        <div class="hm-alert hm-alert--critical">
+            <span class="hm-alert-dot"></span>
+            CRITICAL — HF @_healthFactor.ToString("F3") — liquidation imminent!
+        </div>
+    }
+    else if (_healthFactor > 0 && _healthFactor < 1.5)
+    {
+        <div class="hm-alert hm-alert--warning">
+            <span class="hm-alert-dot hm-alert-dot--warning"></span>
+            WARNING — HF @_healthFactor.ToString("F3") — approaching liquidation
+        </div>
+    }
+
+    @* ── Sparkline history ─────────────────────────────────────────────────── *@
+    <div class="hm-history">
+        <div class="hm-history-label">
+            <span>HF History</span>
+            <span class="hm-history-count">@_history.Count readings</span>
+        </div>
+        <div class="hm-sparkline">
+            @if (_history.Count >= 2)
+            {
+                <svg viewBox="0 0 200 32" preserveAspectRatio="none">
+                    @* Fill under curve *@
+                    <defs>
+                        <linearGradient id="spark-fill-@_gaugeId" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="@GetHfColor(_healthFactor)" stop-opacity="0.25"/>
+                            <stop offset="100%" stop-color="@GetHfColor(_healthFactor)" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                    <polygon points="0,32 @GetSparklinePoints() 200,32"
+                             fill="url(#spark-fill-@_gaugeId)" />
+                    <polyline points="@GetSparklinePoints()"
+                              fill="none"
+                              stroke="@GetHfColor(_healthFactor)"
+                              stroke-width="1.5"
+                              stroke-linejoin="round" />
+                    <line x1="0" y1="@GetSparklineY(1.2)" x2="200" y2="@GetSparklineY(1.2)"
+                          stroke="#f43f5e" stroke-width="0.75" stroke-dasharray="4 3" opacity="0.5" />
+                </svg>
+            }
+            else
+            {
+                <div class="hm-spark-empty">Waiting for data…</div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .health-monitor {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--mls-surface, #0e1018);
+        overflow-y: auto;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    .hm-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+    .hm-header-left { display: flex; align-items: center; gap: 7px; flex: 1; }
+    .hm-icon { font-size: 0.85rem; }
+    .hm-title { font-weight: 700; font-size: 0.82rem; color: var(--mls-text, #e2e8f0); letter-spacing: -0.01em; }
+
+    .hm-accent-bar {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(124,58,237,0.4), rgba(0,212,255,0.3), transparent);
+        flex-shrink: 0;
+    }
+
+    /* ── Gauge ────────────────────────────────────────────────────────────── */
+    .hm-gauge-area {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px 12px 8px;
+        gap: 8px;
+    }
+
+    .hf-gauge { width: 200px; height: 130px; }
+
+    /* ── Status badge ─────────────────────────────────────────────────────── */
+    .hm-status {
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 3px 12px;
+        border-radius: 20px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+    }
+    .status-healthy  { background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.25); color: #22c55e; }
+    .status-warning  { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; }
+    .status-critical { background: rgba(244,63,94,0.1);  border: 1px solid rgba(244,63,94,0.35); color: #f43f5e;
+                        animation: status-pulse 1s ease-in-out infinite; }
+    .status-liquidatable { background: rgba(244,63,94,0.2); border: 1px solid rgba(244,63,94,0.5); color: #f43f5e;
+                            animation: status-pulse 0.5s ease-in-out infinite; }
+
+    @@keyframes status-pulse { 0%,100%{opacity:1;} 50%{opacity:0.45;} }
+
+    /* ── Metric cards ─────────────────────────────────────────────────────── */
+    .hm-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        padding: 8px 12px;
+    }
+
+    .hm-metric-card {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        background: rgba(255,255,255,0.025);
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 8px;
+        padding: 8px 10px;
+    }
+    .hm-metric-card--warn {
+        border-color: rgba(244,63,94,0.2);
+        background: rgba(244,63,94,0.04);
+    }
+    .hm-mc-label {
+        font-size: 0.58rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--mls-text-faint, #334155);
+    }
+    .hm-mc-value {
+        font-family: var(--font-mono, monospace);
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: var(--mls-text, #e2e8f0);
+        font-variant-numeric: tabular-nums;
+    }
+    .hm-mc-value.negative { color: #f43f5e; }
+
+    .hm-mc-bar-track {
+        height: 3px;
+        background: rgba(255,255,255,0.06);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 2px;
+    }
+    .hm-mc-bar {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    }
+    .hm-mc-bar--ok     { background: linear-gradient(90deg, #22c55e, #86efac); }
+    .hm-mc-bar--warn   { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+    .hm-mc-bar--cyan   { background: linear-gradient(90deg, #00d4ff, #67e8f9); }
+    .hm-mc-bar--purple { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
+
+    /* ── Alert banners ────────────────────────────────────────────────────── */
+    .hm-alert {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 10px 8px;
+        padding: 7px 12px;
+        border-radius: 6px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+    }
+    .hm-alert--critical {
+        background: rgba(244,63,94,0.1);
+        border: 1px solid rgba(244,63,94,0.35);
+        color: #f43f5e;
+        animation: alert-flash 0.9s ease-in-out infinite;
+    }
+    .hm-alert--warning {
+        background: rgba(245,158,11,0.08);
+        border: 1px solid rgba(245,158,11,0.25);
+        color: #f59e0b;
+    }
+    @@keyframes alert-flash { 0%,100%{opacity:1;} 50%{opacity:0.55;} }
+
+    .hm-alert-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
+        animation: live-pulse 0.8s ease-in-out infinite;
+    }
+    .hm-alert-dot--warning { animation-duration: 1.4s; }
+
+    /* ── History sparkline ────────────────────────────────────────────────── */
+    .hm-history { padding: 4px 12px 14px; flex-shrink: 0; }
+    .hm-history-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.58rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--mls-text-faint, #334155);
+        margin-bottom: 6px;
+    }
+    .hm-history-count {
+        font-weight: 400;
+        color: rgba(255,255,255,0.15);
+        text-transform: none;
+        letter-spacing: 0;
+    }
+    .hm-sparkline { background: rgba(255,255,255,0.02); border-radius: 6px; overflow: hidden; }
+    .hm-sparkline svg { width: 100%; height: 36px; display: block; }
+    .hm-spark-empty {
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.62rem;
+        color: var(--mls-text-faint, #334155);
+        font-style: italic;
+    }
+
+    .negative { color: #f43f5e; }
+</style>
+
+@code {
+    private readonly string _gaugeId = Guid.NewGuid().ToString("N")[..8];
+    private string _protocol = "all";
+    private double _healthFactor;
+    private double _ltv;
+    private double _liqDistance;
+    private double _borrowRate;
+    private readonly List<double> _history = new(30);
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["HEALTH_FACTOR_UPDATE", "DEFI_HEALTH_WARNING"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            var payload = envelope.Payload;
+
+            if (_protocol != "all" &&
+                payload.TryGetProperty("protocol", out var pr) &&
+                pr.GetString() != _protocol) continue;
+
+            if (payload.TryGetProperty("health_factor", out var hf))  _healthFactor = hf.GetDouble();
+            if (payload.TryGetProperty("ltv",           out var ltv)) _ltv          = ltv.GetDouble();
+            if (payload.TryGetProperty("liq_distance",  out var ld))  _liqDistance  = ld.GetDouble();
+            if (payload.TryGetProperty("borrow_rate",   out var br))  _borrowRate   = br.GetDouble();
+
+            if (_history.Count >= 30) _history.RemoveAt(0);
+            if (_healthFactor > 0) _history.Add(_healthFactor);
+
+            await JS.InvokeVoidAsync("updateHealthFactor", $"hm-{_gaugeId}", _healthFactor)
+                .ConfigureAwait(false);
+
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private static string GetHfColor(double hf) =>
+        hf <= 0 ? "#334155" : hf < 1.2 ? "#f43f5e" : hf < 1.5 ? "#f59e0b" : "#22c55e";
+
+    private static string GetHfColorTint(double hf) =>
+        hf <= 0 ? "#475569" : hf < 1.2 ? "#fb7185" : hf < 1.5 ? "#fcd34d" : "#86efac";
+
+    private static string GetStatusClass(double hf) =>
+        hf <= 0 ? "" : hf < 1.0 ? "status-liquidatable" : hf < 1.2 ? "status-critical" : hf < 1.5 ? "status-warning" : "status-healthy";
+
+    private static string GetStatusLabel(double hf) =>
+        hf <= 0 ? "Awaiting data" : hf < 1.0 ? "LIQUIDATABLE" : hf < 1.2 ? "CRITICAL" : hf < 1.5 ? "WARNING" : "Healthy";
+
+    // Arc: half-circle r=56, circumference ≈ 175.93
+    private static double GetDashOffset(double hf)
+    {
+        const double c = 175.93;
+        if (hf <= 0) return c;
+        var pct = Math.Min(1.0, hf / 3.0);
+        return c * (1 - pct);
+    }
+
+    private string GetSparklinePoints()
+    {
+        if (_history.Count < 2) return "";
+        var min = Math.Max(0.8, _history.Min() - 0.1);
+        var max = Math.Max(min + 0.1, _history.Max() + 0.1);
+        var step = 200.0 / (_history.Count - 1);
+        var pts  = _history.Select((v, i) =>
+        {
+            var x = i * step;
+            var y = 30 - (v - min) / (max - min) * 28 - 1;
+            return $"{x:F1},{y:F1}";
+        });
+        return string.Join(" ", pts);
+    }
+
+    private double GetSparklineY(double hf)
+    {
+        if (_history.Count < 2) return 15;
+        var min = Math.Max(0.8, _history.Min() - 0.1);
+        var max = Math.Max(min + 0.1, _history.Max() + 0.1);
+        return 30 - (hf - min) / (max - min) * 28 - 1;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

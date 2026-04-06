@@ -1,0 +1,227 @@
+@inherits LayoutComponentBase
+@inject WindowManager WM
+
+<FluentDesignTheme Mode="DesignThemeModes.Dark" />
+
+<div class="mls-shell">
+    <nav class="mls-nav">
+        @* ── Brand strip ──────────────────────────────────────────────────── *@
+        <div class="nav-brand">
+            <div class="nav-brand-logo">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <path d="M14 2L26 8v12L14 26 2 20V8L14 2z"
+                          fill="none" stroke="url(#brand-grad)" stroke-width="1.5"/>
+                    <path d="M8 14l4 4 8-8" stroke="url(#brand-grad)" stroke-width="2" stroke-linecap="round"/>
+                    <defs>
+                        <linearGradient id="brand-grad" x1="2" y1="2" x2="26" y2="26" gradientUnits="userSpaceOnUse">
+                            <stop offset="0%" stop-color="#00d4ff"/>
+                            <stop offset="100%" stop-color="#7c3aed"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="nav-brand-text">
+                <span class="nav-brand-name">MLS</span>
+                <span class="nav-brand-sub">Trading Platform</span>
+            </div>
+        </div>
+
+        <FluentNavMenu Width="220" class="mls-fluent-nav">
+            <FluentNavLink Href="/" Match="NavLinkMatch.All">
+                Dashboard
+            </FluentNavLink>
+
+            <FluentNavGroup Title="Trading">
+                <FluentNavLink @onclick='() => WM.OpenPanel("TradingTerminal", "Trading Terminal")'>
+                    Terminal
+                </FluentNavLink>
+                <FluentNavLink @onclick='() => WM.OpenPanel("TradingChart", "Chart")'>
+                    Chart
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="Arbitrage">
+                <FluentNavLink @onclick='() => WM.OpenPanel("ArbitrageScanner", "Arbitrage Scanner")'>
+                    Scanner
+                </FluentNavLink>
+                <FluentNavLink @onclick='() => WM.OpenPanel("PathVisualization", "Path Graph")'>
+                    Path Graph
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="DeFi">
+                <FluentNavLink @onclick='() => WM.OpenPanel("DeFiPositions", "DeFi Positions")'>
+                    Positions
+                </FluentNavLink>
+                <FluentNavLink @onclick='() => WM.OpenPanel("HealthMonitor", "Health Monitor")'>
+                    Health Monitor
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="Designer">
+                <FluentNavLink @onclick='() => WM.OpenPanel("DesignerCanvas", "Strategy Designer")'>
+                    Canvas
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="ML">
+                <FluentNavLink Href="/ml">
+                    Model Registry
+                </FluentNavLink>
+            </FluentNavGroup>
+        </FluentNavMenu>
+
+        <div class="nav-footer">
+            <div class="nav-status-dot"></div>
+            <span class="nav-status-text">Live</span>
+        </div>
+    </nav>
+
+    <main class="mls-main">
+        @Body
+    </main>
+</div>
+
+<FluentToastProvider />
+<FluentDialogProvider />
+<FluentMessageBarProvider />
+<FluentTooltipProvider />
+
+<style>
+    .mls-shell {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--mls-bg, #07080c);
+    }
+
+    /* ── Sidebar nav ─────────────────────────────────────────────────────── */
+    .mls-nav {
+        width: 220px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--mls-surface, #0e1018);
+        border-right: 1px solid rgba(255,255,255,0.05);
+        overflow-y: auto;
+        overflow-x: hidden;
+        position: relative;
+    }
+
+    /* Subtle left-edge glow */
+    .mls-nav::after {
+        content: '';
+        position: absolute;
+        right: 0; top: 0; bottom: 0;
+        width: 1px;
+        background: linear-gradient(180deg, transparent 0%, rgba(0,212,255,0.2) 40%, rgba(124,58,237,0.2) 70%, transparent 100%);
+        pointer-events: none;
+    }
+
+    /* ── Brand ────────────────────────────────────────────────────────────── */
+    .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 20px 16px 16px;
+        flex-shrink: 0;
+    }
+
+    .nav-brand-logo {
+        width: 36px; height: 36px;
+        display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, rgba(0,212,255,0.08), rgba(124,58,237,0.08));
+        border: 1px solid rgba(0,212,255,0.2);
+        border-radius: 10px;
+        flex-shrink: 0;
+    }
+
+    .nav-brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+    .nav-brand-name {
+        font-size: 0.9rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #00d4ff, #7c3aed);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: 0.05em;
+    }
+    .nav-brand-sub {
+        font-size: 0.6rem;
+        color: var(--mls-text-faint, #334155);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    /* ── Section labels ───────────────────────────────────────────────────── */
+    .nav-section-label {
+        font-size: 0.55rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--mls-text-faint, #334155);
+        padding: 12px 16px 4px;
+        flex-shrink: 0;
+    }
+
+    /* ── Nav icons ───────────────────────────────────────────────────────── */
+    .nav-icon {
+        font-size: 0.9rem;
+        width: 18px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    .nav-icon--trading  { color: #22c55e; }
+    .nav-icon--arb      { color: #f59e0b; }
+    .nav-icon--defi     { color: #7c3aed; }
+    .nav-icon--designer { color: #00d4ff; }
+    .nav-icon--ml       { color: #ec4899; }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    .nav-footer {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 12px 16px;
+        border-top: 1px solid rgba(255,255,255,0.04);
+    }
+    .nav-status-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 6px #22c55e;
+        animation: live-pulse 1.5s ease-in-out infinite;
+    }
+    .nav-status-text {
+        font-size: 0.6rem;
+        font-weight: 600;
+        color: #22c55e;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+
+    /* ── Main ─────────────────────────────────────────────────────────────── */
+    .mls-main {
+        flex: 1;
+        overflow: hidden;
+        position: relative;
+        min-width: 0;
+    }
+</style>
+
+@code {
+    [Inject] private IJSRuntime? JS { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var width = await JS!.InvokeAsync<double>("eval", "window.innerWidth")
+                .ConfigureAwait(false);
+            _ = width; // nav is always visible; used for future collapse support
+        }
+        catch { /* non-critical */ }
+    }
+}

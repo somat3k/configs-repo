@@ -1,0 +1,247 @@
+@* Block palette — categorized accordion of all registered block types *@
+
+<div class="block-palette">
+    <div class="palette-header">
+        <span class="palette-title">Block Palette</span>
+        <FluentButton Appearance="Appearance.Stealth"
+                     
+                      @onclick="() => OnClose.InvokeAsync()"
+                      title="Close palette" />
+    </div>
+
+    <div class="palette-search">
+        <FluentSearch Placeholder="Search blocks…"
+                      @bind-Value="_search"
+                      @bind-Value:after="StateHasChanged" />
+    </div>
+
+    <div class="palette-body">
+        @foreach (var category in FilteredCategories())
+        {
+            <details class="palette-category" open>
+                <summary class="category-header">
+                    <span class="category-badge" style="background:@category.Color">@category.ShortLabel</span>
+                    @category.Label
+                </summary>
+                <div class="category-items">
+                    @foreach (var block in category.Blocks)
+                    {
+                        var b = block;
+                        <div class="palette-item"
+                             draggable="true"
+                             @ondragstart="() => OnBlockDragStart.InvokeAsync(b.TypeKey)"
+                             @onclick="() => OnBlockDragStart.InvokeAsync(b.TypeKey)"
+                             title="@b.Description">
+                            <span class="pi-name">@b.DisplayName</span>
+                            @if (!string.IsNullOrEmpty(b.Description))
+                            {
+                                <span class="pi-desc">@b.Description</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </details>
+        }
+    </div>
+</div>
+
+<style>
+    .block-palette {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 220px;
+        background: var(--neutral-layer-3, #1c2128);
+        border-right: 1px solid rgba(255,255,255,0.08);
+        display: flex;
+        flex-direction: column;
+        z-index: 10;
+        overflow: hidden;
+    }
+
+    .palette-header {
+        display: flex;
+        align-items: center;
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    .palette-title {
+        flex: 1;
+        font-weight: 600;
+        font-size: 0.78rem;
+        color: #e6edf3;
+    }
+
+    .palette-search {
+        padding: 6px 8px;
+        flex-shrink: 0;
+    }
+
+    .palette-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 4px 0;
+    }
+
+    .palette-category {
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .category-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #8b949e;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        list-style: none;
+        user-select: none;
+    }
+
+    .category-header:hover { color: #e6edf3; background: rgba(255,255,255,0.04); }
+
+    .category-badge {
+        font-size: 0.58rem;
+        padding: 1px 4px;
+        border-radius: 2px;
+        color: #fff;
+        font-weight: 700;
+    }
+
+    .category-items { padding: 2px 0; }
+
+    .palette-item {
+        padding: 5px 12px 5px 20px;
+        cursor: grab;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        border-radius: 4px;
+        margin: 1px 4px;
+        transition: background 0.12s;
+    }
+
+    .palette-item:hover { background: rgba(0,212,255,0.08); }
+    .palette-item:active { cursor: grabbing; }
+
+    .pi-name {
+        font-size: 0.74rem;
+        color: #e6edf3;
+        white-space: nowrap;
+    }
+
+    .pi-desc {
+        font-size: 0.64rem;
+        color: #6e7681;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+</style>
+
+@code {
+    [Parameter] public EventCallback<string> OnBlockDragStart { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string _search = string.Empty;
+
+    private record BlockEntry(string TypeKey, string DisplayName, string Description = "");
+
+    private record CategoryEntry(string Label, string ShortLabel, string Color, BlockEntry[] Blocks);
+
+    private static readonly CategoryEntry[] AllCategories =
+    [
+        new("Data Sources", "DATA", "#1e6091",
+        [
+            new("CandleFeedBlock",     "Candle Feed",     "OHLCV candle stream"),
+            new("OrderBookFeedBlock",  "Order Book Feed", "L2 order book updates"),
+            new("TradeFeedBlock",      "Trade Feed",      "Real-time trade ticks"),
+            new("BacktestReplayBlock", "Backtest Replay", "Historical candle replay"),
+            new("FeedSourceBlock",     "Feed Source",     "Hydra data source"),
+        ]),
+        new("Indicators", "IND", "#0a7c7c",
+        [
+            new("RSIBlock",           "RSI",              "Relative Strength Index"),
+            new("MACDBlock",          "MACD",             "Moving Average Convergence"),
+            new("BollingerBlock",     "Bollinger Bands",  "Volatility envelope"),
+            new("ATRBlock",           "ATR",              "Average True Range"),
+            new("VWAPBlock",          "VWAP",             "Volume Weighted Avg Price"),
+            new("VolumeProfileBlock", "Volume Profile",   "Volume by price level"),
+            new("CustomIndicatorBlock","Custom Indicator","User-defined indicator"),
+        ]),
+        new("ML Models", "ML", "#6b2fa0",
+        [
+            new("ModelTInferenceBlock", "Model-T Inference", "Trading model inference"),
+            new("ModelAInferenceBlock", "Model-A Inference", "Arbitrage model inference"),
+            new("ModelDInferenceBlock", "Model-D Inference", "DeFi model inference"),
+            new("EnsembleBlock",        "Ensemble",          "Multi-model ensemble"),
+        ]),
+        new("Strategy", "STRAT", "#2d5a27",
+        [
+            new("MomentumStrategyBlock",  "Momentum",       "Trend-following strategy"),
+            new("MeanReversionBlock",     "Mean Reversion", "Counter-trend strategy"),
+            new("TrendFollowBlock",       "Trend Follow",   "Long-term trend capture"),
+            new("CompositeStrategyBlock", "Composite",      "Nested strategy container"),
+        ]),
+        new("Risk / Execution", "EXEC", "#7c3f00",
+        [
+            new("PositionSizerBlock",  "Position Sizer",   "Kelly / fixed-risk sizing"),
+            new("StopLossBlock",       "Stop Loss",        "Dynamic stop management"),
+            new("DrawdownGuardBlock",  "Drawdown Guard",   "Max drawdown circuit break"),
+            new("ExposureLimitBlock",  "Exposure Limit",   "Portfolio exposure cap"),
+            new("OrderEmitterBlock",   "Order Emitter",    "Submit orders to broker"),
+            new("OrderRouterBlock",    "Order Router",     "Route to best venue"),
+        ]),
+        new("Arbitrage", "ARB", "#9e5a00",
+        [
+            new("SpreadCalculatorBlock", "Spread Calc",     "Cross-exchange spread"),
+            new("nHOPPathFinderBlock",   "nHOP Path Finder","Multi-hop route finder"),
+            new("FlashLoanBlock",        "Flash Loan",       "Balancer flash loan"),
+            new("ProfitGateBlock",       "Profit Gate",      "Min-profit filter"),
+        ]),
+        new("DeFi", "DEFI", "#0e7490",
+        [
+            new("MorphoSupplyBlock",    "Morpho Supply",    "Morpho lending supply"),
+            new("MorphoBorrowBlock",    "Morpho Borrow",    "Morpho borrow position"),
+            new("BalancerSwapBlock",    "Balancer Swap",    "Balancer AMM swap"),
+            new("CollateralHealthBlock","Collateral Health","Collateral health check"),
+            new("YieldOptimizerBlock",  "Yield Optimizer",  "Auto yield routing"),
+            new("LiquidationGuardBlock","Liquidation Guard","Liquidation prevention"),
+            new("LendingHealthBlock",   "Lending Health",   "HF/LTV monitor"),
+        ]),
+        new("ML Training", "TRAIN", "#831843",
+        [
+            new("DataLoaderBlock",       "Data Loader",    "Load training dataset"),
+            new("FeatureEngineerBlock",  "Feature Engineer","Feature engineering"),
+            new("TrainSplitBlock",       "Train/Val Split", "Train/validation split"),
+            new("TrainModelBlock",       "Train Model",     "Launch training job"),
+            new("ValidateModelBlock",    "Validate Model",  "Validation metrics"),
+            new("ExportONNXBlock",       "Export ONNX",     "Export to ONNX runtime"),
+            new("HyperparamSearchBlock", "Hyperparam Search","Hyperparameter sweep"),
+        ]),
+    ];
+
+    private IEnumerable<CategoryEntry> FilteredCategories()
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+            return AllCategories;
+
+        return AllCategories
+            .Select(c => c with
+            {
+                Blocks = c.Blocks.Where(b =>
+                    b.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                    b.Description.Contains(_search, StringComparison.OrdinalIgnoreCase)).ToArray(),
+            })
+            .Where(c => c.Blocks.Length > 0)
+            .ToArray();
+    }
+}

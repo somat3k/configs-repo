@@ -1,0 +1,223 @@
+@using Microsoft.AspNetCore.Components.Web
+
+@* ── Positioned absolutely; z-index, position, size come from WindowState ── *@
+<div class="document-window @(State.IsMaximized ? "maximized" : "") @(State.IsMinimized ? "minimized" : "")"
+     style="left:@(State.X)px; top:@(State.Y)px;
+            width:@(State.IsMaximized ? "100%" : $"{State.Width}px");
+            height:@(State.IsMaximized ? "100%" : $"{State.Height}px");
+            z-index:@State.ZIndex;"
+     @onmousedown="() => OnFocus.InvokeAsync()">
+
+    @* ── Gradient border glow (inactive) / active border (focused) ── *@
+    <div class="window-glow-border"></div>
+
+    @* ── Title bar ──────────────────────────────────────────────────────── *@
+    <div class="window-titlebar"
+         @onmousedown:preventDefault
+         @onmousedown="OnTitleBarMouseDown">
+
+        @* Traffic-light controls (macOS-inspired but futuristic) *@
+        <div class="window-controls">
+            <button class="wc-btn wc-close" title="Close"
+                    @onclick:stopPropagation
+                    @onclick="() => OnClose.InvokeAsync()">
+                <svg width="8" height="8" viewBox="0 0 8 8">
+                    <line x1="1" y1="1" x2="7" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="7" y1="1" x2="1" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <button class="wc-btn wc-minimize" title="Minimise"
+                    @onclick:stopPropagation
+                    @onclick="() => OnMinimize.InvokeAsync()">
+                <svg width="8" height="2" viewBox="0 0 8 2">
+                    <line x1="0" y1="1" x2="8" y2="1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <button class="wc-btn wc-maximize" title="@(State.IsMaximized ? "Restore" : "Maximise")"
+                    @onclick:stopPropagation
+                    @onclick="() => OnMaximize.InvokeAsync()">
+                @if (State.IsMaximized)
+                {
+                    <svg width="9" height="9" viewBox="0 0 9 9">
+                        <rect x="2.5" y="0.5" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.2" rx="1"/>
+                        <rect x="0.5" y="2.5" width="6" height="6" fill="var(--mls-surface-2,#131620)" stroke="currentColor" stroke-width="1.2" rx="1"/>
+                    </svg>
+                }
+                else
+                {
+                    <svg width="9" height="9" viewBox="0 0 9 9">
+                        <rect x="0.5" y="0.5" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2" rx="1"/>
+                    </svg>
+                }
+            </button>
+        </div>
+
+        <span class="window-title">@State.Title</span>
+    </div>
+
+    @* ── Content area ────────────────────────────────────────────────────── *@
+    <div class="window-content">
+        @ChildContent
+    </div>
+
+    @* ── Eight resize handles ────────────────────────────────────────────── *@
+    @if (!State.IsMaximized)
+    {
+        @foreach (var dir in Enum.GetValues<ResizeDirection>())
+        {
+            var captured = dir;
+            <div class="resize-handle rh-@dir.ToString().ToLowerInvariant()"
+                 @onmousedown:preventDefault
+                 @onmousedown="(args) => OnResizeStart.InvokeAsync((captured, args))">
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .document-window {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        background: var(--mls-surface, #0e1018);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: var(--r-lg, 12px);
+        box-shadow:
+            0 0 0 1px rgba(0, 212, 255, 0.06),
+            0 20px 60px rgba(0, 0, 0, 0.7),
+            0 4px 16px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        animation: panel-enter 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        user-select: none;
+        backdrop-filter: blur(2px);
+    }
+
+    .document-window:focus-within,
+    .document-window:hover {
+        border-color: rgba(0, 212, 255, 0.15);
+        box-shadow:
+            0 0 0 1px rgba(0, 212, 255, 0.12),
+            0 24px 70px rgba(0, 0, 0, 0.75),
+            0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .document-window.maximized {
+        left: 0 !important;
+        top: 0 !important;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+    }
+
+    @* Top-edge glow accent *@
+    .window-glow-border {
+        position: absolute;
+        top: 0; left: 20%; right: 20%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0,212,255,0.5), rgba(124,58,237,0.4), transparent);
+        pointer-events: none;
+        z-index: 10;
+    }
+
+    @@keyframes panel-enter {
+        from { transform: translateY(12px) scale(0.98); opacity: 0; }
+        to   { transform: translateY(0)    scale(1);    opacity: 1; }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .document-window { animation: none; }
+    }
+
+    /* ── Title bar ─────────────────────────────────────────────────────────── */
+    .window-titlebar {
+        display: flex;
+        align-items: center;
+        height: 34px;
+        padding: 0 10px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        cursor: grab;
+        flex-shrink: 0;
+        gap: 8px;
+    }
+
+    .window-titlebar:active { cursor: grabbing; }
+
+    /* ── Traffic-light style controls ──────────────────────────────────────── */
+    .window-controls {
+        display: flex;
+        gap: 5px;
+        cursor: default;
+        flex-shrink: 0;
+    }
+
+    .wc-btn {
+        width: 14px;
+        height: 14px;
+        border: none;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.06);
+        color: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s, color 0.15s, transform 0.1s;
+        flex-shrink: 0;
+        padding: 0;
+    }
+
+    .document-window:hover .wc-close    { background: #f43f5e; color: #7f1d1d; }
+    .document-window:hover .wc-minimize { background: #f59e0b; color: #78350f; }
+    .document-window:hover .wc-maximize { background: #22c55e; color: #14532d; }
+
+    .wc-btn:hover { transform: scale(1.15); }
+    .wc-btn:active { transform: scale(0.9); }
+
+    .window-title {
+        flex: 1;
+        font-size: 0.72rem;
+        font-weight: 500;
+        color: var(--mls-text-muted, #64748b);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        letter-spacing: 0.02em;
+    }
+
+    /* ── Content ───────────────────────────────────────────────────────────── */
+    .window-content {
+        flex: 1;
+        overflow: auto;
+        position: relative;
+        min-height: 0;
+    }
+
+    /* ── Resize handles ──────────────────────────────────────────────────── */
+    .resize-handle { position: absolute; z-index: 10; }
+    .rh-n  { top: -4px;  left: 10px;   right: 10px;  height: 8px;   cursor: n-resize; }
+    .rh-s  { bottom: -4px; left: 10px; right: 10px;  height: 8px;   cursor: s-resize; }
+    .rh-e  { top: 10px;  right: -4px;  bottom: 10px; width: 8px;    cursor: e-resize; }
+    .rh-w  { top: 10px;  left: -4px;   bottom: 10px; width: 8px;    cursor: w-resize; }
+    .rh-ne { top: -4px;  right: -4px;  width: 14px;  height: 14px;  cursor: ne-resize; }
+    .rh-nw { top: -4px;  left: -4px;   width: 14px;  height: 14px;  cursor: nw-resize; }
+    .rh-se { bottom: -4px; right: -4px; width: 14px; height: 14px;  cursor: se-resize; }
+    .rh-sw { bottom: -4px; left: -4px;  width: 14px; height: 14px;  cursor: sw-resize; }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public WindowState State { get; set; } = default!;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnMinimize { get; set; }
+    [Parameter] public EventCallback OnMaximize { get; set; }
+    [Parameter] public EventCallback OnFocus { get; set; }
+    [Parameter] public EventCallback<MouseEventArgs> OnDragStart { get; set; }
+    [Parameter] public EventCallback<(ResizeDirection Direction, MouseEventArgs Args)> OnResizeStart { get; set; }
+
+    private void OnTitleBarMouseDown(MouseEventArgs args)
+    {
+        if (args.Button == 0)
+            OnDragStart.InvokeAsync(args);
+    }
+}

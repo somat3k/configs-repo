@@ -1,0 +1,215 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="path-visualization">
+    <div class="pv-header">
+        <span class="pv-title">nHOP Token Graph</span>
+        <div class="pv-controls">
+            <FluentButton Appearance="Appearance.Stealth"
+                         
+                          @onclick="RefreshAsync"
+                          title="Refresh layout">
+                Refresh
+            </FluentButton>
+        </div>
+    </div>
+
+    <div class="pv-body">
+        <div id="@_cytoscapeId" class="cytoscape-container"></div>
+
+        <div class="pv-legend">
+            <div class="legend-item">
+                <span class="legend-dot" style="background:#22c55e"></span>
+                <span>Profitable path</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background:#eab308"></span>
+                <span>Break-even</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot" style="background:#f85149"></span>
+                <span>Unprofitable</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .path-visualization {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #0d1117;
+        overflow: hidden;
+    }
+
+    .pv-header {
+        display: flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        background: var(--neutral-layer-2, #161b22);
+        flex-shrink: 0;
+        gap: 8px;
+    }
+
+    .pv-title {
+        font-weight: 600;
+        font-size: 0.82rem;
+        color: #e6edf3;
+        flex: 1;
+    }
+
+    .pv-body {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .cytoscape-container {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        inset: 0;
+    }
+
+    .pv-legend {
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        background: rgba(22,27,34,0.85);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 6px;
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        backdrop-filter: blur(4px);
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.65rem;
+        color: #8b949e;
+    }
+
+    .legend-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+</style>
+
+@code {
+    private readonly string _cytoscapeId = $"cy-{Guid.NewGuid():N}"[..16];
+    private CancellationTokenSource _cts = new();
+    private bool _initialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["ARB_PATH_FOUND", "ARB_GRAPH_UPDATE"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            var graphData = BuildGraphData(envelope.Payload);
+            if (_initialized)
+            {
+                await JS.InvokeVoidAsync("updateCytoscapeGraph", _cytoscapeId, graphData)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("initCytoscapeGraph", _cytoscapeId, graphData)
+                    .ConfigureAwait(false);
+                _initialized = true;
+            }
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _initialized = false;
+        await JS.InvokeVoidAsync("initCytoscapeGraph", _cytoscapeId, new { nodes = Array.Empty<object>(), edges = Array.Empty<object>() })
+            .ConfigureAwait(false);
+    }
+
+    private static object BuildGraphData(System.Text.Json.JsonElement payload)
+    {
+        var nodes = new List<object>();
+        var edges = new List<object>();
+
+        if (payload.TryGetProperty("nodes", out var nodesEl))
+        {
+            foreach (var n in nodesEl.EnumerateArray())
+            {
+                nodes.Add(new
+                {
+                    data = new
+                    {
+                        id    = n.TryGetProperty("id",    out var id)    ? id.GetString()    : "",
+                        label = n.TryGetProperty("label", out var lbl)   ? lbl.GetString()   : "",
+                    },
+                });
+            }
+        }
+
+        if (payload.TryGetProperty("edges", out var edgesEl))
+        {
+            foreach (var e in edgesEl.EnumerateArray())
+            {
+                var profitPct = e.TryGetProperty("profit_pct", out var pp) ? pp.GetDouble() : 0;
+                edges.Add(new
+                {
+                    data = new
+                    {
+                        id     = e.TryGetProperty("id",     out var eid) ? eid.GetString()    : Guid.NewGuid().ToString("N")[..8],
+                        source = e.TryGetProperty("source", out var src) ? src.GetString()    : "",
+                        target = e.TryGetProperty("target", out var tgt) ? tgt.GetString()    : "",
+                        weight = $"{profitPct:F3}%",
+                        profit = profitPct,
+                    },
+                    style = new { lineColor = profitPct >= 0.05 ? "#22c55e" : profitPct >= 0 ? "#eab308" : "#f85149" },
+                });
+            }
+        }
+
+        // Fallback: if envelope has token_path, synthesize a simple path graph
+        if (nodes.Count == 0 && payload.TryGetProperty("token_path", out var pathEl))
+        {
+            var path = pathEl.GetString()?.Split("→") ?? [];
+            for (var i = 0; i < path.Length; i++)
+            {
+                var token = path[i].Trim();
+                nodes.Add(new { data = new { id = token, label = token } });
+                if (i > 0)
+                {
+                    var prevToken = path[i - 1].Trim();
+                    edges.Add(new
+                    {
+                        data = new
+                        {
+                            id = $"{prevToken}-{token}",
+                            source = prevToken,
+                            target = token,
+                            weight = "",
+                        },
+                    });
+                }
+            }
+        }
+
+        return new { nodes = nodes.ToArray(), edges = edges.ToArray() };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}

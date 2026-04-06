@@ -1,0 +1,144 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="order-book" id="orderbook-@Symbol">
+    <div class="ob-spread">
+        Spread: <span class="ob-spread-value">@_spread.ToString("F4")</span>
+    </div>
+
+    <div class="ob-asks-header">Asks</div>
+    <div class="ob-asks">
+        @foreach (var ask in _asks.Take(12))
+        {
+            <div class="ob-row ask">
+                <span class="ob-price">@ask.Price.ToString("F4")</span>
+                <span class="ob-qty">@ask.Quantity.ToString("F3")</span>
+            </div>
+        }
+    </div>
+
+    <div class="ob-mid">@_midPrice.ToString("F4")</div>
+
+    <div class="ob-bids-header">Bids</div>
+    <div class="ob-bids">
+        @foreach (var bid in _bids.Take(12))
+        {
+            <div class="ob-row bid">
+                <span class="ob-price">@bid.Price.ToString("F4")</span>
+                <span class="ob-qty">@bid.Quantity.ToString("F3")</span>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .order-book {
+        font-size: 0.7rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        padding: 4px;
+    }
+
+    .ob-asks-header, .ob-bids-header {
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        color: #484f58;
+        padding: 2px 4px;
+        font-family: system-ui, sans-serif;
+    }
+
+    .ob-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 1px 4px;
+        border-radius: 2px;
+        transition: background 0.1s;
+    }
+
+    .ob-row:hover { background: rgba(255,255,255,0.04); }
+
+    .ob-row.bid .ob-price { color: #2ea043; }
+    .ob-row.ask .ob-price { color: #f85149; }
+    .ob-qty { color: #8b949e; }
+
+    .ob-mid {
+        text-align: center;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: #e6edf3;
+        padding: 3px 4px;
+        border-top: 1px solid rgba(255,255,255,0.07);
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .ob-spread { font-size: 0.62rem; color: #484f58; padding: 2px 4px; text-align: right; }
+    .ob-spread-value { color: #8b949e; }
+</style>
+
+@code {
+    [Parameter] public string Symbol { get; set; } = "BTC-USD";
+
+    private record Level(double Price, double Quantity);
+
+    private List<Level> _bids = [];
+    private List<Level> _asks = [];
+    private double _spread;
+    private double _midPrice;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(["ORDER_BOOK_UPDATE"], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            if (!envelope.Payload.TryGetProperty("symbol", out var sym) ||
+                sym.GetString() != Symbol) continue;
+
+            var bids = new List<Level>();
+            var asks = new List<Level>();
+
+            if (envelope.Payload.TryGetProperty("bids", out var bidsEl))
+            {
+                foreach (var item in bidsEl.EnumerateArray())
+                {
+                    var arr = item.EnumerateArray().ToArray();
+                    if (arr.Length >= 2)
+                        bids.Add(new(arr[0].GetDouble(), arr[1].GetDouble()));
+                }
+            }
+
+            if (envelope.Payload.TryGetProperty("asks", out var asksEl))
+            {
+                foreach (var item in asksEl.EnumerateArray())
+                {
+                    var arr = item.EnumerateArray().ToArray();
+                    if (arr.Length >= 2)
+                        asks.Add(new(arr[0].GetDouble(), arr[1].GetDouble()));
+                }
+            }
+
+            // Use JS interop for DOM update — no StateHasChanged
+            var bidsArr = bids.Select(b => new[] { b.Price, b.Quantity }).ToArray();
+            var asksArr = asks.Select(a => new[] { a.Price, a.Quantity }).ToArray();
+            await JS.InvokeVoidAsync("updateOrderBook", Symbol, bidsArr, asksArr)
+                .ConfigureAwait(false);
+
+            // Update spread calc in memory (only re-renders on next Blazor cycle naturally)
+            if (bids.Count > 0 && asks.Count > 0)
+            {
+                _spread = asks[0].Price - bids[0].Price;
+                _midPrice = (asks[0].Price + bids[0].Price) / 2;
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}
