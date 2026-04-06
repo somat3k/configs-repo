@@ -1,0 +1,330 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="envelope-stream">
+
+    @* ── Header ─────────────────────────────────────────────────────────── *@
+    <div class="es-header">
+        <div class="es-header-left">
+            <span class="es-icon" style="color:#00d4ff">≋</span>
+            <span class="es-title">Envelope Stream</span>
+            <div class="live-dot"></div>
+        </div>
+        <div class="es-header-right">
+            <span class="es-count">@_buffer.Count / @MaxBuffer</span>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ClearBuffer" class="es-clear-btn">
+                Clear
+            </FluentButton>
+        </div>
+    </div>
+
+    <div class="es-accent-bar"></div>
+
+    @* ── Filters ─────────────────────────────────────────────────────────── *@
+    <div class="es-filters">
+        <div class="es-filter-input-wrap">
+            <span class="es-filter-icon">⌕</span>
+            <input class="es-filter-input"
+                   type="text"
+                   placeholder="Regex filter (e.g. TRADE_.*)…"
+                   @bind="_regexFilter"
+                   @bind:event="oninput" />
+            @if (_regexError is not null)
+            {
+                <span class="es-regex-error" title="@_regexError">⚠</span>
+            }
+        </div>
+
+        @* Category chip filters *@
+        <div class="es-chips">
+            @foreach (var cat in _categories)
+            {
+                var c = cat;
+                <button class="es-chip @(_activeCategories.Contains(c) ? "es-chip--active" : "")"
+                        @onclick="() => ToggleCategory(c)">
+                    <span class="es-chip-dot" style="background:@GetCategoryColor(c)"></span>
+                    @c
+                </button>
+            }
+        </div>
+    </div>
+
+    @* ── Envelope rows ────────────────────────────────────────────────────── *@
+    <div class="es-scroll" id="es-scroll-@_id">
+        @foreach (var entry in FilteredEntries())
+        {
+            <div class="es-row" @key="entry.EntryId">
+                <span class="es-ts mono">@entry.Timestamp.ToString("HH:mm:ss.fff")</span>
+                <span class="es-type-badge" style="background:@(GetCategoryColor(GetCategory(entry.Type)) + "22"); border-color:@(GetCategoryColor(GetCategory(entry.Type)) + "44"); color:@GetCategoryColor(GetCategory(entry.Type))">
+                    @entry.Type
+                </span>
+                <span class="es-module mono">@entry.ModuleId</span>
+                <span class="es-summary">@entry.PayloadSummary</span>
+            </div>
+        }
+        @if (!FilteredEntries().Any())
+        {
+            <div class="es-empty">No envelopes match the current filter</div>
+        }
+    </div>
+</div>
+
+<style>
+    .envelope-stream {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--mls-surface, #0e1018);
+        overflow: hidden;
+    }
+
+    .es-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 14px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+    .es-header-left { display: flex; align-items: center; gap: 7px; }
+    .es-header-right { display: flex; align-items: center; gap: 8px; }
+    .es-icon { font-size: 1rem; }
+    .es-title { font-weight: 700; font-size: 0.82rem; color: var(--mls-text, #e2e8f0); }
+    .es-count { font-size: 0.68rem; color: rgba(255,255,255,0.25); font-family: var(--font-mono, monospace); }
+    .es-clear-btn { font-size: 0.68rem !important; padding: 2px 8px !important; }
+
+    .es-accent-bar {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0,212,255,0.35), transparent);
+        flex-shrink: 0;
+    }
+
+    .es-filters {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 12px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        flex-shrink: 0;
+    }
+    .es-filter-input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 6px;
+        padding: 5px 10px;
+    }
+    .es-filter-icon { color: rgba(255,255,255,0.2); font-size: 0.9rem; }
+    .es-filter-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--mls-text, #e2e8f0);
+        font-size: 0.75rem;
+        font-family: var(--font-mono, monospace);
+    }
+    .es-filter-input::placeholder { color: rgba(255,255,255,0.15); }
+    .es-regex-error { color: #f43f5e; font-size: 0.75rem; cursor: help; }
+
+    .es-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+    .es-chip {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.63rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.03);
+        color: rgba(255,255,255,0.35);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .es-chip:hover { color: rgba(255,255,255,0.7); }
+    .es-chip--active { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.15); color: #e2e8f0; }
+    .es-chip-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+    .es-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 4px 0;
+        font-size: 0.72rem;
+    }
+    .es-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 4px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.02);
+        transition: background 0.1s;
+    }
+    .es-row:hover { background: rgba(255,255,255,0.02); }
+
+    .es-ts {
+        font-size: 0.65rem;
+        color: rgba(255,255,255,0.25);
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-variant-numeric: tabular-nums;
+    }
+    .es-type-badge {
+        padding: 1px 7px;
+        border-radius: 4px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        border: 1px solid;
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-family: var(--font-mono, monospace);
+    }
+    .es-module {
+        font-size: 0.65rem;
+        color: rgba(255,255,255,0.2);
+        white-space: nowrap;
+        flex-shrink: 0;
+        min-width: 80px;
+    }
+    .es-summary {
+        color: rgba(255,255,255,0.5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .es-empty {
+        text-align: center;
+        padding: 24px;
+        color: rgba(255,255,255,0.15);
+        font-style: italic;
+    }
+
+    .mono { font-family: var(--font-mono, monospace); }
+    .live-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: #00d4ff;
+        animation: live-pulse 1.5s ease-in-out infinite;
+    }
+    @@keyframes live-pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+</style>
+
+@code {
+    private const int MaxBuffer = 500;
+
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+    private readonly List<EnvelopeEntry> _buffer = new(MaxBuffer);
+    private string _regexFilter = "";
+    private string? _regexError;
+    private readonly HashSet<string> _activeCategories = new(StringComparer.OrdinalIgnoreCase);
+    private CancellationTokenSource _cts = new();
+
+    private static readonly string[] _categories = ["Trading", "Arbitrage", "DeFi", "ML", "System", "AI", "Shell", "Other"];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Subscribe to all topics by passing empty array
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync([], _cts.Token)
+            .ConfigureAwait(false))
+        {
+            var payloadSummary = envelope.Payload.GetRawText();
+            if (payloadSummary.Length > 120) payloadSummary = payloadSummary[..120] + "…";
+
+            var entry = new EnvelopeEntry(
+                EntryId:        Guid.NewGuid(),
+                Timestamp:      DateTimeOffset.UtcNow,
+                Type:           envelope.Type ?? "UNKNOWN",
+                ModuleId:       envelope.ModuleId ?? "—",
+                PayloadSummary: payloadSummary);
+
+            if (_buffer.Count >= MaxBuffer) _buffer.RemoveAt(0);
+            _buffer.Add(entry);
+
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private IEnumerable<EnvelopeEntry> FilteredEntries()
+    {
+        IEnumerable<EnvelopeEntry> result = _buffer;
+
+        // Category filter
+        if (_activeCategories.Count > 0)
+            result = result.Where(e => _activeCategories.Contains(GetCategory(e.Type)));
+
+        // Regex filter
+        if (!string.IsNullOrWhiteSpace(_regexFilter))
+        {
+            try
+            {
+                var rx = new System.Text.RegularExpressions.Regex(
+                    _regexFilter,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                    TimeSpan.FromMilliseconds(50));
+                _regexError = null;
+                result = result.Where(e => rx.IsMatch(e.Type));
+            }
+            catch (System.Text.RegularExpressions.RegexParseException ex)
+            {
+                _regexError = ex.Message;
+            }
+        }
+
+        return result.Reverse(); // newest first
+    }
+
+    private void ToggleCategory(string category)
+    {
+        if (!_activeCategories.Remove(category))
+            _activeCategories.Add(category);
+    }
+
+    private void ClearBuffer() => _buffer.Clear();
+
+    private static string GetCategory(string type) => type switch
+    {
+        var t when t.StartsWith("TRADE") || t.StartsWith("ORDER") || t.StartsWith("POSITION") => "Trading",
+        var t when t.StartsWith("ARB")                                                          => "Arbitrage",
+        var t when t.StartsWith("DEFI") || t.StartsWith("HEALTH")                              => "DeFi",
+        var t when t.StartsWith("TRAINING") || t.StartsWith("INFERENCE") || t.StartsWith("MODEL") => "ML",
+        var t when t.StartsWith("MODULE")   || t.StartsWith("ENVELOPE")  || t.StartsWith("STRATEGY") => "System",
+        var t when t.StartsWith("AI")                                                           => "AI",
+        var t when t.StartsWith("SHELL")                                                        => "Shell",
+        _                                                                                       => "Other",
+    };
+
+    private static string GetCategoryColor(string category) => category switch
+    {
+        "Trading"   => "#00d4ff",
+        "Arbitrage" => "#f59e0b",
+        "DeFi"      => "#22c55e",
+        "ML"        => "#7c3aed",
+        "System"    => "#64748b",
+        "AI"        => "#ec4899",
+        "Shell"     => "#f43f5e",
+        _           => "#94a3b8",
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+
+    private sealed record EnvelopeEntry(
+        Guid EntryId,
+        DateTimeOffset Timestamp,
+        string Type,
+        string ModuleId,
+        string PayloadSummary);
+}

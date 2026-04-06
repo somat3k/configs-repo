@@ -1,0 +1,148 @@
+@using MLS.WebApp.Services
+
+<div class="module-card @GetStatusClass(Module?.Status)">
+    @if (Module is not null)
+    {
+        @* ── Status indicator + name ───────────────────────────────────── *@
+        <div class="mc-row mc-row--header">
+            <span class="mc-status-dot" style="background:@GetStatusColor(Module.Status)"></span>
+            <span class="mc-name">@Module.ModuleId</span>
+            <span class="mc-badge @GetStatusClass(Module.Status)">@Module.Status</span>
+        </div>
+
+        @* ── Metrics row ──────────────────────────────────────────────── *@
+        <div class="mc-metrics">
+            <div class="mc-metric">
+                <span class="mc-metric-val mono">@FormatUptime(Module.UptimeSeconds)</span>
+                <span class="mc-metric-lbl">Uptime</span>
+            </div>
+            <div class="mc-metric">
+                <span class="mc-metric-val mono @(Module.CpuPercent > 80 ? "warn-value" : "")">
+                    @Module.CpuPercent.ToString("F1")%
+                </span>
+                <span class="mc-metric-lbl">CPU</span>
+            </div>
+            <div class="mc-metric">
+                <span class="mc-metric-val mono">@Module.MemoryMb.ToString("F0") MB</span>
+                <span class="mc-metric-lbl">Memory</span>
+            </div>
+            <div class="mc-metric">
+                <span class="mc-metric-val mc-heartbeat">@FormatHeartbeat(Module.LastHeartbeat)</span>
+                <span class="mc-metric-lbl">Heartbeat</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="mc-empty">No module data</div>
+    }
+</div>
+
+<style>
+    .module-card {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 12px;
+        background: rgba(255,255,255,0.025);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 8px;
+        transition: border-color 0.3s;
+    }
+    .module-card.status-healthy  { border-left: 3px solid rgba(34,197,94,0.4); }
+    .module-card.status-degraded { border-left: 3px solid rgba(245,158,11,0.4); }
+    .module-card.status-offline  { border-left: 3px solid rgba(244,63,94,0.4); opacity: 0.7; }
+
+    .mc-row { display: flex; align-items: center; gap: 7px; }
+    .mc-row--header { }
+
+    .mc-status-dot {
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .mc-name {
+        font-weight: 700;
+        font-size: 0.78rem;
+        color: #e2e8f0;
+        flex: 1;
+        font-family: var(--font-mono, monospace);
+    }
+    .mc-badge {
+        font-size: 0.6rem;
+        font-weight: 600;
+        padding: 1px 7px;
+        border-radius: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+    .status-healthy  .mc-badge,  .mc-badge.status-healthy  { background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.25);  color: #22c55e; }
+    .status-degraded .mc-badge,  .mc-badge.status-degraded { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); color: #f59e0b; }
+    .status-offline  .mc-badge,  .mc-badge.status-offline  { background: rgba(244,63,94,0.1);  border: 1px solid rgba(244,63,94,0.25);  color: #f43f5e; }
+
+    .mc-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+    }
+    .mc-metric {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1px;
+    }
+    .mc-metric-val {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #e2e8f0;
+        font-variant-numeric: tabular-nums;
+    }
+    .mc-metric-lbl {
+        font-size: 0.55rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: rgba(255,255,255,0.2);
+        font-weight: 600;
+    }
+    .mc-heartbeat { color: rgba(255,255,255,0.4); }
+    .warn-value { color: #f59e0b; }
+    .mono { font-family: var(--font-mono, monospace); }
+    .mc-empty { font-size: 0.7rem; color: rgba(255,255,255,0.2); text-align: center; padding: 8px; }
+</style>
+
+@code {
+    /// <summary>Module status data to render. May be <c>null</c> for a placeholder card.</summary>
+    [Parameter]
+    public ModuleStatusUpdate? Module { get; set; }
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "Healthy"  => "#22c55e",
+        "Degraded" => "#f59e0b",
+        _          => "#f43f5e",
+    };
+
+    private static string GetStatusClass(string? status) => (status ?? "Offline") switch
+    {
+        "Healthy"  => "status-healthy",
+        "Degraded" => "status-degraded",
+        _          => "status-offline",
+    };
+
+    private static string FormatUptime(long seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        if (ts.TotalDays >= 1)  return $"{(int)ts.TotalDays}d {ts.Hours}h";
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        return $"{ts.Minutes}m {ts.Seconds}s";
+    }
+
+    private static string FormatHeartbeat(DateTimeOffset last)
+    {
+        var ago = DateTimeOffset.UtcNow - last;
+        if (ago.TotalSeconds < 5)  return "now";
+        if (ago.TotalSeconds < 60) return $"{(int)ago.TotalSeconds}s ago";
+        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m ago";
+        return $"{(int)ago.TotalHours}h ago";
+    }
+}

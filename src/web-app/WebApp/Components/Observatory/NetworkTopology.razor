@@ -1,0 +1,173 @@
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="network-topology" id="nt-@_id">
+
+    @* ── Header ─────────────────────────────────────────────────────────── *@
+    <div class="nt-header">
+        <div class="nt-header-left">
+            <span class="nt-icon" style="color:#22c55e">◎</span>
+            <span class="nt-title">Network Topology</span>
+        </div>
+        <div class="nt-header-right">
+            <div class="live-dot"></div>
+            <span class="nt-count">@_modules.Count modules</span>
+        </div>
+    </div>
+
+    <div class="nt-accent-bar"></div>
+
+    @* ── Graph container ──────────────────────────────────────────────────── *@
+    <div id="nt-graph-@_id" class="nt-graph-area"></div>
+
+    @* ── Module list (synced with graph) ─────────────────────────────────── *@
+    <div class="nt-module-list">
+        @foreach (var mod in _modules.Values.OrderBy(m => m.ModuleId))
+        {
+            <ModuleCard Module="mod" />
+        }
+    </div>
+</div>
+
+<style>
+    .network-topology {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--mls-surface, #0e1018);
+        overflow: hidden;
+    }
+
+    .nt-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 14px;
+        background: var(--mls-surface-2, #131620);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        flex-shrink: 0;
+    }
+    .nt-header-left { display: flex; align-items: center; gap: 7px; }
+    .nt-header-right { display: flex; align-items: center; gap: 6px; }
+    .nt-icon { font-size: 0.85rem; }
+    .nt-title { font-weight: 700; font-size: 0.82rem; color: var(--mls-text, #e2e8f0); }
+    .nt-count { font-size: 0.7rem; color: rgba(255,255,255,0.3); }
+
+    .nt-accent-bar {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(34,197,94,0.4), rgba(0,212,255,0.3), transparent);
+        flex-shrink: 0;
+    }
+
+    .nt-graph-area {
+        flex: 0 0 240px;
+        background: rgba(0,0,0,0.2);
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .nt-module-list {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 10px;
+    }
+
+    .live-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: #22c55e;
+        animation: live-pulse 2s ease-in-out infinite;
+    }
+    @@keyframes live-pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+</style>
+
+@code {
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+    private readonly Dictionary<string, ModuleStatusUpdate> _modules = new();
+    private CancellationTokenSource _cts = new();
+    private bool _graphInitialised;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Subscribe to module lifecycle + heartbeat events
+        await foreach (var envelope in Hub
+            .GetEnvelopeStreamAsync(
+                [MLS.Core.Constants.MessageTypes.ModuleHeartbeat,
+                 MLS.Core.Constants.MessageTypes.ModuleRegister,
+                 MLS.Core.Constants.MessageTypes.ModuleDeregister],
+                _cts.Token)
+            .ConfigureAwait(false))
+        {
+            var p = envelope.Payload;
+            var moduleId = p.TryGetProperty("module_id", out var mid) ? mid.GetString() ?? envelope.ModuleId : envelope.ModuleId;
+
+            if (envelope.Type == MLS.Core.Constants.MessageTypes.ModuleDeregister)
+            {
+                _modules.Remove(moduleId);
+            }
+            else
+            {
+                var update = new ModuleStatusUpdate(
+                    ModuleId:       moduleId,
+                    Status:         p.TryGetProperty("status",         out var st)  ? st.GetString()  ?? "Healthy" : "Healthy",
+                    UptimeSeconds:  p.TryGetProperty("uptime_seconds", out var us)  ? us.GetInt64()   : 0,
+                    CpuPercent:     p.TryGetProperty("cpu_percent",    out var cpu) ? cpu.GetDouble() : 0,
+                    MemoryMb:       p.TryGetProperty("memory_mb",      out var mem) ? mem.GetDouble() : 0,
+                    LastHeartbeat:  DateTimeOffset.UtcNow);
+
+                _modules[moduleId] = update;
+            }
+
+            // Initialise graph on first module or update existing nodes
+            if (!_graphInitialised && _modules.Count > 0)
+            {
+                var elements = BuildCytoscapeElements();
+                await JS.InvokeVoidAsync("initCytoscapeGraph", $"nt-graph-{_id}", elements)
+                    .ConfigureAwait(false);
+                _graphInitialised = true;
+            }
+            else if (_graphInitialised)
+            {
+                await JS.InvokeVoidAsync("updateCytoscapeNode", $"nt-graph-{_id}",
+                    moduleId, GetNodeColor(_modules.GetValueOrDefault(moduleId)?.Status ?? "Offline"))
+                    .ConfigureAwait(false);
+            }
+
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        }
+    }
+
+    private object[] BuildCytoscapeElements()
+    {
+        var nodes = _modules.Values.Select(m => new
+        {
+            data = new { id = m.ModuleId, label = m.ModuleId, color = GetNodeColor(m.Status) }
+        }).Cast<object>().ToList();
+
+        // Hub-and-spoke edges: every module connects to block-controller
+        var edges = _modules.Keys
+            .Where(id => id != "block-controller")
+            .Select(id => new { data = new { id = $"e-{id}", source = id, target = "block-controller", label = "WS" } })
+            .Cast<object>();
+
+        return nodes.Concat(edges).ToArray();
+    }
+
+    private static string GetNodeColor(string status) => status switch
+    {
+        "Healthy"  => "#22c55e",
+        "Degraded" => "#f59e0b",
+        _          => "#f43f5e",
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}
