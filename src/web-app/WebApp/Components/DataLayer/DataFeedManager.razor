@@ -3,6 +3,7 @@
 @using MLS.Core.Contracts.Designer
 @using System.Text.Json
 @inject IBlockControllerHub Hub
+@inject ILogger<DataFeedManager> Logger
 @implements IAsyncDisposable
 
 <div class="dfm-panel">
@@ -511,6 +512,7 @@
         catch (Exception ex)
         {
             // Surface envelope processing errors in the UI rather than silently halting updates.
+            Logger.LogError(ex, "DataFeedManager: envelope stream faulted");
             _feedError = $"Feed stream error: {ex.Message}";
             await InvokeAsync(StateHasChanged).ConfigureAwait(false);
         }

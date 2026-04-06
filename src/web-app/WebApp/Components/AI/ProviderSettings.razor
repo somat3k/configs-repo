@@ -444,7 +444,12 @@
                 await JS.InvokeVoidAsync("localStorage.setItem", "mls-pref-user-id", _userId.ToString())
                     .ConfigureAwait(false);
         }
-        catch (JSException) { /* non-fatal — use generated ID */ }
+        catch (JSException ex)
+        {
+            // localStorage may be unavailable (private browsing, restricted policy).
+            // Fall through with the generated ID — non-fatal.
+            Logger.LogWarning(ex, "ProviderSettings: could not access localStorage for user ID persistence");
+        }
 
         _providers =
         [

@@ -54,10 +54,10 @@ public sealed class PreferencesController(
         CancellationToken ct)
     {
         if (request.UserId == Guid.Empty)
-            return BadRequest(new { error = "user_id must not be empty." });
+            return BadRequest(new { error = "UserId must not be empty." });
 
         if (string.IsNullOrWhiteSpace(request.PrimaryProviderId))
-            return BadRequest(new { error = "primary_provider_id is required." });
+            return BadRequest(new { error = "PrimaryProviderId is required." });
 
         var preference = new UserPreference
         {
@@ -70,9 +70,12 @@ public sealed class PreferencesController(
 
         await _repo.SaveAsync(preference, ct).ConfigureAwait(false);
 
+        // Sanitize user-provided value before logging to prevent log injection.
+        var safePrimary = request.PrimaryProviderId
+            .Replace('\n', '_').Replace('\r', '_');
         _logger.LogInformation(
             "Saved preferences for userId {UserId}, primary={Primary}",
-            request.UserId, request.PrimaryProviderId);
+            request.UserId, safePrimary);
 
         return Ok(new { saved = true, user_id = request.UserId });
     }
