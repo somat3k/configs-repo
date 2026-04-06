@@ -253,7 +253,7 @@
                 {
                     _isTraining  = true;
                     _trainStart  = DateTimeOffset.UtcNow;
-                    _modelType   = p.TryGetProperty("model_type",   out var mt) ? mt.GetString() : null;
+                    _modelType   = p.TryGetProperty("model_type",   out var modelTypeProp) ? modelTypeProp.GetString() : null;
                     _totalEpochs = p.TryGetProperty("total_epochs", out var te) ? te.GetInt32() : 0;
                 }
 

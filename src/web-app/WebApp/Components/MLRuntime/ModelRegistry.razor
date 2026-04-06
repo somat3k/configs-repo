@@ -241,9 +241,9 @@
             if (envelope.Type == MLS.Core.Constants.MessageTypes.TrainingJobComplete)
             {
                 var entry = new ModelEntry(
-                    ModelId: p.TryGetProperty("model_id",    out var mi) ? mi.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString(),
+                    ModelId: p.TryGetProperty("model_id",    out var modelIdProp)   ? modelIdProp.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString(),
                     Name:    p.TryGetProperty("model_key",   out var mk) ? mk.GetString() ?? "unknown" : "unknown",
-                    ModelType: p.TryGetProperty("model_type", out var mt) ? mt.GetString() ?? "unknown" : "unknown",
+                    ModelType: p.TryGetProperty("model_type", out var modelTypeProp) ? modelTypeProp.GetString() ?? "unknown" : "unknown",
                     Version: p.TryGetProperty("version",     out var v)  ? v.GetInt32() : 1,
                     Accuracy: p.TryGetProperty("accuracy",   out var ac) ? ac.GetDouble() : 0,
                     F1Score:  p.TryGetProperty("f1_score",   out var f1) ? f1.GetDouble() : 0,

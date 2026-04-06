@@ -104,7 +104,7 @@
             .ConfigureAwait(false))
         {
             var p = envelope.Payload;
-            var moduleId = p.TryGetProperty("module_id", out var mid) ? mid.GetString() ?? envelope.ModuleId : envelope.ModuleId;
+            var moduleId = p.TryGetProperty("module_id", out var moduleIdProp) ? moduleIdProp.GetString() ?? envelope.ModuleId : envelope.ModuleId;
 
             if (envelope.Type == MLS.Core.Constants.MessageTypes.ModuleDeregister)
             {

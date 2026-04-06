@@ -260,7 +260,7 @@
             .ConfigureAwait(false))
         {
             var p = envelope.Payload;
-            var modelType = p.TryGetProperty("model_type", out var mt) ? mt.GetString() : null;
+            var modelType = p.TryGetProperty("model_type", out var modelTypeProp) ? modelTypeProp.GetString() : null;
             if (_modelFilter != "all" && modelType != _modelFilter) continue;
 
             if (!p.TryGetProperty("latency_ms", out var latProp)) continue;
