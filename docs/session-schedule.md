@@ -836,12 +836,12 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 
 | Action | File | Description |
 |--------|------|-------------|
-| CREATE | `src/web-app/WebApp/Components/MLRuntime/ModelRegistry.razor` | All models, versions, metrics |
-| CREATE | `src/web-app/WebApp/Components/MLRuntime/InferenceMetrics.razor` | Latency histogram, throughput |
-| CREATE | `src/web-app/WebApp/Components/MLRuntime/TrainProgress.razor` | Live training: loss curve, confusion matrix |
-| CREATE | `src/web-app/WebApp/Components/Observatory/NetworkTopology.razor` | Cytoscape.js module graph |
-| CREATE | `src/web-app/WebApp/Components/Observatory/ModuleCard.razor` | Health card per module |
-| CREATE | `src/web-app/WebApp/Components/Observatory/EnvelopeStream.razor` | Live filtered envelope viewer |
+| CREATE | `src/web-app/WebApp/Components/MLRuntime/ModelRegistry.razor` | ✅ All models, versions, metrics |
+| CREATE | `src/web-app/WebApp/Components/MLRuntime/InferenceMetrics.razor` | ✅ Latency histogram, throughput |
+| CREATE | `src/web-app/WebApp/Components/MLRuntime/TrainProgress.razor` | ✅ Live training: loss curve, confusion matrix |
+| CREATE | `src/web-app/WebApp/Components/Observatory/NetworkTopology.razor` | ✅ Cytoscape.js module graph |
+| CREATE | `src/web-app/WebApp/Components/Observatory/ModuleCard.razor` | ✅ Health card per module |
+| CREATE | `src/web-app/WebApp/Components/Observatory/EnvelopeStream.razor` | ✅ Live filtered envelope viewer |
 
 **TrainProgress Live Chart Pattern**
 
@@ -861,10 +861,12 @@ On TRAINING_JOB_COMPLETE:
 - `.skills/machine-learning.md`
 
 **Acceptance Criteria**
-- [ ] `TrainProgress` renders live loss curve updating every epoch
-- [ ] `NetworkTopology` shows all registered modules as graph nodes with edge labels
-- [ ] `EnvelopeStream` filters by message type with regex search
-- [ ] `ModelRegistry` shows model lineage (parent training run → exported ONNX → deployed)
+- [x] `TrainProgress` renders live loss curve updating every epoch
+- [x] `NetworkTopology` shows all registered modules as graph nodes with edge labels
+- [x] `EnvelopeStream` filters by message type with regex search
+- [x] `ModelRegistry` shows model lineage (parent training run → exported ONNX → deployed)
+
+**Session Status: ✅ COMPLETE** — Implemented 2026-04-06
 
 ---
 
@@ -876,12 +878,12 @@ On TRAINING_JOB_COMPLETE:
 
 | Action | File | Description |
 |--------|------|-------------|
-| CREATE | `src/web-app/WebApp/Components/AI/AIChatPanel.razor` | Streaming chat with canvas action integration |
-| CREATE | `src/web-app/WebApp/Components/AI/ProviderSettings.razor` | User-defined provider configuration |
-| CREATE | `src/web-app/WebApp/Components/AI/CanvasActionRenderer.razor` | Render AI canvas actions as MDI panels |
-| CREATE | `src/web-app/WebApp/Components/AI/MessageBubble.razor` | Chat message with code/diagram rendering |
-| CREATE | `src/web-app/WebApp/Components/DataLayer/DataFeedManager.razor` | Active feeds, latency, gap status |
-| CREATE | `src/web-app/WebApp/Services/AICanvasService.cs` | Receive AI_CANVAS_ACTION, open/update panels |
+| CREATE | `src/web-app/WebApp/Components/AI/AIChatPanel.razor` | ✅ Streaming chat with canvas action integration |
+| CREATE | `src/web-app/WebApp/Components/AI/ProviderSettings.razor` | ✅ User-defined provider configuration |
+| CREATE | `src/web-app/WebApp/Components/AI/CanvasActionRenderer.razor` | ✅ Render AI canvas actions as MDI panels |
+| CREATE | `src/web-app/WebApp/Components/AI/MessageBubble.razor` | ✅ Chat message with code/diagram rendering |
+| CREATE | `src/web-app/WebApp/Components/DataLayer/DataFeedManager.razor` | ✅ Active feeds, latency, gap status |
+| CREATE | `src/web-app/WebApp/Services/AICanvasService.cs` | ✅ Receive AI_CANVAS_ACTION, open/update panels |
 
 **AI Chat UX Flow**
 
@@ -916,11 +918,13 @@ Final message: "Here's the BTC chart [linked to opened panel] and the P&L summar
 - `.skills/web-apps.md`
 
 **Acceptance Criteria**
-- [ ] Chat panel streams token-by-token with typing cursor effect
-- [ ] Canvas actions open real MDI panels before text response completes
-- [ ] Mermaid diagrams render correctly in chat messages
-- [ ] Provider settings persist across browser sessions (localStorage + PostgreSQL)
-- [ ] `DataFeedManager` shows per-feed latency, last candle time, gap count
+- [x] Chat panel streams token-by-token with typing cursor effect
+- [x] Canvas actions open real MDI panels before text response completes
+- [x] Mermaid diagrams render correctly in chat messages
+- [x] Provider settings persist across browser sessions (localStorage + PostgreSQL)
+- [x] `DataFeedManager` shows per-feed latency, last candle time, gap count
+
+**Session Status: ✅ COMPLETE** — Implemented 2026-04-06
 
 ---
 
