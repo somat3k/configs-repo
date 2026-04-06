@@ -80,3 +80,4 @@ logs/
 # ─── Temporary ────────────────────────────────────────────
 tmp/
 temp/
+src/web-app/WebApp/nohup.out
