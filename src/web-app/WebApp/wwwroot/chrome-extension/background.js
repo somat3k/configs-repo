@@ -95,7 +95,11 @@ function handlePortMessage(port, msg) {
     }
 }
 
-/** Validates that an object has all required EnvelopePayload fields. */
+/** Validates that an object has all required EnvelopePayload fields.
+ *  Field set matches MLS.Core.Contracts.EnvelopePayload (the actual wire contract):
+ *  type (string), version (int ≥ 1), session_id (UUID string),
+ *  module_id (string), timestamp (ISO string), payload (object).
+ */
 function isValidEnvelope(env) {
     if (!env || typeof env !== 'object') return false;
     return (
@@ -175,6 +179,8 @@ async function connectSignalR() {
 }
 
 async function subscribeToTopics() {
+    // Hub method name matches the C# declaration exactly (ASP.NET Core SignalR is case-sensitive
+    // and uses PascalCase for hub method names: BlockControllerHub.SubscribeToTopicAsync).
     for (const topic of wsConfig.dataTopics) {
         try {
             await hubConnection.invoke('SubscribeToTopicAsync', topic);
@@ -201,6 +207,10 @@ async function sendEnvelope(envelope) {
     }
 }
 
+/** Builds an EnvelopePayload matching MLS.Core.Contracts.EnvelopePayload wire contract.
+ *  Required fields: type, version (int), session_id, module_id, timestamp, payload.
+ *  See: src/core/MLS.Core/Contracts/EnvelopePayload.cs
+ */
 function buildEnvelope(type, payload) {
     return {
         type,

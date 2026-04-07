@@ -375,12 +375,14 @@
     /// Invoked from JS when the viewport crosses the 768px mobile breakpoint.
     /// </summary>
     [JSInvokable]
-    public Task OnBreakpointChange(bool isMobile) => SetMobileMode(isMobile ? 767 : 1024);
+    public Task OnBreakpointChange(bool isMobile) => SetMobileMode(isMobile);
 
-    private async Task SetMobileMode(double width)
+    private async Task SetMobileMode(double width) => await SetMobileMode(width < 768).ConfigureAwait(false);
+
+    private async Task SetMobileMode(bool isMobile)
     {
         var wasMobile = _isMobile;
-        _isMobile = width < 768;
+        _isMobile = isMobile;
 
         // When switching to mobile with no panel selected, pick first available
         if (_isMobile && _activeMobilePanel is null)

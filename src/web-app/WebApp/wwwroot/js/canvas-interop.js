@@ -631,14 +631,18 @@ window.mlsViewport = {
      * Registers a matchMedia listener for the 768px mobile breakpoint.
      * Calls dotnetRef.invokeMethodAsync('OnBreakpointChange', isMobile) whenever
      * the viewport crosses the threshold.
-     * The listener is automatically cleaned up when the DotNetObjectReference is
-     * disposed on the Blazor side.
+     * The listener auto-removes itself when the DotNetObjectReference is disposed
+     * (invocation throws after disposal).
      * @param {import('@microsoft/dotnet-js-interop').DotNetObjectReference} dotnetRef
      */
     onBreakpointChange: function (dotnetRef) {
         const mq = window.matchMedia('(max-width: 767px)');
         const handler = (e) => {
-            dotnetRef.invokeMethodAsync('OnBreakpointChange', e.matches).catch(() => {});
+            dotnetRef.invokeMethodAsync('OnBreakpointChange', e.matches)
+                .catch(() => {
+                    // DotNetObjectReference was disposed — unsubscribe to avoid leaks
+                    mq.removeEventListener('change', handler);
+                });
         };
         mq.addEventListener('change', handler);
     }

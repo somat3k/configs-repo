@@ -28,6 +28,10 @@ try {
 
 /** Assets that must be pre-cached for the offline shell to load */
 const PRECACHE_URLS = Array.isArray(self.__MLS_ASSETS__) ? self.__MLS_ASSETS__ : [];
+if (PRECACHE_URLS.length === 0) {
+    console.warn('[MLS SW] service-worker-assets.js not loaded or empty — precaching is disabled. ' +
+        'Offline functionality will be limited to the "/" shell only.');
+}
 
 // ── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {

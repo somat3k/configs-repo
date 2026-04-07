@@ -37,7 +37,13 @@
         "https://app.hyperliquid.xyz/*",
         "https://hyperliquid.xyz/*",
         "https://app.camelot.exchange/*",
-        "https://camelot.exchange/*"
+        "https://camelot.exchange/*",
+        "https://app.dfyn.network/*",
+        "https://dfyn.network/*",
+        "https://app.morpho.org/*",
+        "https://app.morpho.xyz/*",
+        "https://app.balancer.fi/*",
+        "https://balancer.fi/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"],
@@ -57,7 +63,13 @@
     "https://app.hyperliquid.xyz/*",
     "https://hyperliquid.xyz/*",
     "https://app.camelot.exchange/*",
-    "https://camelot.exchange/*"
+    "https://camelot.exchange/*",
+    "https://app.dfyn.network/*",
+    "https://dfyn.network/*",
+    "https://app.morpho.org/*",
+    "https://app.morpho.xyz/*",
+    "https://app.balancer.fi/*",
+    "https://balancer.fi/*"
   ],
 
   "web_accessible_resources": [
@@ -67,7 +79,13 @@
         "https://app.hyperliquid.xyz/*",
         "https://hyperliquid.xyz/*",
         "https://app.camelot.exchange/*",
-        "https://camelot.exchange/*"
+        "https://camelot.exchange/*",
+        "https://app.dfyn.network/*",
+        "https://dfyn.network/*",
+        "https://app.morpho.org/*",
+        "https://app.morpho.xyz/*",
+        "https://app.balancer.fi/*",
+        "https://balancer.fi/*"
       ]
     }
   ]
