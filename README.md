@@ -35,14 +35,14 @@
 | Module | Port (HTTP/WS) | Role | Status |
 |--------|----------------|------|--------|
 | [block-controller](src/block-controller/README.md) | 5100/6100 | Orchestration hub | ✅ Active |
-| [web-app](src/web-app/README.md) | 5200/6200 | Blazor MDI UI | 🔧 Scaffold |
+| [web-app](src/web-app/README.md) | 5200/6200 | Blazor MDI UI | ✅ Active |
 | [designer](src/modules/designer/README.md) | 5250/6250 | Block graph composer | ✅ Active |
 | [trader](src/modules/trader/README.md) | 5300/6300 | Algo trading model | 🔧 Scaffold |
 | [arbitrager](src/modules/arbitrager/README.md) | 5400/6400 | Arbitrage model | 🔧 Scaffold |
 | [defi](src/modules/defi/README.md) | 5500/6500 | DeFi services | 🔧 Scaffold |
 | [ml-runtime](src/modules/ml-runtime/README.md) | 5600/6600 | ML training & inference | 🔧 Scaffold |
-| [data-layer](src/modules/data-layer/README.md) | 5700/6700 | Data access layer | 🔧 Scaffold |
-| ai-hub | 5750/6750 | AI chat & canvas dispatch | 🔧 Scaffold |
+| [data-layer](src/modules/data-layer/README.md) | 5700/6700 | Hydra OHLCV feed collection, gap detection, backfill | ✅ Active |
+| [ai-hub](src/modules/ai-hub/README.md) | 5750/6750 | AI chat & canvas dispatch | ✅ Active |
 | [broker](src/modules/broker/README.md) | 5800/6800 | Broker integration (HYPERLIQUID) | 🔧 Scaffold |
 | [transactions](src/modules/transactions/README.md) | 5900/6900 | Transaction manager | 🔧 Scaffold |
 | [network-modules](src/network-modules/README.md) | — | ID gen, registry, runtime, VM | 🔧 Scaffold |

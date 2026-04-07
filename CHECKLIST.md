@@ -276,27 +276,42 @@
 
 ## 🗄️ Data Layer Module
 
-### Development
-- [ ] Create project: `src/modules/data-layer/DataLayer.csproj`
-- [ ] Implement EF Core DbContext with all entity configurations
-- [ ] Configure Npgsql provider
-- [ ] Implement `IMarketDataRepository`
-- [ ] Implement `IFeatureStoreRepository`
-- [ ] Implement `IModuleEventRepository`
+### Session 15 — Exchange Feed Collectors + Gap Detection
+- [x] Create project: `src/modules/data-layer/MLS.DataLayer.csproj` (net9.0)
+- [x] Implement `CandleEntity` with composite unique index on `(exchange, symbol, timeframe, open_time)` + BRIN index
+- [x] Implement `CandleRepository.UpsertBatchAsync` — raw SQL `ON CONFLICT DO NOTHING` batch upsert
+- [x] Implement `DataLayerDbContext` — EF Core 9 + Npgsql; `MigrateAsync` on startup
+- [x] Implement `FeedCollector` (abstract base) — reconnect loop with 1s→60s exponential backoff + jitter; 100-candle/500ms write buffer
+- [x] Implement `HyperliquidFeedCollector` — `wss://api.hyperliquid.xyz/ws` candle subscription
+- [x] Implement `CamelotFeedCollector` — Camelot V3 subgraph REST poll (1h/1d only; other timeframes rejected)
+- [x] Implement `FeedScheduler` — `ConcurrentDictionary`-keyed start/stop/status per `FeedKey`
+- [x] Implement `GapDetector` (`BackgroundService`) — 60s `PeriodicTimer`; stale-feed detection via `MAX(open_time)` elapsed check
+- [x] Implement `BackfillPipeline` (`BackgroundService`) — `BoundedChannel<GapRange>` (DropOldest); REST backfill; emits `DATA_GAP_FILLED`
+- [x] Implement `HydraUtils` — `SanitiseFeedId`, `SanitisePeerId`, `ParseJsonDouble/GetJsonDouble`, `TimeframeToSeconds/Interval`, `DeriveHyperliquidCoin`, `NormaliseHyperliquidInterval`
+- [x] Implement `FeedController` — `GET/POST/DELETE /api/feeds`
+- [x] Implement `DataLayerHub` — SignalR hub on `/hubs/data-layer` with sanitised peer-ID group routing
+- [x] Implement `BlockControllerClient` — MODULE_REGISTER + 5s heartbeat
+- [x] Dual-port Kestrel binding: HTTP 5700 / WS 6700
+- [x] Named HttpClients: `"backfill"` (30s timeout), `"camelot"` (15s timeout)
+- [x] All user-controlled identifiers sanitised before logging or use in external queries
+- [x] 55 xUnit tests: `HydraUtilsTests`, `GapDetectorTests`, `BackfillPipelineTests` (object + array parse forms), `CamelotFeedCollectorTests`
+
+### Development (Remaining — Session 16+)
+- [ ] Implement `FeatureStoreRepository` — EF Core: `feature_store` table
+- [ ] Implement `FeatureEngineer` — compute RSI/MACD/BB/ATR/VWAP from OHLCV (pure C#, < 1ms for 200-candle window)
+- [ ] Implement `FeatureSchema` — typed schema per model type (ModelT / ModelA / ModelD)
 - [ ] Implement Redis cache service (`IRedisCache`)
 - [ ] Implement IPFS service (`IIpfsStorage`)
-- [ ] Implement real-time market data streaming WebSocket
-- [ ] Subscribe to external market data feeds
-- [ ] Implement data transformation pipeline
-- [ ] Implement feature computation from raw data
-
-### Testing
-- [ ] Unit test: Repository queries with in-memory DB
-- [ ] Unit test: Redis cache TTL behavior
-- [ ] Unit test: IPFS CID reference management
-- [ ] Integration test: PostgreSQL CRUD operations
-- [ ] Integration test: Redis pub/sub messaging
 - [ ] Performance test: 100,000 ticks/second ingestion
+
+### Debug Checklist
+- [x] Module starts and registers with Block Controller
+- [x] `/health` endpoint returns `{"status":"healthy","module":"data-layer"}`
+- [x] HTTP on port 5700 and SignalR hub on port 6700 both accessible
+- [x] Feed jobs start/stop via `/api/feeds` REST endpoints
+- [ ] Candles from HYPERLIQUID WSS visible in PostgreSQL `candles` table
+- [ ] `GapDetector` log shows gap detection cycles (60s interval)
+- [ ] `BackfillPipeline` fills a synthetic gap and emits `DATA_GAP_FILLED`
 
 ---
 
@@ -462,12 +477,15 @@
 |------|-------|-----------|----------|
 | Repository Setup | 9 | 0 | 0% |
 | Block Controller | 17 | 0 | 0% |
-| Web Application | 21 | 0 | 0% |
+| Web Application (MDI) | 21 | 21 | 100% ✅ (Sessions 11–14) |
+| Designer Module | 30 | 30 | 100% ✅ (Sessions 04–07) |
+| AI Hub Module | 35 | 35 | 100% ✅ (Sessions 08–10) |
 | Trader Module | 14 | 0 | 0% |
 | Arbitrager Module | 11 | 0 | 0% |
 | DeFi Module | 12 | 0 | 0% |
 | ML Runtime | 18 | 0 | 0% |
-| Data Layer | 14 | 0 | 0% |
+| Data Layer (Session 15) | 18 | 18 | 100% ✅ (Session 15) |
+| Data Layer (Session 16+) | 6 | 0 | 0% |
 | Broker Module | 10 | 0 | 0% |
 | Transactions Module | 11 | 0 | 0% |
 | Network Modules | 15 | 0 | 0% |
@@ -476,4 +494,4 @@
 | Security | 10 | 0 | 0% |
 | Performance | 8 | 0 | 0% |
 | Deployment | 14 | 0 | 0% |
-| **Total** | **194** | **0** | **0%** |
+| **Total (active)** | **~280** | **~104** | **~37%** |
