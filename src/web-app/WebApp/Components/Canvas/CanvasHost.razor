@@ -328,6 +328,7 @@
     private string? _activeMobilePanel;
     private string _activeMobilePanelTitle = string.Empty;
     private CancellationTokenSource _cts = new();
+    private DotNetObjectReference<CanvasHost>? _dotNetRef;
 
     private record PanelEntry(string Key, string Label, string ShortLabel, string Icon, string IconClass);
 
@@ -358,14 +359,23 @@
         WM.OnLayoutChanged += LayoutChanged;
         await WM.RestoreLayoutAsync(_cts.Token).ConfigureAwait(false);
 
-        // Detect initial viewport width for mobile/desktop mode
+        // Detect initial viewport width for mobile/desktop mode and subscribe
+        // to breakpoint changes so _isMobile stays in sync on resize/rotation.
+        _dotNetRef = DotNetObjectReference.Create(this);
         try
         {
             var width = await JS.InvokeAsync<double>("mlsViewport.getInnerWidth").ConfigureAwait(false);
             await SetMobileMode(width).ConfigureAwait(false);
+            await JS.InvokeVoidAsync("mlsViewport.onBreakpointChange", _dotNetRef).ConfigureAwait(false);
         }
         catch { /* non-critical */ }
     }
+
+    /// <summary>
+    /// Invoked from JS when the viewport crosses the 768px mobile breakpoint.
+    /// </summary>
+    [JSInvokable]
+    public Task OnBreakpointChange(bool isMobile) => SetMobileMode(isMobile ? 767 : 1024);
 
     private async Task SetMobileMode(double width)
     {
@@ -475,5 +485,6 @@
         WM.OnLayoutChanged -= LayoutChanged;
         _cts.Cancel();
         _cts.Dispose();
+        _dotNetRef?.Dispose();
     }
 }

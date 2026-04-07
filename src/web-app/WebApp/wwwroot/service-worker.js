@@ -17,16 +17,25 @@ const FONT_CACHE    = `${CACHE_VERSION}-fonts`;
 const OFFLINE_URL   = '/offline.html';
 const MAX_AGE_FONTS = 30 * 24 * 60 * 60; // 30 days
 
+// Load the generated asset manifest into the service worker global scope.
+// Page-level scripts do NOT populate the service worker execution context.
+try {
+    self.importScripts('./service-worker-assets.js');
+} catch {
+    // Continue without precache manifest; install still succeeds and
+    // runtime caching strategies remain available.
+}
+
 /** Assets that must be pre-cached for the offline shell to load */
-const PRECACHE_URLS = self.__MLS_ASSETS__ || [];
+const PRECACHE_URLS = Array.isArray(self.__MLS_ASSETS__) ? self.__MLS_ASSETS__ : [];
 
 // ── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
     event.waitUntil(
         (async () => {
             const shellCache = await caches.open(SHELL_CACHE);
-            // Always cache the app shell
-            await shellCache.addAll(['/']);
+            // Always cache the app shell and offline fallback
+            await shellCache.addAll(['/', OFFLINE_URL]);
 
             // Pre-cache known assets from the asset manifest
             if (PRECACHE_URLS.length > 0) {
@@ -81,6 +90,24 @@ self.addEventListener('fetch', event => {
     if (url.pathname.includes('/hubs/')) return;
     if (url.pathname.endsWith('/negotiate')) return;
     if (url.pathname.includes('/_blazor')) return;
+
+    // ── SPA navigation: serve cached shell, fall back to offline page ─────────
+    if (request.mode === 'navigate') {
+        event.respondWith(
+            (async () => {
+                try {
+                    const network = await fetch(request);
+                    return network;
+                } catch {
+                    const shellCache = await caches.open(SHELL_CACHE);
+                    return (await shellCache.match('/')) ||
+                           (await shellCache.match(OFFLINE_URL)) ||
+                           new Response('Offline', { status: 503 });
+                }
+            })()
+        );
+        return;
+    }
 
     // ── API: NetworkFirst ─────────────────────────────────────────────────────
     if (url.pathname.startsWith('/api/')) {

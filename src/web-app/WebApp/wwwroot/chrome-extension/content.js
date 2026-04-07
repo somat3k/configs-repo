@@ -324,9 +324,14 @@
         });
     }
 
-    // ── MutationObserver: re-annotate after React re-renders ──────────────────
+    // ── MutationObserver: re-annotate after React re-renders (debounced) ──────
+    let annotationFrame = null;
     const observer = new MutationObserver(() => {
-        injectExchangeAnnotations();
+        if (annotationFrame !== null) return; // already scheduled
+        annotationFrame = requestAnimationFrame(() => {
+            annotationFrame = null;
+            injectExchangeAnnotations();
+        });
     });
 
     // ── Initialise ────────────────────────────────────────────────────────────

@@ -625,7 +625,23 @@ window.scrollElementToBottom = function (el) {
 
 window.mlsViewport = {
     /** Returns the current inner width of the browser window. */
-    getInnerWidth: function () { return window.innerWidth; }
+    getInnerWidth: function () { return window.innerWidth; },
+
+    /**
+     * Registers a matchMedia listener for the 768px mobile breakpoint.
+     * Calls dotnetRef.invokeMethodAsync('OnBreakpointChange', isMobile) whenever
+     * the viewport crosses the threshold.
+     * The listener is automatically cleaned up when the DotNetObjectReference is
+     * disposed on the Blazor side.
+     * @param {import('@microsoft/dotnet-js-interop').DotNetObjectReference} dotnetRef
+     */
+    onBreakpointChange: function (dotnetRef) {
+        const mq = window.matchMedia('(max-width: 767px)');
+        const handler = (e) => {
+            dotnetRef.invokeMethodAsync('OnBreakpointChange', e.matches).catch(() => {});
+        };
+        mq.addEventListener('change', handler);
+    }
 };
 
 })();

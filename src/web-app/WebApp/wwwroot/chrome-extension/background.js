@@ -3,15 +3,21 @@
  *
  * Responsibilities:
  *   1. Open the MLS Side Panel on extension icon click
- *   2. Maintain a persistent WebSocket connection to MLS block-controller
+ *   2. Maintain a persistent SignalR connection to MLS block-controller
  *   3. Fan-out live data to the Side Panel and Popup via chrome.runtime.connect ports
- *   4. Reconnect automatically after Chrome restart or WS disconnect
- *   5. Queue outbound orders when WS is disconnected; replay on reconnect
+ *   4. Reconnect automatically after Chrome restart or hub disconnect
+ *   5. Queue outbound orders when disconnected; replay on reconnect
+ *
+ * Dependencies:
+ *   lib/signalr.esm.js — local ESM build of @microsoft/signalr.
+ *   Run: cd chrome-extension && npm install && npm run build
  */
+
+import * as signalR from './lib/signalr.esm.js';
 
 // ── Configuration (override via chrome.storage.sync) ─────────────────────────
 const DEFAULT_CONFIG = {
-    wsUrl: 'ws://localhost:6100/hubs/block-controller',
+    hubUrl: 'http://localhost:6100/hubs/block-controller',
     clientId: null, // assigned on first run
     reconnectDelayMs: 2000,
     maxReconnectDelayMs: 30000,
@@ -21,10 +27,9 @@ const DEFAULT_CONFIG = {
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let ws = null;
+let hubConnection = null;
 let wsConfig = { ...DEFAULT_CONFIG };
 let reconnectDelay = DEFAULT_CONFIG.reconnectDelayMs;
-let heartbeatTimer = null;
 let reconnectTimer = null;
 let pendingOrders = [];
 
@@ -39,12 +44,12 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
         wsConfig.clientId = clientId;
     }
     await initConfig();
-    connectWebSocket();
+    connectSignalR();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
     await initConfig();
-    connectWebSocket();
+    connectSignalR();
 });
 
 // ── Side Panel: open on action click ─────────────────────────────────────────
@@ -55,7 +60,10 @@ chrome.runtime.onConnect.addListener(port => {
     if (!['mls-sidebar', 'mls-popup'].includes(port.name)) return;
 
     connectedPorts.add(port);
-    broadcastToPort(port, { type: 'CONNECTED', status: ws?.readyState === WebSocket.OPEN ? 'online' : 'offline' });
+    broadcastToPort(port, {
+        type: 'CONNECTED',
+        status: hubConnection?.state === signalR.HubConnectionState.Connected ? 'online' : 'offline'
+    });
 
     port.onMessage.addListener(msg => handlePortMessage(port, msg));
     port.onDisconnect.addListener(() => connectedPorts.delete(port));
@@ -68,18 +76,39 @@ function handlePortMessage(port, msg) {
             broadcastToPort(port, { type: 'SUBSCRIBED', topics: wsConfig.dataTopics });
             break;
         case 'SEND_ENVELOPE':
-            sendEnvelope(msg.payload);
+            // Validate required EnvelopePayload fields before forwarding
+            if (isValidEnvelope(msg.payload)) {
+                sendEnvelope(msg.payload);
+            } else {
+                broadcastToPort(port, { type: 'ERROR', message: 'Invalid envelope: missing required fields (type, version, session_id, module_id, timestamp, payload)' });
+            }
             break;
         case 'PLACE_ORDER':
             queueOrSendOrder(msg.payload);
             break;
         case 'GET_STATUS':
-            broadcastToPort(port, { type: 'STATUS', connected: ws?.readyState === WebSocket.OPEN });
+            broadcastToPort(port, {
+                type: 'STATUS',
+                connected: hubConnection?.state === signalR.HubConnectionState.Connected
+            });
             break;
     }
 }
 
-// ── WebSocket connection ───────────────────────────────────────────────────────
+/** Validates that an object has all required EnvelopePayload fields. */
+function isValidEnvelope(env) {
+    if (!env || typeof env !== 'object') return false;
+    return (
+        typeof env.type === 'string' && env.type.length > 0 &&
+        typeof env.version === 'number' && env.version >= 1 &&
+        typeof env.session_id === 'string' && env.session_id.length > 0 &&
+        typeof env.module_id === 'string' && env.module_id.length > 0 &&
+        typeof env.timestamp === 'string' && env.timestamp.length > 0 &&
+        env.payload !== null && env.payload !== undefined
+    );
+}
+
+// ── SignalR connection ─────────────────────────────────────────────────────────
 async function initConfig() {
     const stored = await chrome.storage.sync.get(null);
     wsConfig = { ...DEFAULT_CONFIG, ...stored };
@@ -89,87 +118,95 @@ async function initConfig() {
     }
 }
 
-function connectWebSocket() {
-    if (ws && ws.readyState === WebSocket.CONNECTING) return;
-
-    clearTimeout(reconnectTimer);
-    clearInterval(heartbeatTimer);
-
-    const url = `${wsConfig.wsUrl}?clientId=${wsConfig.clientId}`;
-
-    try {
-        ws = new WebSocket(url);
-    } catch (err) {
-        console.warn('[MLS BG] WS construction error:', err);
-        scheduleReconnect();
+async function connectSignalR() {
+    if (hubConnection?.state === signalR.HubConnectionState.Connected ||
+        hubConnection?.state === signalR.HubConnectionState.Connecting ||
+        hubConnection?.state === signalR.HubConnectionState.Reconnecting) {
         return;
     }
 
-    ws.onopen = () => {
-        console.log('[MLS BG] WebSocket connected to MLS');
-        reconnectDelay = DEFAULT_CONFIG.reconnectDelayMs;
+    clearTimeout(reconnectTimer);
 
-        // Subscribe to data topics
-        wsConfig.dataTopics.forEach(topic => {
-            sendEnvelope(buildEnvelope('SUBSCRIBE_TOPIC', { topic }));
-        });
+    const url = `${wsConfig.hubUrl}?clientId=${wsConfig.clientId}`;
 
-        // Start heartbeat
-        heartbeatTimer = setInterval(() => {
-            if (ws?.readyState === WebSocket.OPEN) {
-                sendEnvelope(buildEnvelope('HEARTBEAT', {}));
+    hubConnection = new signalR.HubConnectionBuilder()
+        .withUrl(url)
+        .withAutomaticReconnect({
+            nextRetryDelayInMilliseconds: () => {
+                reconnectDelay = Math.min(reconnectDelay * 1.5, wsConfig.maxReconnectDelayMs);
+                return reconnectDelay;
             }
-        }, wsConfig.heartbeatIntervalMs);
+        })
+        .configureLogging(signalR.LogLevel.Warning)
+        .build();
 
-        // Replay any queued orders
+    // ── Receive envelopes from the hub ────────────────────────────────────────
+    hubConnection.on('ReceiveEnvelope', envelope => routeEnvelope(envelope));
+
+    hubConnection.onreconnected(() => {
+        console.log('[MLS BG] SignalR reconnected');
+        reconnectDelay = DEFAULT_CONFIG.reconnectDelayMs;
+        subscribeToTopics();
         replayOrderQueue();
-
         broadcastToAll({ type: 'WS_STATUS', connected: true });
-    };
+    });
 
-    ws.onmessage = event => {
-        let envelope;
-        try {
-            envelope = JSON.parse(event.data);
-        } catch {
-            return;
-        }
-        routeEnvelope(envelope);
-    };
+    hubConnection.onreconnecting(() => {
+        broadcastToAll({ type: 'WS_STATUS', connected: false });
+    });
 
-    ws.onerror = err => {
-        console.warn('[MLS BG] WS error:', err);
-    };
-
-    ws.onclose = event => {
-        console.log(`[MLS BG] WS closed (code=${event.code})`);
-        clearInterval(heartbeatTimer);
+    hubConnection.onclose(() => {
+        console.log('[MLS BG] SignalR connection closed');
         broadcastToAll({ type: 'WS_STATUS', connected: false });
         scheduleReconnect();
-    };
+    });
+
+    try {
+        await hubConnection.start();
+        console.log('[MLS BG] SignalR connected to MLS block-controller');
+        reconnectDelay = DEFAULT_CONFIG.reconnectDelayMs;
+        await subscribeToTopics();
+        replayOrderQueue();
+        broadcastToAll({ type: 'WS_STATUS', connected: true });
+    } catch (err) {
+        console.warn('[MLS BG] SignalR start failed:', err);
+        scheduleReconnect();
+    }
+}
+
+async function subscribeToTopics() {
+    for (const topic of wsConfig.dataTopics) {
+        try {
+            await hubConnection.invoke('SubscribeToTopicAsync', topic);
+        } catch (err) {
+            console.warn('[MLS BG] Topic subscribe failed for', topic, err);
+        }
+    }
 }
 
 function scheduleReconnect() {
     reconnectTimer = setTimeout(() => {
         reconnectDelay = Math.min(reconnectDelay * 1.5, DEFAULT_CONFIG.maxReconnectDelayMs);
-        connectWebSocket();
+        connectSignalR();
     }, reconnectDelay);
 }
 
-function sendEnvelope(envelope) {
-    if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(envelope));
+async function sendEnvelope(envelope) {
+    if (hubConnection?.state === signalR.HubConnectionState.Connected) {
+        try {
+            await hubConnection.invoke('SendEnvelope', envelope);
+        } catch (err) {
+            console.warn('[MLS BG] SendEnvelope failed:', err);
+        }
     }
 }
 
 function buildEnvelope(type, payload) {
     return {
         type,
-        version: '1.0',
-        unique_id: crypto.randomUUID(),
-        module_id: 'chrome-extension',
-        module_network_address: 'chrome-extension',
-        module_network_port: 0,
+        version: 1,          // int, must be ≥ 1  (EnvelopePayload.Version)
+        session_id: crypto.randomUUID(),
+        module_id: `chrome-extension:${wsConfig.clientId || 'unknown'}`,
         timestamp: new Date().toISOString(),
         payload
     };
@@ -225,7 +262,7 @@ function notifyArbitrageOpportunity(data) {
 
 // ── Order queue (offline resilience) ─────────────────────────────────────────
 function queueOrSendOrder(order) {
-    if (ws?.readyState === WebSocket.OPEN) {
+    if (hubConnection?.state === signalR.HubConnectionState.Connected) {
         sendEnvelope(buildEnvelope('PLACE_ORDER', order));
     } else {
         order._queuedAt = Date.now();
@@ -242,7 +279,7 @@ async function replayOrderQueue() {
     pendingOrders = [...queue];
 
     for (const order of [...pendingOrders]) {
-        if (ws?.readyState === WebSocket.OPEN) {
+        if (hubConnection?.state === signalR.HubConnectionState.Connected) {
             sendEnvelope(buildEnvelope('PLACE_ORDER', order));
         }
     }
@@ -268,15 +305,16 @@ function broadcastToPort(port, message) {
     }
 }
 
-// ── Alarm: ensure WS stays connected even after service worker idle ───────────
+// ── Alarm: ensure SignalR stays connected even after service worker idle ──────
 chrome.alarms.create('mls-keepalive', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(alarm => {
     if (alarm.name === 'mls-keepalive') {
-        if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-            connectWebSocket();
+        if (!hubConnection ||
+            hubConnection.state === signalR.HubConnectionState.Disconnected) {
+            connectSignalR();
         }
     }
 });
 
 // ── Initial connection on first load ─────────────────────────────────────────
-initConfig().then(connectWebSocket);
+initConfig().then(connectSignalR);

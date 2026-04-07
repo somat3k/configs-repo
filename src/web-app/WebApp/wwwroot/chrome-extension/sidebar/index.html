@@ -85,9 +85,9 @@
         </section>
     </main>
 
-    <!-- ApexCharts for the mini chart -->
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.1/dist/apexcharts.min.js"
-            crossorigin="anonymous"></script>
+    <!-- ApexCharts: bundled locally (MV3 extensions cannot load remote scripts).
+         Build: cd chrome-extension && npm install && npm run build -->
+    <script src="./apexcharts.min.js"></script>
     <script src="sidebar.js" type="module"></script>
 </body>
 </html>

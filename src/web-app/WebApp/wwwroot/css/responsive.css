@@ -355,6 +355,13 @@
 }
 
 /* ── Container queries (canvas-level responsiveness) ─────────────────────── */
+/* Mirror the CanvasHost.razor scoped declaration globally so @container canvas
+   rules resolve regardless of CSS scope context. */
+.canvas-host {
+    container-type: inline-size;
+    container-name: canvas;
+}
+
 @container canvas (max-width: 480px) {
     .document-window .window-btn-group {
         gap: 2px;

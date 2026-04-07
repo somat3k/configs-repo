@@ -1,6 +1,6 @@
 /* MLS Chrome Extension — Popup Styles */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+/* Google Fonts @import is blocked by MV3 extension CSP.
+   Inter/JetBrains Mono fall back to the nearest system equivalent. */
 
 *, *::before, *::after { box-sizing: border-box; }
 
