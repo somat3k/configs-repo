@@ -321,7 +321,7 @@
         if (!firstRender) return;
         try
         {
-            var width = await JS!.InvokeAsync<double>("eval", "window.innerWidth")
+            var width = await JS!.InvokeAsync<double>("mlsViewport.getInnerWidth")
                 .ConfigureAwait(false);
             _ = width; // nav collapse driven by CSS media queries
         }

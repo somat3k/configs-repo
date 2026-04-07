@@ -79,7 +79,7 @@ self.addEventListener('fetch', event => {
     }
     if (!url.protocol.startsWith('http')) return;
     if (url.pathname.includes('/hubs/')) return;
-    if (url.pathname.includes('negotiate')) return;
+    if (url.pathname.endsWith('/negotiate')) return;
     if (url.pathname.includes('/_blazor')) return;
 
     // ── API: NetworkFirst ─────────────────────────────────────────────────────
@@ -89,13 +89,13 @@ self.addEventListener('fetch', event => {
     }
 
     // ── Blazor framework files: CacheFirst (immutable) ────────────────────────
-    if (url.pathname.includes('/_framework/') || url.hostname.includes('cdn.jsdelivr.net')) {
+    if (url.pathname.includes('/_framework/') || url.hostname === 'cdn.jsdelivr.net') {
         event.respondWith(cacheFirst(request, FRAME_CACHE));
         return;
     }
 
     // ── Fonts (Google Fonts, etc): CacheFirst 30-day expiry ───────────────────
-    if (url.hostname.includes('fonts.googleapis.com') || url.hostname.includes('fonts.gstatic.com')) {
+    if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
         event.respondWith(cacheFirstWithExpiry(request, FONT_CACHE, MAX_AGE_FONTS));
         return;
     }
@@ -155,7 +155,10 @@ async function cacheFirst(request, cacheName) {
         if (response.ok) cache.put(request, response.clone());
         return response;
     } catch {
-        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        return new Response(
+            JSON.stringify({ error: 'offline', cached: false }),
+            { status: 503, headers: { 'Content-Type': 'application/json' } }
+        );
     }
 }
 

@@ -361,7 +361,7 @@
         // Detect initial viewport width for mobile/desktop mode
         try
         {
-            var width = await JS.InvokeAsync<double>("eval", "window.innerWidth").ConfigureAwait(false);
+            var width = await JS.InvokeAsync<double>("mlsViewport.getInnerWidth").ConfigureAwait(false);
             await SetMobileMode(width).ConfigureAwait(false);
         }
         catch { /* non-critical */ }

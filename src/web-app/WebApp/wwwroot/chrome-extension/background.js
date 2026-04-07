@@ -16,7 +16,8 @@ const DEFAULT_CONFIG = {
     reconnectDelayMs: 2000,
     maxReconnectDelayMs: 30000,
     heartbeatIntervalMs: 5000,
-    dataTopics: ['prices', 'positions', 'arb-opportunities', 'ai-responses']
+    dataTopics: ['prices', 'positions', 'arb-opportunities', 'ai-responses'],
+    arbNotificationThresholdBps: 50  // notify on arb opportunities > 0.5% profit
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -212,7 +213,7 @@ function cacheLatestPrice(priceData) {
 
 // ── Arbitrage notifications ───────────────────────────────────────────────────
 function notifyArbitrageOpportunity(data) {
-    if (!data?.profitBps || data.profitBps < 50) return; // > 0.5% only
+    if (!data?.profitBps || data.profitBps < wsConfig.arbNotificationThresholdBps) return;
     chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/icon-48.svg',

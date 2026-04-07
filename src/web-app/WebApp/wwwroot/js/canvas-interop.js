@@ -621,4 +621,11 @@ window.scrollElementToBottom = function (el) {
     if (el) el.scrollTop = el.scrollHeight;
 };
 
+// ── Viewport helpers ─────────────────────────────────────────────────────────
+
+window.mlsViewport = {
+    /** Returns the current inner width of the browser window. */
+    getInnerWidth: function () { return window.innerWidth; }
+};
+
 })();
