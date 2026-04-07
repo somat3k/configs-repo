@@ -221,3 +221,33 @@ public static class ModelTypeIds
                                    "Unknown ModelType — add a canonical ID mapping."),
     };
 }
+
+// ── Chart-ready plot sample ───────────────────────────────────────────────────
+
+/// <summary>
+/// A single chart-ready data point projected from a <see cref="FeatureVector"/>.
+/// </summary>
+/// <remarks>
+/// Designed for direct use with
+/// <c>canvas-interop.js:updateApexSeries(chartId, SeriesName, TimestampEpochMs, Value)</c>
+/// and <c>initIndicatorChart</c>. Consumers iterate the list returned by
+/// <see cref="FeatureEngineer.ToPlotSamples"/> and call <c>updateApexSeries</c>
+/// once per sample to push a new point to the live chart.
+/// </remarks>
+/// <param name="IndicatorId">
+/// Unique slug matching <see cref="IndicatorDescriptor.Id"/> (e.g. <c>"rsi_14"</c>).
+/// Use this to look up rendering metadata from <see cref="IndicatorLibrary"/>.
+/// </param>
+/// <param name="SeriesName">
+/// Human-readable series name for the chart legend (e.g. <c>"RSI (14)"</c>).
+/// Matches the <c>seriesName</c> argument in <c>updateApexSeries</c>.
+/// </param>
+/// <param name="TimestampEpochMs">
+/// Unix epoch milliseconds used as the x-axis value in ApexCharts datetime series.
+/// </param>
+/// <param name="Value">Computed indicator value (y-axis).</param>
+public sealed record IndicatorPlotSample(
+    string IndicatorId,
+    string SeriesName,
+    long   TimestampEpochMs,
+    double Value);

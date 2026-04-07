@@ -463,7 +463,110 @@
         container._apexChart = chart;
     };
 
-    // ── Utilities ────────────────────────────────────────────────────────────
+    // ── Indicator chart ──────────────────────────────────────────────────────
+
+    /**
+     * Initialise a multi-series ApexCharts indicator panel from a list of
+     * indicator descriptors produced by IndicatorLibrary / FeatureEngineer.ToPlotSamples.
+     *
+     * After initialisation use updateApexSeries(containerId, sample.SeriesName,
+     * sample.TimestampEpochMs, sample.Value) to push live data into the chart.
+     *
+     * @param {string} containerId
+     * @param {Array<{
+     *   id:       string,
+     *   name:     string,
+     *   plotType: string,   // "Line" | "Histogram" | "Area"
+     *   color:    string,
+     *   min:      number|null,
+     *   max:      number|null,
+     *   unit:     string
+     * }>} descriptors  — serialised IndicatorDescriptor objects
+     */
+    window.initIndicatorChart = function (containerId, descriptors) {
+        const container = document.getElementById(containerId);
+        if (!container || typeof ApexCharts === 'undefined') return;
+        if (container._apexChart) { container._apexChart.destroy(); }
+
+        container._seriesData = {};
+        const series = [];
+        const yaxes  = [];
+
+        descriptors.forEach(function (d, idx) {
+            const isHistogram = (d.plotType === 'Histogram');
+            const isArea      = (d.plotType === 'Area');
+            const seriesType  = isHistogram ? 'bar' : (isArea ? 'area' : 'line');
+
+            // Track named series for updateApexSeries
+            container._seriesData[d.name] = [];
+
+            series.push({
+                name:  d.name,
+                type:  seriesType,
+                data:  [],
+                color: d.color || '#00d4ff',
+            });
+
+            // First line-type series drives the primary (left) y-axis.
+            // Histograms always get a secondary (right) y-axis.
+            // If no line series has been seen yet this entry is the first candidate.
+            const firstLineSeen = series.filter(function (s) { return s.type === 'line' || s.type === 'area'; }).length === 1
+                               && (seriesType === 'line' || seriesType === 'area');
+            yaxes.push({
+                seriesName: d.name,
+                opposite:   isHistogram,
+                show:       firstLineSeen || isHistogram,
+                min:        d.min  != null ? d.min  : undefined,
+                max:        d.max  != null ? d.max  : undefined,
+                tickAmount: 5,
+                labels: {
+                    style: { colors: [d.color || '#8b949e'] },
+                    formatter: function (v) {
+                        if (typeof v !== 'number') return v;
+                        var formatted = v.toFixed(4);
+                        return d.unit ? (formatted + ' ' + d.unit) : formatted;
+                    },
+                },
+            });
+        });
+
+        const chart = new ApexCharts(container, {
+            series: series,
+            chart: {
+                id:         containerId,
+                type:       'line',
+                height:     '100%',
+                background: '#0d1117',
+                foreColor:  '#8b949e',
+                animations: { enabled: false },
+                toolbar: { show: true, tools: { zoom: true, pan: true, reset: true } },
+            },
+            stroke: {
+                curve: 'smooth',
+                width: series.map(function (s) { return s.type === 'bar' ? 0 : 2; }),
+            },
+            fill: {
+                type: series.map(function (s) { return s.type === 'area' ? 'gradient' : 'solid'; }),
+                gradient: { opacityFrom: 0.4, opacityTo: 0.05 },
+            },
+            xaxis: {
+                type: 'datetime',
+                labels: { datetimeUTC: false, style: { colors: '#8b949e' } },
+            },
+            yaxis: yaxes,
+            grid:   { borderColor: 'rgba(255,255,255,0.05)' },
+            legend: { show: true, position: 'top', labels: { colors: '#8b949e' } },
+            theme:  { mode: 'dark' },
+            tooltip: {
+                theme:  'dark',
+                shared: true,
+                x:      { format: 'dd MMM HH:mm' },
+            },
+        });
+
+        chart.render();
+        container._apexChart = chart;
+    };
 
     function flashElement(el) {
         el.classList.remove('value-flash');

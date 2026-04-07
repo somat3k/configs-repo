@@ -82,6 +82,47 @@ public sealed class FeatureEngineer
             SchemaVersion: FeatureSchemaVersions.Trading);
     }
 
+    /// <summary>
+    /// Projects a computed <see cref="FeatureVector"/> into a list of
+    /// <see cref="IndicatorPlotSample"/> objects ready for live chart injection.
+    /// </summary>
+    /// <remarks>
+    /// Each sample in the returned list maps directly to one call of
+    /// <c>canvas-interop.js:updateApexSeries(chartId, sample.SeriesName,
+    /// sample.TimestampEpochMs, sample.Value)</c>.
+    /// The <see cref="IndicatorDescriptor"/> for each sample (colour, plot type,
+    /// y-axis range) can be resolved from <see cref="IndicatorLibrary"/> using
+    /// <c>IndicatorLibrary.TryGet(sample.IndicatorId, out var desc)</c>.
+    /// </remarks>
+    /// <param name="vector">The computed feature vector.</param>
+    /// <param name="featureTimestamp">
+    /// UTC timestamp of the last candle in the computation window.
+    /// Converted to Unix milliseconds as the chart x-axis epoch value.
+    /// </param>
+    /// <returns>
+    /// <see cref="FeatureVector.FeatureCount"/> samples ordered by feature index.
+    /// </returns>
+    public static IReadOnlyList<IndicatorPlotSample> ToPlotSamples(
+        FeatureVector  vector,
+        DateTimeOffset featureTimestamp)
+    {
+        long     epochMs = featureTimestamp.ToUnixTimeMilliseconds();
+        double[] values  = vector.ToArray();
+
+        var samples = new IndicatorPlotSample[values.Length];
+        for (int i = 0; i < values.Length; i++)
+        {
+            IndicatorDescriptor? desc = IndicatorLibrary.GetByFeatureIndex(i);
+            samples[i] = new IndicatorPlotSample(
+                IndicatorId:      desc?.Id   ?? $"feature_{i}",
+                SeriesName:       desc?.Name ?? $"Feature {i}",
+                TimestampEpochMs: epochMs,
+                Value:            values[i]);
+        }
+
+        return samples;
+    }
+
     // ── RSI ───────────────────────────────────────────────────────────────────
 
     /// <summary>
