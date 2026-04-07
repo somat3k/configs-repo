@@ -24,13 +24,17 @@ public abstract class FeedCollector(ILogger _logger)
             .Select(i => TimeSpan.FromSeconds(Math.Min(Math.Pow(2, i), 60)))
             .ToArray();
 
+    private const int FlushBatchSize  = 100;   // flush after this many candles
+    private const int FlushIntervalMs = 500;   // or after this many milliseconds
+
     /// <summary>Identifies the exchange this collector serves, e.g. <c>hyperliquid</c>.</summary>
     public abstract string ExchangeId { get; }
 
     /// <summary>
     /// Runs the feed collection loop until <paramref name="ct"/> is cancelled.
     /// On disconnect the loop reconnects using exponential backoff with jitter.
-    /// Each successfully received candle is persisted via <paramref name="repository"/>.
+    /// Received candles are buffered and flushed to <paramref name="repository"/> in
+    /// batches (up to <see cref="FlushBatchSize"/> candles or every <see cref="FlushIntervalMs"/> ms).
     /// </summary>
     /// <param name="key">Feed subscription key (exchange / symbol / timeframe).</param>
     /// <param name="repository">Candle persistence repository (scoped lifetime).</param>
@@ -50,6 +54,9 @@ public abstract class FeedCollector(ILogger _logger)
                 safeExchange, safeSymbol, safeTimeframe, attempt + 1);
 
             bool connected = false;
+            var buffer     = new List<CandleEntity>(FlushBatchSize);
+            var nextFlush  = DateTime.UtcNow.AddMilliseconds(FlushIntervalMs);
+
             try
             {
                 await foreach (var candle in StreamCandlesAsync(key, ct).ConfigureAwait(false))
@@ -63,16 +70,40 @@ public abstract class FeedCollector(ILogger _logger)
                             safeExchange, safeSymbol, safeTimeframe);
                     }
 
-                    await repository.UpsertBatchAsync([candle], ct).ConfigureAwait(false);
+                    buffer.Add(candle);
+
+                    // Flush when buffer is full or the flush interval has elapsed
+                    if (buffer.Count >= FlushBatchSize || DateTime.UtcNow >= nextFlush)
+                    {
+                        await repository.UpsertBatchAsync(buffer, ct).ConfigureAwait(false);
+                        buffer.Clear();
+                        nextFlush = DateTime.UtcNow.AddMilliseconds(FlushIntervalMs);
+                    }
                 }
+
+                // Flush any remaining candles after the stream ends
+                if (buffer.Count > 0)
+                    await repository.UpsertBatchAsync(buffer, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // Graceful shutdown — exit immediately
+                // Flush before graceful shutdown
+                if (buffer.Count > 0)
+                {
+                    try { await repository.UpsertBatchAsync(buffer, CancellationToken.None).ConfigureAwait(false); }
+                    catch { /* best-effort */ }
+                }
                 return;
             }
             catch (Exception ex)
             {
+                // Flush partial buffer before reconnect attempt
+                if (buffer.Count > 0)
+                {
+                    try { await repository.UpsertBatchAsync(buffer, CancellationToken.None).ConfigureAwait(false); }
+                    catch { /* best-effort */ }
+                }
+
                 _logger.LogWarning(ex,
                     "FeedCollector [{Exchange}/{Symbol}/{Timeframe}] stream error (attempt {N})",
                     safeExchange, safeSymbol, safeTimeframe, attempt + 1);

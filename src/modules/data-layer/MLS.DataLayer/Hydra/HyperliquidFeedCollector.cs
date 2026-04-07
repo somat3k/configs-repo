@@ -109,8 +109,7 @@ public sealed class HyperliquidFeedCollector(
             if (openTimeMs == 0) return null;
 
             static double ParseD(JsonElement el, string key_)
-                => el.TryGetProperty(key_, out var v)
-                   && double.TryParse(v.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var r) ? r : 0.0;
+                => el.TryGetProperty(key_, out var v) ? HydraUtils.ParseJsonDouble(v) : 0.0;
 
             var open  = ParseD(d, "o");
             var high  = ParseD(d, "h");

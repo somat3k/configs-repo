@@ -17,6 +17,10 @@ namespace MLS.DataLayer.Hydra;
 /// and yielding any new candle that has not yet been stored.
 /// </para>
 /// <para>
+/// Supported timeframes: <c>1h</c> (queries <c>poolHourDatas</c>) and
+/// <c>1d</c> (queries <c>poolDayDatas</c>).  Other timeframes are rejected.
+/// </para>
+/// <para>
 /// Subgraph endpoint: <c>https://api.thegraph.com/subgraphs/name/camelot-dex/camelot-v3</c>
 /// </para>
 /// </remarks>
@@ -27,6 +31,13 @@ public sealed class CamelotFeedCollector(
     private const string SubgraphUrl =
         "https://api.thegraph.com/subgraphs/name/camelot-dex/camelot-v3";
 
+    /// <summary>
+    /// Timeframes supported by the Camelot V3 subgraph.
+    /// <c>1h</c> maps to <c>poolHourDatas</c>; <c>1d</c> maps to <c>poolDayDatas</c>.
+    /// </summary>
+    public static readonly IReadOnlySet<string> SupportedTimeframes =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "1h", "1d" };
+
     /// <inheritdoc/>
     public override string ExchangeId => "camelot";
 
@@ -35,6 +46,16 @@ public sealed class CamelotFeedCollector(
         FeedKey key,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        if (!SupportedTimeframes.Contains(key.Timeframe))
+        {
+            _logger.LogWarning(
+                "CamelotFeedCollector: unsupported timeframe '{Timeframe}' for {Symbol} — " +
+                "only 1h and 1d are available from the Camelot subgraph",
+                HydraUtils.SanitiseFeedId(key.Timeframe),
+                HydraUtils.SanitiseFeedId(key.Symbol));
+            yield break;
+        }
+
         var pollInterval = HydraUtils.TimeframeToInterval(key.Timeframe);
         var lastSeen     = DateTimeOffset.UtcNow - pollInterval * 2; // seed to fetch current candle
 
@@ -72,7 +93,8 @@ public sealed class CamelotFeedCollector(
     private async Task<IReadOnlyList<CandleEntity>> FetchCandlesAsync(
         FeedKey key, DateTimeOffset since, CancellationToken ct)
     {
-        // Camelot V3 subgraph: query poolHourData
+        // Select subgraph entity based on timeframe
+        var entityName  = key.Timeframe == "1d" ? "poolDayDatas" : "poolHourDatas";
         var periodStart = since.ToUnixTimeSeconds();
 
         // Sanitise symbol before embedding in the GraphQL query (strip non-alphanumeric chars)
@@ -82,7 +104,7 @@ public sealed class CamelotFeedCollector(
         // Build via JsonSerializer to avoid any interpolation injection
         var queryBody = new
         {
-            query = $"{{ poolHourDatas(first: 200, orderBy: periodStartUnix, orderDirection: asc," +
+            query = $"{{ {entityName}(first: 200, orderBy: periodStartUnix, orderDirection: asc," +
                     $" where: {{ pool_: {{ token0_: {{symbol_contains_nocase: \"{poolId}\" }} }}," +
                     $" periodStartUnix_gt: {periodStart} }}) {{" +
                     $" periodStartUnix high low open close volumeToken0 volumeToken1 }} }}"
@@ -99,30 +121,27 @@ public sealed class CamelotFeedCollector(
         using var doc          = await JsonDocument.ParseAsync(stream, cancellationToken: ct)
                                                     .ConfigureAwait(false);
 
-        return ParseSubgraphCandles(doc.RootElement, key);
+        return ParseSubgraphCandles(doc.RootElement, key, entityName);
     }
 
-    private static IReadOnlyList<CandleEntity> ParseSubgraphCandles(JsonElement root, FeedKey key)
+    private static IReadOnlyList<CandleEntity> ParseSubgraphCandles(
+        JsonElement root, FeedKey key, string entityName)
     {
         var result = new List<CandleEntity>();
 
         if (!root.TryGetProperty("data", out var data)) return result;
-        if (!data.TryGetProperty("poolHourDatas", out var rows)) return result;
+        if (!data.TryGetProperty(entityName, out var rows)) return result;
 
         foreach (var row in rows.EnumerateArray())
         {
             if (!row.TryGetProperty("periodStartUnix", out var tsProp)
                 || !tsProp.TryGetInt64(out var tsUnix)) continue;
 
-            static double Dp(JsonElement el, string k)
-                => el.TryGetProperty(k, out var v)
-                   && double.TryParse(v.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var r) ? r : 0.0;
-
-            var open  = Dp(row, "open");
-            var high  = Dp(row, "high");
-            var low   = Dp(row, "low");
-            var close = Dp(row, "close");
-            var vol   = Dp(row, "volumeToken0");
+            var open  = HydraUtils.GetJsonDouble(row, "open");
+            var high  = HydraUtils.GetJsonDouble(row, "high");
+            var low   = HydraUtils.GetJsonDouble(row, "low");
+            var close = HydraUtils.GetJsonDouble(row, "close");
+            var vol   = HydraUtils.GetJsonDouble(row, "volumeToken0");
 
             result.Add(new CandleEntity
             {
@@ -135,7 +154,7 @@ public sealed class CamelotFeedCollector(
                 Low         = low,
                 Close       = close,
                 Volume      = vol,
-                QuoteVolume = Dp(row, "volumeToken1"),
+                QuoteVolume = HydraUtils.GetJsonDouble(row, "volumeToken1"),
                 InsertedAt  = DateTimeOffset.UtcNow,
             });
         }

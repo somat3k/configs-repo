@@ -4,7 +4,6 @@ using MLS.Core.Contracts.Designer;
 using MLS.DataLayer.Configuration;
 using MLS.DataLayer.Persistence;
 using MLS.DataLayer.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace MLS.DataLayer.Hydra;
 
@@ -33,8 +32,7 @@ public sealed class GapDetector(
     IEnvelopeSender _envelopeSender,
     ILogger<GapDetector> _logger) : BackgroundService
 {
-    private const string ModuleId        = "data-layer";
-    private const double GapTolerance    = 0.05; // 5 % tolerance
+    private const string ModuleId = "data-layer";
 
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -72,7 +70,9 @@ public sealed class GapDetector(
             {
                 _logger.LogWarning(ex,
                     "GapDetector: error checking [{Exchange}/{Symbol}/{Timeframe}]",
-                    key.Exchange, key.Symbol, key.Timeframe);
+                    HydraUtils.SanitiseFeedId(key.Exchange),
+                    HydraUtils.SanitiseFeedId(key.Symbol),
+                    HydraUtils.SanitiseFeedId(key.Timeframe));
             }
         }
     }
@@ -90,42 +90,34 @@ public sealed class GapDetector(
         if (latestStored is null)
         {
             // No data at all — nothing to compare against yet
-            _logger.LogDebug("GapDetector: no candles for [{Exchange}/{Symbol}/{Timeframe}] — skipping",
-                key.Exchange, key.Symbol, key.Timeframe);
+            _logger.LogDebug(
+                "GapDetector: no candles for [{Exchange}/{Symbol}/{Timeframe}] — skipping",
+                HydraUtils.SanitiseFeedId(key.Exchange),
+                HydraUtils.SanitiseFeedId(key.Symbol),
+                HydraUtils.SanitiseFeedId(key.Timeframe));
             return;
         }
 
-        var elapsed         = now - latestStored.Value;
-        var tfSeconds       = HydraUtils.TimeframeToSeconds(key.Timeframe);
-        var expectedCount   = (int)(elapsed.TotalSeconds / tfSeconds);
+        var elapsed       = now - latestStored.Value;
+        var tfSeconds     = HydraUtils.TimeframeToSeconds(key.Timeframe);
 
-        if (expectedCount <= 0) return; // feed is current
+        // How many candles are missing in the gap between latestStored and now.
+        // Subtract 1 so that the latest stored candle itself is not counted as missing.
+        var missingCount  = (int)(elapsed.TotalSeconds / tfSeconds) - 1;
 
-        var actualCount = await db.Candles
-            .Where(c => c.Exchange == key.Exchange
-                     && c.Symbol    == key.Symbol
-                     && c.Timeframe == key.Timeframe
-                     && c.OpenTime  > latestStored.Value)
-            .CountAsync(ct)
-            .ConfigureAwait(false);
+        // No gap if fewer than 1.05 × interval have passed (5 % tolerance)
+        if (missingCount <= 0) return;
 
-        var ratio = expectedCount > 0
-            ? (double)actualCount / expectedCount
-            : 1.0;
-
-        if (ratio >= (1.0 - GapTolerance)) return; // no significant gap
-
-        var missingCount = Math.Max(0, expectedCount - actualCount);
-        var gapStart     = CalculateGapStart(latestStored.Value, tfSeconds);
-        var gapEnd       = now;
+        var gapStart = CalculateGapStart(latestStored.Value, tfSeconds);
+        var gapEnd   = now;
 
         _logger.LogWarning(
             "GapDetector: gap detected [{Exchange}/{Symbol}/{Timeframe}] " +
-            "expected={Expected} actual={Actual} missing={Missing} start={GapStart} end={GapEnd}",
+            "missing={Missing} start={GapStart} end={GapEnd}",
             HydraUtils.SanitiseFeedId(key.Exchange),
             HydraUtils.SanitiseFeedId(key.Symbol),
             HydraUtils.SanitiseFeedId(key.Timeframe),
-            expectedCount, actualCount, missingCount, gapStart, gapEnd);
+            missingCount, gapStart, gapEnd);
 
         // Broadcast DATA_GAP_DETECTED envelope to Block Controller
         var payload = new DataGapDetectedPayload(

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace MLS.DataLayer.Hydra;
@@ -64,4 +66,36 @@ internal static partial class HydraUtils
     /// <summary>Converts a timeframe string to a <see cref="TimeSpan"/> poll interval.</summary>
     public static TimeSpan TimeframeToInterval(string tf) =>
         TimeSpan.FromSeconds(TimeframeToSeconds(tf));
+
+    /// <summary>
+    /// Sanitises a peer ID (moduleId / clientId) for use as a SignalR group name.
+    /// Truncates to 64 characters and replaces carriage-return / line-feed with underscores.
+    /// </summary>
+    public static string SanitisePeerId(string id) =>
+        (id.Length > 64 ? id[..64] : id)
+            .Replace('\r', '_')
+            .Replace('\n', '_');
+
+    /// <summary>
+    /// Parses a numeric value from a <see cref="JsonElement"/> that may be either a JSON
+    /// <c>number</c> or a JSON <c>string</c> representation of a number (e.g. <c>"65000.5"</c>).
+    /// Returns 0.0 when the element is absent or cannot be parsed.
+    /// </summary>
+    public static double ParseJsonDouble(JsonElement v) => v.ValueKind switch
+    {
+        JsonValueKind.Number => v.GetDouble(),
+        JsonValueKind.String when double.TryParse(
+            v.GetString(),
+            NumberStyles.Float | NumberStyles.AllowThousands,
+            CultureInfo.InvariantCulture,
+            out var r) => r,
+        _ => 0.0,
+    };
+
+    /// <summary>
+    /// Tries to get the double value of property <paramref name="key"/> from a JSON object element.
+    /// Returns 0.0 when the property is absent or unparsable.
+    /// </summary>
+    public static double GetJsonDouble(JsonElement obj, string key) =>
+        obj.TryGetProperty(key, out var v) ? ParseJsonDouble(v) : 0.0;
 }
