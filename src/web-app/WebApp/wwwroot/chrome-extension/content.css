@@ -1,0 +1,4 @@
+/* MLS Chrome Extension — Content Script Styles */
+/* These styles are injected as a CSS file so they don't pollute the JS bundle */
+
+/* Overlay is fully scoped under #mls-price-overlay, so no host page styles leak */

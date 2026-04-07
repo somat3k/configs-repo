@@ -621,4 +621,31 @@ window.scrollElementToBottom = function (el) {
     if (el) el.scrollTop = el.scrollHeight;
 };
 
+// ── Viewport helpers ─────────────────────────────────────────────────────────
+
+window.mlsViewport = {
+    /** Returns the current inner width of the browser window. */
+    getInnerWidth: function () { return window.innerWidth; },
+
+    /**
+     * Registers a matchMedia listener for the 768px mobile breakpoint.
+     * Calls dotnetRef.invokeMethodAsync('OnBreakpointChange', isMobile) whenever
+     * the viewport crosses the threshold.
+     * The listener auto-removes itself when the DotNetObjectReference is disposed
+     * (invocation throws after disposal).
+     * @param {import('@microsoft/dotnet-js-interop').DotNetObjectReference} dotnetRef
+     */
+    onBreakpointChange: function (dotnetRef) {
+        const mq = window.matchMedia('(max-width: 767px)');
+        const handler = (e) => {
+            dotnetRef.invokeMethodAsync('OnBreakpointChange', e.matches)
+                .catch(() => {
+                    // DotNetObjectReference was disposed — unsubscribe to avoid leaks
+                    mq.removeEventListener('change', handler);
+                });
+        };
+        mq.addEventListener('change', handler);
+    }
+};
+
 })();

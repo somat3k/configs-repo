@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#07080c"/>
+  <defs>
+    <linearGradient id="g1" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <path d="M256 64L448 160v192L256 448 64 352V160L256 64z" fill="none" stroke="url(#g1)" stroke-width="14"/>
+  <path d="M170 256l58 58 114-114" stroke="url(#g1)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <text x="256" y="340" font-family="Inter,system-ui,sans-serif" font-size="52" font-weight="700"
+        text-anchor="middle" fill="url(#g1)" letter-spacing="4">MLS</text>
+</svg>

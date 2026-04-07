@@ -1,0 +1,17 @@
+{
+  "name": "mls-chrome-extension",
+  "version": "1.0.0",
+  "description": "MLS Trading Platform — Chrome Extension (MV3)",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^8.0.0",
+    "apexcharts": "^3.49.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0"
+  }
+}
