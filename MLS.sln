@@ -39,6 +39,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "data-layer", "data-layer", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MLS.DataLayer", "src\modules\data-layer\MLS.DataLayer\MLS.DataLayer.csproj", "{B850CE81-EB90-4A3A-ABA0-F91F44AB2C9F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MLS.DataLayer.Tests", "src\modules\data-layer\MLS.DataLayer.Tests\MLS.DataLayer.Tests.csproj", "{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -169,6 +171,18 @@ Global
 		{B850CE81-EB90-4A3A-ABA0-F91F44AB2C9F}.Release|x64.Build.0 = Release|Any CPU
 		{B850CE81-EB90-4A3A-ABA0-F91F44AB2C9F}.Release|x86.ActiveCfg = Release|Any CPU
 		{B850CE81-EB90-4A3A-ABA0-F91F44AB2C9F}.Release|x86.Build.0 = Release|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Debug|x64.Build.0 = Debug|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Debug|x86.Build.0 = Debug|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Release|x64.ActiveCfg = Release|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Release|x64.Build.0 = Release|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Release|x86.ActiveCfg = Release|Any CPU
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -191,5 +205,6 @@ Global
 		{EC447DCF-ABFA-6E24-52A5-D7FD48A5C558} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{C220CD10-BE45-7C37-FF4E-88FF3F6BF519} = {EC447DCF-ABFA-6E24-52A5-D7FD48A5C558}
 		{B850CE81-EB90-4A3A-ABA0-F91F44AB2C9F} = {C220CD10-BE45-7C37-FF4E-88FF3F6BF519}
+		{37A6FD5C-E81F-4573-9C12-1684C44BD0DB} = {C220CD10-BE45-7C37-FF4E-88FF3F6BF519}
 	EndGlobalSection
 EndGlobal

@@ -18,8 +18,6 @@ public sealed class CandleRepository(DataLayerDbContext _db)
     {
         if (candles.Count == 0) return 0;
 
-        await _db.EnsureSchemaAsync(ct).ConfigureAwait(false);
-
         // ExecuteUpdate / raw SQL for efficient ON CONFLICT DO NOTHING
         var sql = """
             INSERT INTO candles
@@ -87,22 +85,5 @@ public sealed class CandleRepository(DataLayerDbContext _db)
                      && c.OpenTime  > since)
             .CountAsync(ct)
             .ConfigureAwait(false);
-    }
-}
-
-/// <summary>Internal EF Core migration helper.</summary>
-internal static class DbContextExtensions
-{
-    private static int _schemaEnsured;
-
-    /// <summary>
-    /// Applies any pending EF Core migrations on first call; subsequent calls are no-ops.
-    /// </summary>
-    internal static async Task EnsureSchemaAsync(
-        this DataLayerDbContext db,
-        CancellationToken ct = default)
-    {
-        if (Interlocked.Exchange(ref _schemaEnsured, 1) == 0)
-            await db.Database.MigrateAsync(ct).ConfigureAwait(false);
     }
 }

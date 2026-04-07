@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using MLS.Core.Contracts;
+using MLS.DataLayer.Hydra;
 
 namespace MLS.DataLayer.Hubs;
 
@@ -28,7 +29,7 @@ public sealed class DataLayerHub : Hub
 
         if (peerId is not null)
         {
-            var safeGroup = peerId.Replace(" ", "_");
+            var safeGroup = HydraUtils.SanitisePeerId(peerId);
             await Groups.AddToGroupAsync(Context.ConnectionId, safeGroup).ConfigureAwait(false);
         }
 

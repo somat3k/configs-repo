@@ -25,7 +25,7 @@ namespace MLS.DataLayer.Hydra;
 /// </para>
 /// </remarks>
 public sealed class CamelotFeedCollector(
-    HttpClient _http,
+    IHttpClientFactory _httpFactory,
     ILogger<CamelotFeedCollector> _logger) : FeedCollector(_logger)
 {
     private const string SubgraphUrl =
@@ -112,7 +112,8 @@ public sealed class CamelotFeedCollector(
         var queryJson = System.Text.Json.JsonSerializer.Serialize(queryBody);
 
         using var content  = new StringContent(queryJson, Encoding.UTF8, "application/json");
-        using var response = await _http.PostAsync(SubgraphUrl, content, ct).ConfigureAwait(false);
+        using var http     = _httpFactory.CreateClient("camelot");
+        using var response = await http.PostAsync(SubgraphUrl, content, ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
             return [];

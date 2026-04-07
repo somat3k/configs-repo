@@ -26,14 +26,14 @@ builder.Services.AddHttpClient<IEnvelopeSender, EnvelopeSender>(client =>
     client.Timeout     = TimeSpan.FromSeconds(10);
 });
 
-// BackfillPipeline uses a typed HttpClient for HYPERLIQUID / Camelot REST calls
-builder.Services.AddHttpClient<BackfillPipeline>(client =>
+// BackfillPipeline and CamelotFeedCollector use named clients so their singleton
+// registrations do not conflict with typed-client DI resolution.
+builder.Services.AddHttpClient("backfill", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
-// CamelotFeedCollector uses a typed HttpClient for subgraph polling
-builder.Services.AddHttpClient<CamelotFeedCollector>(client =>
+builder.Services.AddHttpClient("camelot", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(15);
 });
@@ -97,5 +97,9 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<DataLayerDbContext>();
     await db.Database.MigrateAsync();
 }
+
+// HTTP port 5700 + WebSocket/SignalR port 6700 — both served by the same Kestrel instance.
+app.Urls.Add("http://0.0.0.0:5700");
+app.Urls.Add("http://0.0.0.0:6700");
 
 await app.RunAsync();
