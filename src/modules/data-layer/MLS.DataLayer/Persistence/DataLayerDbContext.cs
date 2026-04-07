@@ -48,11 +48,6 @@ public sealed class DataLayerDbContext(DbContextOptions<DataLayerDbContext> opti
                .HasDatabaseName("ix_feature_store_feed_model_ts")
                .IsUnique(true);
 
-        // Fast range queries for training data access
-        feature.HasIndex(f => new { f.Exchange, f.Symbol, f.Timeframe, f.ModelType, f.FeatureTimestamp })
-               .HasDatabaseName("ix_feature_store_ts_brin")
-               .HasMethod("brin");
-
         feature.Property(f => f.Exchange).HasMaxLength(64);
         feature.Property(f => f.Symbol).HasMaxLength(32);
         feature.Property(f => f.Timeframe).HasMaxLength(8);

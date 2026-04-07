@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace MLS.DataLayer.FeatureStore;
@@ -321,10 +320,6 @@ public sealed class FeatureEngineer
         double priceVolSum = 0.0;
         double volSum      = 0.0;
 
-        // Vectorised accumulation via System.Numerics.Vector<double>
-        int vecLen = Vector<double>.Count;
-        // VWAP uses close*volume — we accumulate scalars as the two arrays are interleaved
-        // in the OhlcvCandle struct; scalar loop is cache-efficient for struct span.
         for (int i = 0; i < w.Length; i++)
         {
             priceVolSum += w[i].Close * w[i].Volume;
@@ -344,21 +339,14 @@ public sealed class FeatureEngineer
     // ── SIMD helpers ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Vectorised sum of <c>Close</c> values over [start, end) using
-    /// <see cref="Vector{T}"/> when the segment is long enough to benefit.
+    /// Returns the sum of <c>Close</c> values over [start, end).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double ComputeSum(ReadOnlySpan<OhlcvCandle> w, int start, int end)
     {
-        // Extract close values into a temporary span-based double array on the stack
-        // for SIMD — only worthwhile for BbPeriod ≥ 16 windows.
-        int    count  = end - start;
-        double sum    = 0.0;
-
-        // Scalar accumulation (struct span prevents direct SIMD without extraction)
+        double sum = 0.0;
         for (int i = start; i < end; i++)
             sum += w[i].Close;
-
         return sum;
     }
 }
