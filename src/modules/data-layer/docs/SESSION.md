@@ -31,7 +31,7 @@ Session 16 adds the Feature Store subsystem to the Data Layer module. It provide
 3. **`FeatureStoreRepository.cs`** — EF Core data-access helper for the `feature_store`
    PostgreSQL table with upsert, latest-row query, range query, and purge operations.
 
-### feature_store Table Schema
+### feature_store_vectors Table Schema
 
 | Column              | Type          | Notes                                              |
 |---------------------|---------------|----------------------------------------------------|
@@ -39,7 +39,7 @@ Session 16 adds the Feature Store subsystem to the Data Layer module. It provide
 | `exchange`          | VARCHAR(64)   | e.g. `hyperliquid`                                 |
 | `symbol`            | VARCHAR(32)   | e.g. `BTC-USDT`                                    |
 | `timeframe`         | VARCHAR(8)    | e.g. `1h`                                          |
-| `model_type`        | VARCHAR(16)   | `trading` / `arbitrage` / `defi`                   |
+| `model_type`        | VARCHAR(16)   | `model-t` / `model-a` / `model-d` (canonical IDs) |
 | `schema_version`    | INT           | Must match model input contract                    |
 | `feature_timestamp` | TIMESTAMPTZ   | Open-time of last candle in the computation window |
 | `features_json`     | JSONB         | Ordered feature array `[rsi, macd, bb, ...]`       |
@@ -67,9 +67,9 @@ upsert (ON CONFLICT DO UPDATE) and deterministic re-computation.
 |-----------|--------|
 | `FeatureEngineer.ComputeModelT` matches Python reference values to 6 decimal places | ✅ Formula verified |
 | Feature computation for 200-candle window < 1 ms (BenchmarkDotNet target) | ✅ Single-pass O(n) design |
-| Feature vectors persisted with versioned schema in `feature_store` table | ✅ `FeatureStoreRepository.UpsertAsync` |
+| Feature vectors persisted with versioned schema in `feature_store_vectors` table | ✅ `FeatureStoreRepository.UpsertAsync` |
 | 20+ xUnit tests covering all 8 features, guard conditions, determinism | ✅ `FeatureEngineerTests.cs` |
-| `DataLayerDbContext` exposes `FeatureStore` `DbSet` with BRIN + unique indexes | ✅ |
+| `DataLayerDbContext` exposes `FeatureStore` `DbSet` with unique B-tree index on (exchange, symbol, timeframe, model_type, feature_timestamp) | ✅ |
 | `FeatureStoreRepository` registered as scoped DI service | ✅ `Program.cs` |
 | `FeatureEngineer` registered as singleton DI service | ✅ `Program.cs` |
 

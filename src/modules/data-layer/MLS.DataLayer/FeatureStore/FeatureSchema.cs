@@ -100,9 +100,14 @@ public sealed record FeatureVector(
 // ── Feature store entity ──────────────────────────────────────────────────────
 
 /// <summary>
-/// Persisted feature vector row in the <c>feature_store</c> PostgreSQL table.
+/// Persisted feature vector row in the <c>feature_store_vectors</c> PostgreSQL table.
 /// </summary>
-[Table("feature_store")]
+/// <remarks>
+/// A separate <c>feature_store</c> table (from the platform bootstrap SQL) holds
+/// feature-set metadata (name, version, schema JSONB, IPFS ref).
+/// This table stores computed per-candle feature vectors.
+/// </remarks>
+[Table("feature_store_vectors")]
 public sealed class FeatureStoreEntity
 {
     /// <summary>Surrogate primary key.</summary>
@@ -176,4 +181,43 @@ public static class FeatureSchemaVersions
 
     /// <summary>Current schema version for <see cref="ModelType.DeFi"/> (model-d).</summary>
     public const int DeFi = 1;
+}
+
+// ── Canonical model identifiers ───────────────────────────────────────────────
+
+/// <summary>
+/// Maps <see cref="ModelType"/> enum values to their canonical cross-module string
+/// identifiers (<c>model-t</c>, <c>model-a</c>, <c>model-d</c>).
+/// </summary>
+/// <remarks>
+/// Always use these identifiers when persisting model type strings to the database
+/// or sending them in envelope payloads, to stay consistent with the rest of the
+/// MLS platform (designer, ml-runtime, ai-hub, etc.).
+/// </remarks>
+public static class ModelTypeIds
+{
+    /// <summary>Canonical identifier for <see cref="ModelType.Trading"/>.</summary>
+    public const string Trading = "model-t";
+
+    /// <summary>Canonical identifier for <see cref="ModelType.Arbitrage"/>.</summary>
+    public const string Arbitrage = "model-a";
+
+    /// <summary>Canonical identifier for <see cref="ModelType.DeFi"/>.</summary>
+    public const string DeFi = "model-d";
+
+    /// <summary>
+    /// Returns the canonical cross-module identifier for <paramref name="modelType"/>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown for an unrecognised <see cref="ModelType"/> value.
+    /// </exception>
+    public static string For(ModelType modelType) => modelType switch
+    {
+        ModelType.Trading   => Trading,
+        ModelType.Arbitrage => Arbitrage,
+        ModelType.DeFi      => DeFi,
+        _                   => throw new ArgumentOutOfRangeException(
+                                   nameof(modelType), modelType,
+                                   "Unknown ModelType — add a canonical ID mapping."),
+    };
 }

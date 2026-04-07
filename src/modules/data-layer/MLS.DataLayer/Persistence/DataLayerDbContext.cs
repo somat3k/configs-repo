@@ -6,7 +6,7 @@ namespace MLS.DataLayer.Persistence;
 /// <summary>
 /// EF Core <see cref="DbContext"/> for the Data Layer module.
 /// Manages the <see cref="CandleEntity"/> and <see cref="FeatureStoreEntity"/> tables
-/// in the MLS PostgreSQL database.
+/// (<c>candles</c> and <c>feature_store_vectors</c>) in the MLS PostgreSQL database.
 /// </summary>
 public sealed class DataLayerDbContext(DbContextOptions<DataLayerDbContext> options) : DbContext(options)
 {
@@ -37,15 +37,15 @@ public sealed class DataLayerDbContext(DbContextOptions<DataLayerDbContext> opti
         candle.Property(c => c.Symbol).HasMaxLength(32);
         candle.Property(c => c.Timeframe).HasMaxLength(8);
 
-        // ── feature_store ──────────────────────────────────────────────────────
+        // ── feature_store_vectors ──────────────────────────────────────────────
 
         var feature = modelBuilder.Entity<FeatureStoreEntity>();
 
-        feature.ToTable("feature_store");
+        feature.ToTable("feature_store_vectors");
 
         // Composite unique index: one feature vector per (exchange, symbol, timeframe, model_type, feature_timestamp)
         feature.HasIndex(f => new { f.Exchange, f.Symbol, f.Timeframe, f.ModelType, f.FeatureTimestamp })
-               .HasDatabaseName("ix_feature_store_feed_model_ts")
+               .HasDatabaseName("ix_fsvectors_feed_model_ts")
                .IsUnique(true);
 
         feature.Property(f => f.Exchange).HasMaxLength(64);

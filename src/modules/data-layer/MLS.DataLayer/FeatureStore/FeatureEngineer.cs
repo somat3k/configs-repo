@@ -8,9 +8,8 @@ namespace MLS.DataLayer.FeatureStore;
 /// <remarks>
 /// <para><b>Performance target</b>: &lt; 1 ms for a 200-candle window (all models).</para>
 /// <para>
-/// Implementation uses vectorised inner-loops via <see cref="Vector{T}"/> (L1/L2 SIMD)
-/// where the computation is amenable to SIMD, and a single-pass scan elsewhere to
-/// minimise cache pressure.
+/// Implementation uses allocation-conscious scalar computations and single-pass scans
+/// where practical to minimise cache pressure and support low-latency production inference.
 /// </para>
 /// <para>
 /// There are <b>no Python dependencies</b>: this is the pure C# production inference path.
@@ -120,7 +119,9 @@ public sealed class FeatureEngineer
             avgLoss = (avgLoss * (period - 1) + loss) / period;
         }
 
+        if (avgLoss < double.Epsilon && avgGain < double.Epsilon) return 50.0;
         if (avgLoss < double.Epsilon) return 100.0;
+        if (avgGain < double.Epsilon) return 0.0;
 
         double rs = avgGain / avgLoss;
         return 100.0 - 100.0 / (1.0 + rs);
@@ -193,7 +194,7 @@ public sealed class FeatureEngineer
         int start    = n - period;
         if (start < 0) start = 0;
 
-        // Vectorised mean using System.Numerics.Vector<double>
+        // Compute mean over the Bollinger Band window
         double sum = ComputeSum(w, start, n);
         int    cnt = n - start;
         double mean = sum / cnt;
@@ -336,7 +337,7 @@ public sealed class FeatureEngineer
         return (lastClose - vwap) / vwap;
     }
 
-    // ── SIMD helpers ──────────────────────────────────────────────────────────
+    // ── Internal helpers ──────────────────────────────────────────────────────
 
     /// <summary>
     /// Returns the sum of <c>Close</c> values over [start, end).

@@ -6,7 +6,7 @@ namespace MLS.DataLayer.FeatureStore;
 
 /// <summary>
 /// Data-access helper for <see cref="FeatureStoreEntity"/> persisted in the
-/// <c>feature_store</c> PostgreSQL table.
+/// <c>feature_store_vectors</c> PostgreSQL table.
 /// </summary>
 public sealed class FeatureStoreRepository(DataLayerDbContext _db)
 {
@@ -35,11 +35,11 @@ public sealed class FeatureStoreRepository(DataLayerDbContext _db)
         CancellationToken ct = default)
     {
         var featuresJson = JsonSerializer.Serialize(vector.ToArray());
-        var modelType    = vector.ModelType.ToString().ToLowerInvariant();
+        var modelType    = ModelTypeIds.For(vector.ModelType);
         var now          = DateTimeOffset.UtcNow;
 
         var sql = """
-            INSERT INTO feature_store
+            INSERT INTO feature_store_vectors
                 (exchange, symbol, timeframe, model_type, schema_version, feature_timestamp, features_json, computed_at)
             VALUES
                 ({0},{1},{2},{3},{4},{5},{6},{7})
@@ -72,7 +72,7 @@ public sealed class FeatureStoreRepository(DataLayerDbContext _db)
         ModelType modelType,
         CancellationToken ct = default)
     {
-        var mt = modelType.ToString().ToLowerInvariant();
+        var mt = ModelTypeIds.For(modelType);
         return await _db.FeatureStore
             .Where(f => f.Exchange   == exchange
                      && f.Symbol     == symbol
@@ -96,7 +96,7 @@ public sealed class FeatureStoreRepository(DataLayerDbContext _db)
         DateTimeOffset to,
         CancellationToken ct = default)
     {
-        var mt = modelType.ToString().ToLowerInvariant();
+        var mt = ModelTypeIds.For(modelType);
         return await _db.FeatureStore
             .Where(f => f.Exchange          == exchange
                      && f.Symbol            == symbol
@@ -122,7 +122,7 @@ public sealed class FeatureStoreRepository(DataLayerDbContext _db)
         DateTimeOffset before,
         CancellationToken ct = default)
     {
-        var mt = modelType.ToString().ToLowerInvariant();
+        var mt = ModelTypeIds.For(modelType);
         return await _db.FeatureStore
             .Where(f => f.Exchange          == exchange
                      && f.Symbol            == symbol

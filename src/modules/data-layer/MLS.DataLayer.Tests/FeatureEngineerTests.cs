@@ -124,6 +124,19 @@ public sealed class FeatureEngineerTests
         vector.Rsi14.Should().BeLessThan(50.0);
     }
 
+    [Fact]
+    public void ComputeModelT_FlatPrices_RsiIsFifty()
+    {
+        // Flat prices → avgGain = avgLoss = 0 → RSI should be 50 (neutral), not 100
+        var window = new OhlcvCandle[50];
+        for (int i = 0; i < 50; i++)
+            window[i] = new OhlcvCandle(50_000, 50_100, 49_900, 50_000, 100.0);
+
+        var vector = _engineer.ComputeModelT(window);
+
+        vector.Rsi14.Should().BeApproximately(50.0, 1e-9);
+    }
+
     // ── Bollinger Band position ────────────────────────────────────────────────
 
     [Fact]
@@ -334,5 +347,24 @@ public sealed class FeatureEngineerTests
         var b = new OhlcvCandle(1, 2, 3, 4.1, 5);
 
         a.Should().NotBe(b);
+    }
+
+    // ── ModelTypeIds ──────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(ModelType.Trading,   "model-t")]
+    [InlineData(ModelType.Arbitrage, "model-a")]
+    [InlineData(ModelType.DeFi,      "model-d")]
+    public void ModelTypeIds_For_ReturnsCanonicalId(ModelType modelType, string expectedId)
+    {
+        ModelTypeIds.For(modelType).Should().Be(expectedId);
+    }
+
+    [Fact]
+    public void ModelTypeIds_For_UnknownValue_Throws()
+    {
+        var act = () => ModelTypeIds.For((ModelType)99);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 }
