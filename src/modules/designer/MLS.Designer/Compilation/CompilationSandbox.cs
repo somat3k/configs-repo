@@ -109,6 +109,11 @@ public sealed class CompilationSandbox : IAsyncDisposable
 
     private static void EnforceMemoryLimit()
     {
+        // GC.GetTotalMemory measures the entire managed heap for this process, not just this
+        // sandbox's ALC.  For the MLS deployment each strategy runs in its own Docker container,
+        // so the process limit is a valid proxy for per-sandbox memory.  A per-ALC measurement
+        // would require EventSource/EventListener on GC events which adds complexity without
+        // meaningful benefit in a container-per-strategy topology.
         var used = GC.GetTotalMemory(forceFullCollection: false);
         if (used > MemoryLimitBytes)
             throw new InvalidOperationException(

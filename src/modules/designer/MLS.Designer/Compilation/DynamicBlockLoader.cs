@@ -93,6 +93,8 @@ public sealed class DynamicBlockLoader(
     private async Task<byte[]> DownloadFromIpfsAsync(string ipfsApiUrl, string cid, CancellationToken ct)
     {
         using var client = httpClientFactory.CreateClient(IpfsHttpClient);
+        // Kubo HTTP API uses POST for all /api/v0/* endpoints — this is by design.
+        // See: https://docs.ipfs.tech/reference/kubo/rpc/#api-v0-cat
         var uri = new Uri(new Uri(ipfsApiUrl), $"/api/v0/cat?arg={Uri.EscapeDataString(cid)}");
 
         using var response = await client.PostAsync(uri, null, ct).ConfigureAwait(false);

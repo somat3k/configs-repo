@@ -155,7 +155,10 @@ public sealed class RoslynStrategyCompiler(
 
             foreach (var forbidden in ForbiddenNamespaces)
             {
-                if (text.StartsWith(forbidden, StringComparison.Ordinal))
+                // Use exact-prefix matching with a separator guard to avoid false positives:
+                // "System.IOExtensions" must NOT be rejected by the "System.IO" rule.
+                if (text.StartsWith(forbidden, StringComparison.Ordinal) &&
+                    (text.Length == forbidden.Length || text[forbidden.Length] == '.'))
                 {
                     var location = node.GetLocation().GetLineSpan();
                     errors.Add(
@@ -199,16 +202,50 @@ public sealed class RoslynStrategyCompiler(
 
         var bytes = ms.ToArray();
 
-        // Validate that the assembly contains at least one IBlockElement implementation
-        var hasBlockType = compilation.SyntaxTrees
-            .SelectMany(t => t.GetRoot().DescendantNodes())
-            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax>()
-            .Any(c => c.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword)));
+        // Validate that the assembly contains at least one public class with a known base type
+        // (BlockBase or IBlockElement) — checked via the semantic model for accuracy.
+        var hasBlockType = false;
+        foreach (var syntaxTree in compilation.SyntaxTrees)
+        {
+            var semanticModel = compilation.GetSemanticModel(syntaxTree);
+            var classNodes    = syntaxTree.GetRoot()
+                .DescendantNodes()
+                .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax>();
+
+            foreach (var cls in classNodes)
+            {
+                if (!cls.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword))) continue;
+
+                var symbol = semanticModel.GetDeclaredSymbol(cls);
+                if (symbol is null) continue;
+
+                // Walk the base type chain to check for BlockBase or IBlockElement
+                var baseType = symbol.BaseType;
+                while (baseType is not null)
+                {
+                    if (baseType.Name is "BlockBase" or "IBlockElement")
+                    {
+                        hasBlockType = true;
+                        break;
+                    }
+                    baseType = baseType.BaseType;
+                }
+
+                if (!hasBlockType)
+                {
+                    // Also check implemented interfaces
+                    hasBlockType = symbol.AllInterfaces.Any(i => i.Name is "IBlockElement");
+                }
+
+                if (hasBlockType) break;
+            }
+            if (hasBlockType) break;
+        }
 
         if (!hasBlockType)
         {
             messages.Add("[MLS-VAL] Compiled assembly must contain at least one public class " +
-                         "implementing IBlockElement (extending BlockBase).");
+                         "extending BlockBase (or implementing IBlockElement).");
             return (null, messages);
         }
 

@@ -1,5 +1,7 @@
 @using MLS.Core.Designer
 @inject IJSRuntime JS
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
 
 @* Property editor — slides in from the right when a block is selected *@
 
@@ -330,10 +332,10 @@
             // Get the latest code from the editor
             _currentCode = await JS.InvokeAsync<string>("mlsMonaco.getCode", _editorId);
 
-            // POST to the designer compile/upload endpoint
+            // POST to the designer compile/upload endpoint (data-driven via DesignerUrl config)
             var request = new { Source = _currentCode, StrategyId = (Guid?)null };
-            using var http = new System.Net.Http.HttpClient();
-            var response   = await http.PostAsJsonAsync("http://designer:5250/api/compile", request);
+            using var http = HttpClientFactory.CreateClient("designer");
+            var response   = await http.PostAsJsonAsync("/api/compile", request);
 
             if (response.IsSuccessStatusCode)
             {
