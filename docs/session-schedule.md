@@ -17,7 +17,7 @@
 | **3** | 11 – 14 | MDI Canvas Rewrite: Blazor designer UI, chat panel, all panels | Phase 1, 2 |
 | **4** | 15 – 16 | Hydra Data Collection: exchange feeds, gap detection | Phase 1 |
 | **5** | 17 – 18 | PWA + Chrome Extension + Mobile | Phase 3 |
-| **6** | 19 – 20 | Dynamic Compilation: Roslyn strategy compiler, IPFS loading | Phase 1 |
+| **6** | 19 – 20 | Dynamic Compilation: Roslyn strategy compiler, IPFS loading | Phase 1 | ✅ Session 19 complete |
 | **7** | 21 – 22 | Visualization + Benchmarks: live canvas pulses, BDN suite | Phase 3, 6 |
 
 ---
@@ -1134,10 +1134,22 @@ User code runs in CompilationSandbox:
 ```
 
 **Acceptance Criteria**
-- [ ] Custom C# indicator block compiles and runs in < 2s from save
-- [ ] Sandbox prevents file system access (test: attempt File.ReadAllText)
-- [ ] Compiled block IPFS CID stored in strategy schema for distribution
-- [ ] Monaco editor in browser with C# syntax highlighting and IntelliSense
+- [x] Custom C# indicator block compiles and runs in < 2s from save
+- [x] Sandbox prevents file system access (test: attempt File.ReadAllText)
+- [x] Compiled block IPFS CID stored in strategy schema for distribution
+- [x] Monaco editor in browser with C# syntax highlighting and IntelliSense
+
+**Completed**: Session 19 fully implemented.
+- `IStrategyCompiler` interface + `CompilationResult` record
+- `RoslynStrategyCompiler`: Roslyn 4.8.0 compilation, forbidden-namespace source scan, IPFS upload
+- `CompilationSandbox`: collectible `AssemblyLoadContext`, 100 ms timeout, 64 MB memory limit, `IAsyncDisposable`
+- `DynamicBlockLoader`: download assembly from IPFS CID → load into sandbox
+- `DesignerOptions.IpfsApiUrl` + IPFS named `HttpClient` registered in `Program.cs`
+- `StrategySchema.CompiledBlockCid` column + `StrategyRepository.SetCompiledBlockCidAsync`
+- `CompilationController`: `POST /api/compile`, `POST /api/compile/upload`
+- `BlockSocket` made `public` to enable user code extension of `BlockBase`
+- `PropertyEditor.razor`: Monaco editor (CDN), JS interop (`monaco-interop.js`), `CompileAsync` round-trip, CID display
+- 14 new xUnit tests in `CompilationSandboxTests.cs` (80 total, all passing)
 
 ---
 

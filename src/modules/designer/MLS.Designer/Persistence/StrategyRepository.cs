@@ -172,6 +172,30 @@ public sealed partial class StrategyRepository(
         return entity;
     }
 
+    /// <summary>
+    /// Persist the IPFS CID of a compiled block assembly on the strategy record.
+    /// Returns <see langword="true"/> on success, <see langword="false"/> when the strategy is not found.
+    /// </summary>
+    /// <param name="graphId">Strategy graph identifier.</param>
+    /// <param name="cid">IPFS Content Identifier string.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<bool> SetCompiledBlockCidAsync(Guid graphId, string cid, CancellationToken ct = default)
+    {
+        var entity = await _db.Strategies
+            .Where(s => s.GraphId == graphId && !s.IsDeleted)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        if (entity is null) return false;
+
+        entity.CompiledBlockCid = cid;
+        entity.UpdatedAt        = DateTimeOffset.UtcNow;
+
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _logger.LogInformation("CompiledBlockCid set to {Cid} on strategy {GraphId}", cid, graphId);
+        return true;
+    }
+
     // ── Template support ──────────────────────────────────────────────────────────
 
     // Allow only safe characters in template names (alphanumeric, dash, underscore)

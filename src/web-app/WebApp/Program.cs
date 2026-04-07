@@ -40,6 +40,13 @@ builder.Services.AddHttpClient<BlockControllerClient>(client =>
 });
 builder.Services.AddHostedService<BlockControllerClient>();
 
+// ── Designer HTTP client (for PropertyEditor Roslyn compile round-trip) ───────
+builder.Services.AddHttpClient("designer", client =>
+{
+    client.BaseAddress = new Uri(cfg["MLS:Network:DesignerUrl"] ?? "http://designer:5250");
+    client.Timeout     = TimeSpan.FromSeconds(10);
+});
+
 // ── REST + Swagger ────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

@@ -30,7 +30,18 @@
             crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"
             crossorigin="anonymous"></script>
+    <!-- Monaco Editor loader (for CustomIndicatorBlock code editing in PropertyEditor) -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"
+            crossorigin="anonymous"></script>
+    <script>
+        require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs' } });
+        require(['vs/editor/editor.main'], function () {
+            // Monaco is ready; notify any pending init calls
+            window._monacoReady = true;
+        });
+    </script>
     <script src="js/canvas-interop.js"></script>
+    <script src="js/monaco-interop.js"></script>
     <script src="service-worker-assets.js"></script>
     <script>
         // Register MLS service worker
