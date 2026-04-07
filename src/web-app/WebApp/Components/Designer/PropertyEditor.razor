@@ -2,6 +2,7 @@
 @inject IJSRuntime JS
 @inject IHttpClientFactory HttpClientFactory
 @inject NavigationManager Nav
+@implements IAsyncDisposable
 
 @* Property editor — slides in from the right when a block is selected *@
 
@@ -282,13 +283,17 @@
     // ── Monaco editor state ───────────────────────────────────────────────────────
 
     private ElementReference _editorContainer;
-    private string _editorId     = $"monaco-{Guid.NewGuid():N}";
+    private readonly string _editorId = $"monaco-{Guid.NewGuid():N}";
     private string _currentCode  = DefaultIndicatorCode;
     private string _compilationStatus = string.Empty;
     private string _compiledCid  = string.Empty;
     private bool   _isCompiling;
     private bool   _compileSuccess;
     private DotNetObjectReference<PropertyEditor>? _dotNetRef;
+
+    private string? _lastBlockType;
+    private bool    _blockTypeChanged = true;
+    private bool    _editorInitialized;
 
     private List<ParameterViewModel> _parameters = [];
 
@@ -297,19 +302,57 @@
     protected override void OnParametersSet()
     {
         _parameters = GetDefaultParameters(Block.BlockType);
+
+        if (!string.Equals(_lastBlockType, Block.BlockType, StringComparison.Ordinal))
+        {
+            _lastBlockType   = Block.BlockType;
+            _blockTypeChanged = true;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && Block.BlockType == "CustomIndicatorBlock")
+        if (firstRender || _blockTypeChanged)
         {
-            _dotNetRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync(
-                "mlsMonaco.initEditor",
-                _editorId,
-                _currentCode,
-                _dotNetRef);
+            await EnsureMonacoEditorStateAsync();
+            _blockTypeChanged = false;
         }
+    }
+
+    private async Task EnsureMonacoEditorStateAsync()
+    {
+        var isCustomIndicator = string.Equals(Block.BlockType, "CustomIndicatorBlock", StringComparison.Ordinal);
+
+        if (isCustomIndicator)
+        {
+            if (!_editorInitialized)
+                await InitializeMonacoEditorAsync();
+            return;
+        }
+
+        if (_editorInitialized)
+            await DisposeMonacoEditorAsync();
+    }
+
+    private async Task InitializeMonacoEditorAsync()
+    {
+        // _dotNetRef must be null here: this method is only reached when !_editorInitialized.
+        // The disposal guard below is a safety net for any future refactor.
+        _dotNetRef?.Dispose();
+        _dotNetRef = DotNetObjectReference.Create(this);
+
+        await JS.InvokeVoidAsync("mlsMonaco.initEditor", _editorId, _currentCode, _dotNetRef);
+        _editorInitialized = true;
+    }
+
+    private async Task DisposeMonacoEditorAsync()
+    {
+        try { await JS.InvokeVoidAsync("mlsMonaco.disposeEditor", _editorId); }
+        catch { /* ignore JS dispose errors on teardown */ }
+
+        _dotNetRef?.Dispose();
+        _dotNetRef       = null;
+        _editorInitialized = false;
     }
 
     /// <summary>Callback invoked by Monaco JS interop when code changes (debounced 500ms).</summary>
@@ -332,10 +375,10 @@
             // Get the latest code from the editor
             _currentCode = await JS.InvokeAsync<string>("mlsMonaco.getCode", _editorId);
 
-            // POST to the designer compile/upload endpoint (data-driven via DesignerUrl config)
+            // POST to the compile/upload endpoint — returns CID when IPFS is configured
             var request = new { Source = _currentCode, StrategyId = (Guid?)null };
             using var http = HttpClientFactory.CreateClient("designer");
-            var response   = await http.PostAsJsonAsync("/api/compile", request);
+            var response   = await http.PostAsJsonAsync("/api/compile/upload", request);
 
             if (response.IsSuccessStatusCode)
             {
@@ -374,12 +417,8 @@
 
     public async ValueTask DisposeAsync()
     {
-        if (Block.BlockType == "CustomIndicatorBlock")
-        {
-            try { await JS.InvokeVoidAsync("mlsMonaco.disposeEditor", _editorId); }
-            catch { /* ignore JS dispose errors on teardown */ }
-        }
-        _dotNetRef?.Dispose();
+        if (_editorInitialized)
+            await DisposeMonacoEditorAsync();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────

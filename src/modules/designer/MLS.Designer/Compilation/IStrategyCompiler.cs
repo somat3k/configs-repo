@@ -36,7 +36,11 @@ public sealed record CompilationResult(
 ///   <item>No <c>System.IO</c> filesystem access.</item>
 ///   <item>No direct network access (<c>HttpClient</c>, <c>Socket</c>, <c>WebClient</c>).</item>
 ///   <item>No reflection over MLS internals.</item>
-///   <item>Only MLS.Core.Designer contracts are exposed as references.</item>
+///   <item>
+///   Compilation references include the Designer contracts required for custom blocks:
+///   <c>MLS.Core.Designer</c> (IBlockElement, BlockSignal, BlockSocketType) and the
+///   <c>MLS.Designer</c> types needed to inherit from <c>BlockBase</c> and use BlockSocket.
+///   </item>
 /// </list>
 /// Forbidden API usage is rejected with a meaningful compiler diagnostic before
 /// IL emission begins — the source never reaches the .NET runtime.
@@ -48,8 +52,9 @@ public interface IStrategyCompiler
     /// Compile <paramref name="csharpSource"/> into an in-memory assembly.
     /// </summary>
     /// <param name="csharpSource">
-    /// Full C# compilation unit. Must contain exactly one <c>public sealed class</c>
-    /// that extends <c>MLS.Designer.Blocks.BlockBase</c>.
+    /// Full C# compilation unit. Must contain at least one <c>public</c> block type
+    /// that extends <c>MLS.Designer.Blocks.BlockBase</c> or implements
+    /// <c>MLS.Core.Designer.IBlockElement</c>.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>

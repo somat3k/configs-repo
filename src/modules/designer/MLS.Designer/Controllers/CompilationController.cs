@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using MLS.Designer.Compilation;
+using MLS.Designer.Configuration;
 using MLS.Designer.Persistence;
 
 namespace MLS.Designer.Controllers;
@@ -12,6 +14,7 @@ namespace MLS.Designer.Controllers;
 public sealed class CompilationController(
     IStrategyCompiler compiler,
     StrategyRepository repo,
+    IOptions<DesignerOptions> options,
     ILogger<CompilationController> logger) : ControllerBase
 {
     // ── POST /api/compile ─────────────────────────────────────────────────────────
@@ -22,7 +25,7 @@ public sealed class CompilationController(
     /// <remarks>
     /// <para>Does NOT upload to IPFS. Use <c>POST /api/compile/upload</c> to compile and publish.</para>
     /// <para>
-    /// The compilation target must be a single <c>public sealed class</c> extending
+    /// The compilation target must contain at least one <c>public</c> class extending
     /// <c>MLS.Designer.Blocks.BlockBase</c>. Forbidden APIs (filesystem, network, reflection)
     /// are rejected before IL emission.
     /// </para>
@@ -35,7 +38,7 @@ public sealed class CompilationController(
     public async Task<IActionResult> Compile([FromBody] CompileRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Source))
-            return BadRequest(new { error = "Source code must not be empty." });
+            return BadRequest(new CompileResponse(false, null, ["Source code must not be empty."], null, 0));
 
         var result = await compiler.CompileAsync(request.Source, ct).ConfigureAwait(false);
 
@@ -57,9 +60,14 @@ public sealed class CompilationController(
     /// Compile a C# custom block source, upload the assembly to IPFS, and optionally
     /// store the resulting CID on a strategy schema.
     /// </summary>
-    /// <response code="200">Compilation + IPFS upload succeeded.</response>
+    /// <remarks>
+    /// When IPFS is disabled (<c>Designer:IpfsApiUrl</c> is blank), compilation still
+    /// succeeds and 200 is returned with <c>IpfsCid = null</c> and an informational
+    /// diagnostic. 502 is only returned when IPFS is configured but the upload fails.
+    /// </remarks>
+    /// <response code="200">Compilation succeeded (and IPFS upload succeeded if configured).</response>
     /// <response code="400">Compilation failed.</response>
-    /// <response code="502">Compilation succeeded but IPFS upload failed.</response>
+    /// <response code="502">Compilation succeeded but IPFS upload failed (IPFS is configured but unreachable).</response>
     [HttpPost("upload")]
     [ProducesResponseType<CompileResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<CompileResponse>(StatusCodes.Status400BadRequest)]
@@ -67,7 +75,7 @@ public sealed class CompilationController(
     public async Task<IActionResult> CompileAndUpload([FromBody] CompileAndUploadRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Source))
-            return BadRequest(new { error = "Source code must not be empty." });
+            return BadRequest(new CompileResponse(false, null, ["Source code must not be empty."], null, 0));
 
         var result = await compiler.CompileAndUploadAsync(request.Source, ct).ConfigureAwait(false);
 
@@ -92,12 +100,25 @@ public sealed class CompilationController(
                 logger.LogInformation("CID {Cid} persisted on strategy {StrategyId}", result.IpfsCid, request.StrategyId.Value);
         }
 
-        // If upload succeeded entirely return 200; if CID is missing (IPFS unavailable) return 502
+        // CID is null — decide between "IPFS disabled" (200) and "IPFS failed" (502)
         if (result.AssemblyBytes is not null && result.IpfsCid is null)
-            return StatusCode(StatusCodes.Status502BadGateway, response with
+        {
+            var ipfsConfigured = !string.IsNullOrWhiteSpace(options.Value.IpfsApiUrl);
+            if (ipfsConfigured)
             {
-                Diagnostics = [..response.Diagnostics, "IPFS upload failed — assembly compiled but not published."]
+                // IPFS is configured but upload failed — upstream error
+                return StatusCode(StatusCodes.Status502BadGateway, response with
+                {
+                    Diagnostics = [..response.Diagnostics, "IPFS upload failed — assembly compiled but not published."]
+                });
+            }
+
+            // IPFS intentionally disabled — inform the caller but succeed
+            return Ok(response with
+            {
+                Diagnostics = [..response.Diagnostics, "IPFS is not configured (Designer:IpfsApiUrl is blank); CID not generated."]
             });
+        }
 
         return Ok(response);
     }

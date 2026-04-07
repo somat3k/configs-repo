@@ -34,7 +34,7 @@ public sealed class DesignerOptions
     /// <summary>
     /// IPFS Kubo HTTP API base URL used for uploading and downloading compiled block assemblies.
     /// E.g. <c>http://ipfs:5001</c> (default Kubo API port).
-    /// When empty, IPFS operations are skipped and <see cref="CompilationResult.IpfsCid"/> will be <see langword="null"/>.
+    /// When empty, IPFS operations are skipped and <see cref="MLS.Designer.Compilation.CompilationResult.IpfsCid"/> will be <see langword="null"/>.
     /// </summary>
     public string IpfsApiUrl { get; set; } = "http://ipfs:5001";
 }

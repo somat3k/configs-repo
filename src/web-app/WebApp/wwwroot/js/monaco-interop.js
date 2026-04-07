@@ -8,28 +8,48 @@
  *   - mlsMonaco.setCode(containerId, code)
  *   - mlsMonaco.disposeEditor(containerId)
  *
- * Requires Monaco Editor to be loaded from CDN before this script runs.
+ * Requires Monaco Editor to be loaded from CDN via require.js before this script runs.
  * Each editor instance is keyed by containerId.
  */
 (function () {
     'use strict';
 
-    // Map from containerId → monaco editor instance
-    const _editors = new Map();
+    // Map from containerId → { editor, debounceTimer }
+    const _editors  = new Map();
+
+    /**
+     * Wait until window.monaco is defined (loaded via AMD loader), with a 10 s timeout.
+     * @returns {Promise<boolean>} true when ready, false on timeout.
+     */
+    function waitForMonaco() {
+        return new Promise(resolve => {
+            if (typeof window.monaco !== 'undefined') { resolve(true); return; }
+            let attempts = 0;
+            const id = setInterval(() => {
+                if (typeof window.monaco !== 'undefined') {
+                    clearInterval(id);
+                    resolve(true);
+                } else if (++attempts > 200) { // 200 × 50 ms = 10 s
+                    clearInterval(id);
+                    console.warn('[mlsMonaco] Monaco did not load within 10 s');
+                    resolve(false);
+                }
+            }, 50);
+        });
+    }
 
     window.mlsMonaco = {
 
         /**
          * Initialise a Monaco editor in the given container.
+         * Waits for Monaco to finish its AMD load before creating the editor.
          * @param {string} containerId  - id of the host <div>
          * @param {string} initialCode  - initial C# source code
          * @param {object} dotNetRef    - DotNetObjectReference for change callbacks
          */
-        initEditor(containerId, initialCode, dotNetRef) {
-            if (typeof monaco === 'undefined') {
-                console.warn('[mlsMonaco] Monaco not loaded — editor skipped for', containerId);
-                return;
-            }
+        async initEditor(containerId, initialCode, dotNetRef) {
+            const ready = await waitForMonaco();
+            if (!ready) return;
 
             const container = document.getElementById(containerId);
             if (!container) {
@@ -37,10 +57,8 @@
                 return;
             }
 
-            // Dispose any existing editor in the same container
-            if (_editors.has(containerId)) {
-                _editors.get(containerId).dispose();
-            }
+            // Dispose any existing editor in the same container (including its timer + model)
+            mlsMonaco.disposeEditor(containerId);
 
             const editor = monaco.editor.create(container, {
                 value:     initialCode || '',
@@ -59,19 +77,21 @@
                 suggestOnTriggerCharacters: true,
             });
 
-            // Notify Blazor on every content change (debounced 500ms)
-            let _debounceTimer = null;
+            // Per-editor debounce timer stored on the entry object for clean disposal
+            const entry = { editor, debounceTimer: null };
+
             editor.onDidChangeModelContent(() => {
-                if (_debounceTimer) clearTimeout(_debounceTimer);
-                _debounceTimer = setTimeout(() => {
+                clearTimeout(entry.debounceTimer);
+                entry.debounceTimer = setTimeout(() => {
+                    entry.debounceTimer = null;
                     if (dotNetRef) {
                         dotNetRef.invokeMethodAsync('OnCodeChanged', editor.getValue())
-                            .catch(err => console.warn('[mlsMonaco] OnCodeChanged error:', err));
+                            .catch(err => console.warn('[mlsMonaco] OnCodeChanged error:', containerId, err));
                     }
                 }, 500);
             });
 
-            _editors.set(containerId, editor);
+            _editors.set(containerId, entry);
         },
 
         /**
@@ -80,8 +100,8 @@
          * @returns {string} Current editor content, or empty string if not found.
          */
         getCode(containerId) {
-            const editor = _editors.get(containerId);
-            return editor ? editor.getValue() : '';
+            const entry = _editors.get(containerId);
+            return entry ? entry.editor.getValue() : '';
         },
 
         /**
@@ -90,20 +110,28 @@
          * @param {string} code
          */
         setCode(containerId, code) {
-            const editor = _editors.get(containerId);
-            if (editor) {
-                editor.setValue(code || '');
+            const entry = _editors.get(containerId);
+            if (entry) {
+                entry.editor.setValue(code || '');
             }
         },
 
         /**
-         * Dispose a Monaco editor instance and remove it from the registry.
+         * Dispose a Monaco editor instance, its pending debounce timer, and its model.
          * @param {string} containerId
          */
         disposeEditor(containerId) {
-            const editor = _editors.get(containerId);
-            if (editor) {
-                editor.dispose();
+            const entry = _editors.get(containerId);
+            if (entry) {
+                // Cancel any pending debounced callback so it never fires after disposal
+                clearTimeout(entry.debounceTimer);
+                entry.debounceTimer = null;
+
+                // Dispose the model first, then the editor widget
+                const model = entry.editor.getModel();
+                if (model) model.dispose();
+                entry.editor.dispose();
+
                 _editors.delete(containerId);
             }
         },

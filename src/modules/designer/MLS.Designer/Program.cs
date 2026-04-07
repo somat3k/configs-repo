@@ -52,10 +52,20 @@ builder.Services.AddHttpClient<MorphoAdapter>()
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
 
 // ── IPFS HTTP client (for Roslyn compiler + DynamicBlockLoader) ───────────────
+var ipfsApiUrl = designerOpts.IpfsApiUrl?.Trim();
 builder.Services.AddHttpClient("ipfs", client =>
 {
-    client.BaseAddress = new Uri(designerOpts.IpfsApiUrl.TrimEnd('/') + "/");
-    client.Timeout     = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromSeconds(30);
+
+    if (string.IsNullOrWhiteSpace(ipfsApiUrl))
+        return; // IPFS disabled — base address intentionally omitted
+
+    var normalised = ipfsApiUrl.TrimEnd('/') + "/";
+    if (!Uri.TryCreate(normalised, UriKind.Absolute, out var baseUri))
+        throw new InvalidOperationException(
+            $"Designer:IpfsApiUrl '{ipfsApiUrl}' must be a valid absolute URI or empty to disable IPFS operations.");
+
+    client.BaseAddress = baseUri;
 });
 
 // ── PostgreSQL data source (owned by DI — adapters/registry must NOT dispose it) ──
