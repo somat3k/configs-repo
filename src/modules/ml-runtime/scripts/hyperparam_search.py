@@ -388,14 +388,12 @@ def _train_trial(
             else 0
         )
 
-        # Determine objective value for this epoch
-        # direction=maximize → use accuracy; direction=minimize → use val_loss
-        intermediate_value = accuracy if train_cfg.model_type != "model-d" else accuracy
+        # Objective value for this epoch: use accuracy as Sharpe proxy for all model types.
+        # TODO: differentiate by model type when Sharpe ratio data is available from Python pipeline.
+        intermediate_value = accuracy
 
-        # Update best_value_ref
-        if best_value_ref[0] != best_value_ref[0]:  # NaN check
-            best_value_ref[0] = intermediate_value
-        elif intermediate_value > best_value_ref[0]:
+        # Update running best
+        if math.isnan(best_value_ref[0]) or intermediate_value > best_value_ref[0]:
             best_value_ref[0] = intermediate_value
 
         _emit_trial_epoch(
@@ -580,7 +578,7 @@ def run_study(cfg: SearchConfig) -> None:
         except optuna.TrialPruned:
             elapsed_ms = int((time.monotonic() - study_start) * 1000)
             pruned_val = float(trial.intermediate_values.get(
-                max(trial.intermediate_values or {0: 0.0}), 0.0
+                max(trial.intermediate_values.keys()) if trial.intermediate_values else 0, 0.0
             ))
             _emit_trial_summary(
                 job_id=cfg.job_id,
@@ -597,7 +595,7 @@ def run_study(cfg: SearchConfig) -> None:
         elapsed_ms = int((time.monotonic() - study_start) * 1000)
 
         # Update running best
-        if best_value_ref[0] != best_value_ref[0] or value > best_value_ref[0]:
+        if math.isnan(best_value_ref[0]) or value > best_value_ref[0]:
             best_value_ref[0] = value
 
         _emit_trial_summary(

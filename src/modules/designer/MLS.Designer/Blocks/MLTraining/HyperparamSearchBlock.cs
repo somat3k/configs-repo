@@ -223,15 +223,19 @@ public sealed class HyperparamSearchBlock : BlockBase
         if (_optunaSearchJobId is null || _optunaSearchJobId.Value != progress.JobId)
             return;
 
+        // Advance trial counter from the payload when a new trial index is reported
+        if (progress.TrialIndex.HasValue)
+            _trialIndex = progress.TrialIndex.Value;
+
         var statusSignal = new SearchStatus(
             ModelType:       _modelType,
             State:           TrainingState.SearchRunning,
             TrialIndex:      _trialIndex,
             MaxTrials:       _nTrialsParam.DefaultValue,
-            BestMetric:      null,
+            BestMetric:      progress.BestValue,
             BestHyperparams: null,
             IsOptunaMode:    true,
-            NTrials:         _nTrialsParam.DefaultValue,
+            NTrials:         progress.NTrials ?? _nTrialsParam.DefaultValue,
             Direction:       _directionParam.DefaultValue,
             NPruned:         0);
 

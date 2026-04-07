@@ -542,10 +542,10 @@
             if (p.TryGetProperty("trial_index", out var ti))
                 _currentTrial = ti.GetInt32() + 1;  // 0-based in Python → 1-based display
 
-            if (p.TryGetProperty("best_value", out var bv) && !bv.ValueKind.Equals(System.Text.Json.JsonValueKind.Null))
+            if (p.TryGetProperty("best_value", out var bv) &&
+                bv.ValueKind == System.Text.Json.JsonValueKind.Number)
             {
-                double v = bv.GetDouble();
-                if (!double.IsNaN(v)) _bestValue = v;
+                _bestValue = bv.GetDouble();
             }
 
             // Per-epoch fields within current trial
