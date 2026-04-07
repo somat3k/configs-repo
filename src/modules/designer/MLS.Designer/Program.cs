@@ -10,6 +10,7 @@ using MLS.Designer.Blocks.Trading.IndicatorBlocks;
 using MLS.Designer.Blocks.Trading.MLBlocks;
 using MLS.Designer.Blocks.Trading.RiskBlocks;
 using MLS.Designer.Blocks.Trading.StrategyBlocks;
+using MLS.Designer.Compilation;
 using MLS.Designer.Configuration;
 using MLS.Designer.Exchanges;
 using MLS.Designer.Hubs;
@@ -49,6 +50,13 @@ builder.Services.AddHttpClient<BalancerAdapter>()
 
 builder.Services.AddHttpClient<MorphoAdapter>()
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
+
+// ── IPFS HTTP client (for Roslyn compiler + DynamicBlockLoader) ───────────────
+builder.Services.AddHttpClient("ipfs", client =>
+{
+    client.BaseAddress = new Uri(designerOpts.IpfsApiUrl.TrimEnd('/') + "/");
+    client.Timeout     = TimeSpan.FromSeconds(30);
+});
 
 // ── PostgreSQL data source (owned by DI — adapters/registry must NOT dispose it) ──
 var pgConnStr = designerOpts.PostgresConnectionString;
@@ -93,6 +101,10 @@ builder.Services.AddSignalR(hub =>
 
 // ── Training dispatcher ───────────────────────────────────────────────────────
 builder.Services.AddSingleton<ITrainingDispatcher, TrainingDispatcher>();
+
+// ── Roslyn compilation + dynamic block loading ────────────────────────────────
+builder.Services.AddSingleton<IStrategyCompiler, RoslynStrategyCompiler>();
+builder.Services.AddSingleton<DynamicBlockLoader>();
 
 builder.Services.AddSingleton<IBlockRegistry>(sp =>
 {

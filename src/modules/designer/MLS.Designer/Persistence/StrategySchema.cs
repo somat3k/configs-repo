@@ -70,4 +70,14 @@ public sealed class StrategySchema
     /// <summary>Soft-delete flag.  Soft-deleted strategies are hidden from list queries.</summary>
     [Column("is_deleted")]
     public bool IsDeleted { get; set; }
+
+    /// <summary>
+    /// IPFS Content Identifier of the compiled block assembly for this strategy's
+    /// <c>CustomIndicatorBlock</c>, set by the Roslyn compiler after a successful
+    /// <see cref="Compilation.RoslynStrategyCompiler.CompileAndUploadAsync"/> call.
+    /// <see langword="null"/> when no custom compiled block is associated.
+    /// </summary>
+    [MaxLength(128)]
+    [Column("compiled_block_cid")]
+    public string? CompiledBlockCid { get; set; }
 }

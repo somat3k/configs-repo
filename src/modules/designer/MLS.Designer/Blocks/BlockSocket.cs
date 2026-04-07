@@ -6,7 +6,7 @@ namespace MLS.Designer.Blocks;
 /// Concrete implementation of <see cref="IBlockSocket"/> used by all block implementations.
 /// Sockets are immutable by design — connections are tracked by the graph, not the socket.
 /// </summary>
-internal sealed class BlockSocket(
+public sealed class BlockSocket(
     Guid socketId,
     string name,
     BlockSocketType dataType,
