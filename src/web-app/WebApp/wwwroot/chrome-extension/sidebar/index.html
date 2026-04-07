@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>MLS Side Panel</title>
+    <link rel="stylesheet" href="sidebar.css" />
+</head>
+<body>
+    <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+    <header class="sidebar-header">
+        <span class="sidebar-logo">◈</span>
+        <span class="sidebar-title">MLS</span>
+        <span class="conn-dot" id="conn-dot" title="Connection status"></span>
+        <div class="sidebar-tabs" role="tablist">
+            <button class="tab-btn tab-btn--active" data-tab="chart"    role="tab" aria-selected="true">Chart</button>
+            <button class="tab-btn"                 data-tab="positions" role="tab">Positions</button>
+            <button class="tab-btn"                 data-tab="arb"      role="tab">Arb</button>
+            <button class="tab-btn"                 data-tab="ai"       role="tab">AI</button>
+        </div>
+    </header>
+
+    <!-- ── Symbol picker (chart panel only) ───────────────────────────────── -->
+    <div class="symbol-bar" id="symbol-bar">
+        <label for="symbol-select" class="sr-only">Symbol</label>
+        <select id="symbol-select" class="symbol-select">
+            <option value="BTC-PERP">BTC-PERP</option>
+            <option value="ETH-PERP">ETH-PERP</option>
+            <option value="ARB-PERP">ARB-PERP</option>
+            <option value="SOL-PERP">SOL-PERP</option>
+        </select>
+        <span class="symbol-price" id="symbol-price">—</span>
+        <span class="symbol-change" id="symbol-change"></span>
+    </div>
+
+    <!-- ── Tab panels ─────────────────────────────────────────────────────── -->
+    <main class="sidebar-main">
+
+        <!-- Chart panel -->
+        <section class="tab-panel tab-panel--active" id="panel-chart" role="tabpanel">
+            <div id="chart-container" class="chart-container" aria-label="Trading chart"></div>
+            <div class="chart-placeholder" id="chart-placeholder">
+                <div class="placeholder-icon">◈</div>
+                <div class="placeholder-text">Connect to MLS to view live chart</div>
+            </div>
+        </section>
+
+        <!-- Positions panel -->
+        <section class="tab-panel" id="panel-positions" role="tabpanel" aria-hidden="true">
+            <div class="panel-header">Open Positions</div>
+            <div id="positions-container">
+                <div class="empty-state">No open positions</div>
+            </div>
+        </section>
+
+        <!-- Arbitrage panel -->
+        <section class="tab-panel" id="panel-arb" role="tabpanel" aria-hidden="true">
+            <div class="panel-header">Top Opportunities</div>
+            <div id="arb-container">
+                <div class="empty-state">Scanning for opportunities…</div>
+            </div>
+        </section>
+
+        <!-- AI Chat panel -->
+        <section class="tab-panel tab-panel--chat" id="panel-ai" role="tabpanel" aria-hidden="true">
+            <div class="chat-messages" id="chat-messages" aria-live="polite" aria-label="AI chat messages">
+                <div class="chat-message chat-message--assistant">
+                    <div class="message-bubble">
+                        Hello! I'm the MLS AI assistant. Ask me about trading strategies, positions, or market conditions.
+                    </div>
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <textarea id="chat-input"
+                          class="chat-input"
+                          rows="2"
+                          placeholder="Ask MLS AI…"
+                          aria-label="Chat input"></textarea>
+                <button id="chat-send" class="chat-send-btn" aria-label="Send message">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M1 7h12M7 1l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- ApexCharts for the mini chart -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.1/dist/apexcharts.min.js"
+            crossorigin="anonymous"></script>
+    <script src="sidebar.js" type="module"></script>
+</body>
+</html>

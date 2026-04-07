@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MLS Popup</title>
+    <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+    <!-- ── Header ─────────────────────────────────────────────────────────── -->
+    <header class="popup-header">
+        <div class="popup-brand">
+            <span class="popup-logo">◈</span>
+            <span class="popup-title">MLS Trading Platform</span>
+        </div>
+        <div class="popup-status">
+            <span class="conn-dot" id="conn-dot"></span>
+            <span class="conn-label" id="conn-label">Connecting…</span>
+        </div>
+    </header>
+
+    <!-- ── Quick stats grid ────────────────────────────────────────────────── -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">BTC-PERP</div>
+            <div class="stat-value" id="stat-btc">—</div>
+            <div class="stat-change" id="stat-btc-chg"></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">ETH-PERP</div>
+            <div class="stat-value" id="stat-eth">—</div>
+            <div class="stat-change" id="stat-eth-chg"></div>
+        </div>
+        <div class="stat-card stat-card--wide">
+            <div class="stat-label">Unrealised P&amp;L</div>
+            <div class="stat-value" id="stat-pnl">—</div>
+        </div>
+        <div class="stat-card stat-card--wide">
+            <div class="stat-label">Top Arb</div>
+            <div class="stat-value" id="stat-arb">—</div>
+        </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <!-- ── Quick chat ──────────────────────────────────────────────────────── -->
+    <div class="quick-chat">
+        <div class="quick-chat-header">AI Quick Query</div>
+        <div class="chat-messages-mini" id="chat-mini" aria-live="polite"></div>
+        <div class="chat-input-row">
+            <input type="text"
+                   id="quick-input"
+                   class="quick-input"
+                   placeholder="Ask MLS AI…"
+                   aria-label="Quick AI query" />
+            <button id="quick-send" class="quick-send-btn" aria-label="Send">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M1 6h10M6 1l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <!-- ── Actions ────────────────────────────────────────────────────────── -->
+    <div class="popup-actions">
+        <button class="action-btn" id="btn-open-sidebar">
+            <span class="action-icon">◧</span> Side Panel
+        </button>
+        <button class="action-btn" id="btn-open-app">
+            <span class="action-icon">⬡</span> Open App
+        </button>
+        <button class="action-btn" id="btn-settings">
+            <span class="action-icon">⚙</span> Settings
+        </button>
+    </div>
+
+    <script src="popup.js" type="module"></script>
+</body>
+</html>

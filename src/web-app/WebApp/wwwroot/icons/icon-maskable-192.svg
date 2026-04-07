@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Maskable icon: safe area is the inner 80% (152px circle at center) -->
+  <rect width="192" height="192" fill="#07080c"/>
+  <defs>
+    <linearGradient id="g1" x1="20" y1="20" x2="172" y2="172" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <!-- Outer glow ring -->
+  <circle cx="96" cy="96" r="80" fill="url(#g1)" opacity="0.08"/>
+  <!-- Hexagon -->
+  <path d="M96 32L148 62v60L96 152 44 122V62L96 32z" fill="none" stroke="url(#g1)" stroke-width="5"/>
+  <!-- Checkmark -->
+  <path d="M72 96l18 18 30-30" stroke="url(#g1)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

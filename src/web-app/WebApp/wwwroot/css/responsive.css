@@ -1,0 +1,425 @@
+/**
+ * MLS Trading Platform — Responsive Breakpoint System
+ *
+ * Breakpoints:
+ *   > 1440px   Full MDI: floating windows, multi-panel, full palette
+ *   1024-1440  Docked: split panels, collapsible sidebar, no floating
+ *   768-1024   Tablet: single active panel + bottom-sheet navigation
+ *   < 768px    Mobile: single panel stack, FAB for panel selection
+ */
+
+/* ── CSS Custom Properties for breakpoints ───────────────────────────────── */
+:root {
+    --bp-mobile:  768px;
+    --bp-tablet:  1024px;
+    --bp-desktop: 1440px;
+
+    /* Sidebar widths per breakpoint */
+    --nav-width-full:    220px;
+    --nav-width-compact: 56px;
+    --nav-width-hidden:  0px;
+
+    /* Bottom sheet height */
+    --bottom-sheet-height: 60px;
+    --bottom-sheet-expanded: 320px;
+
+    /* Safe area for iOS notch / home bar */
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-top:    env(safe-area-inset-top, 0px);
+}
+
+/* ── 1440px+ : Full MDI ──────────────────────────────────────────────────── */
+@media (min-width: 1440px) {
+    .mls-nav {
+        width: var(--nav-width-full);
+    }
+
+    .document-window {
+        position: absolute !important;
+    }
+
+    .canvas-mobile-stack,
+    .bottom-sheet,
+    .mobile-fab-panel,
+    .hamburger-btn {
+        display: none !important;
+    }
+
+    .nav-brand-text,
+    .mls-fluent-nav {
+        display: flex;
+    }
+}
+
+/* ── 1024px–1440px : Docked / split-panel ───────────────────────────────── */
+@media (min-width: 1024px) and (max-width: 1439px) {
+    .mls-nav {
+        width: var(--nav-width-full);
+    }
+
+    /* Disable free floating; windows dock to fixed grid cells */
+    .document-window {
+        position: relative !important;
+        transform: none !important;
+        box-shadow: none !important;
+        border-radius: var(--r-md) !important;
+        resize: none;
+    }
+
+    .window-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-auto-rows: minmax(300px, 50vh);
+        gap: 8px;
+        padding: 8px;
+        overflow-y: auto;
+        align-content: start;
+    }
+
+    /* Maximized windows span full grid */
+    .document-window--maximized {
+        grid-column: 1 / -1 !important;
+        grid-row: span 2 !important;
+    }
+
+    .canvas-mobile-stack,
+    .bottom-sheet,
+    .mobile-fab-panel,
+    .hamburger-btn {
+        display: none !important;
+    }
+
+    .canvas-fab {
+        display: flex;
+    }
+}
+
+/* ── 768px–1024px : Tablet ───────────────────────────────────────────────── */
+@media (min-width: 768px) and (max-width: 1023px) {
+    .mls-nav {
+        width: var(--nav-width-compact);
+    }
+
+    .nav-brand-text,
+    .mls-fluent-nav fluent-nav-item > span,
+    fluent-tree-item > span {
+        display: none;
+    }
+
+    .nav-brand-logo {
+        margin: 0 auto;
+    }
+
+    /* Single active panel, full-height */
+    .document-window {
+        position: relative !important;
+        width: 100% !important;
+        height: calc(100vh - var(--bottom-sheet-height) - var(--safe-bottom)) !important;
+        transform: none !important;
+        left: 0 !important;
+        top: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+
+    /* Show only the focused (top-z) window */
+    .window-container .document-window:not(:last-child) {
+        display: none;
+    }
+
+    .window-taskbar {
+        display: none;
+    }
+
+    /* Bottom sheet navigation */
+    .bottom-sheet {
+        display: flex !important;
+    }
+
+    .canvas-fab {
+        bottom: calc(var(--bottom-sheet-height) + 16px + var(--safe-bottom));
+    }
+
+    .hamburger-btn {
+        display: none !important;
+    }
+}
+
+/* ── < 768px : Mobile ────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+    /* Hide sidebar completely */
+    .mls-nav {
+        display: none !important;
+    }
+
+    /* Main takes full width */
+    .mls-shell {
+        flex-direction: column;
+    }
+
+    .mls-main {
+        width: 100%;
+        height: calc(100vh - var(--bottom-sheet-height) - var(--safe-top) - var(--safe-bottom));
+        padding-top: var(--safe-top);
+    }
+
+    /* MDI canvas in stack mode */
+    .canvas-host {
+        overflow-y: auto;
+    }
+
+    .document-window {
+        position: relative !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 400px;
+        transform: none !important;
+        left: 0 !important;
+        top: 0 !important;
+        border-radius: var(--r-lg) !important;
+        margin-bottom: 8px !important;
+        box-shadow: none !important;
+        border: 1px solid var(--mls-glass-border) !important;
+    }
+
+    /* Show only the active panel in mobile */
+    .window-container {
+        padding: 8px;
+        overflow-y: auto;
+        height: 100%;
+    }
+
+    /* Disable drag handles on mobile */
+    .window-titlebar {
+        cursor: default !important;
+    }
+    .resize-handle {
+        display: none !important;
+    }
+
+    .window-taskbar {
+        display: none !important;
+    }
+
+    /* FAB repositioned above bottom sheet */
+    .canvas-fab {
+        bottom: calc(var(--bottom-sheet-height) + 20px + var(--safe-bottom));
+        right: 16px;
+    }
+
+    /* Hamburger shown at top */
+    .hamburger-btn {
+        display: flex !important;
+    }
+
+    /* Bottom sheet navigation */
+    .bottom-sheet {
+        display: flex !important;
+        height: calc(var(--bottom-sheet-height) + var(--safe-bottom));
+        padding-bottom: var(--safe-bottom);
+    }
+}
+
+/* ── Bottom sheet component ──────────────────────────────────────────────── */
+.bottom-sheet {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--bottom-sheet-height);
+    background: rgba(14, 16, 24, 0.97);
+    border-top: 1px solid var(--mls-glass-border);
+    backdrop-filter: blur(20px) saturate(180%);
+    z-index: 10001;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 8px;
+    transition: height 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: height;
+    -webkit-overflow-scrolling: touch;
+}
+
+.bottom-sheet--expanded {
+    height: var(--bottom-sheet-expanded);
+    align-items: flex-start;
+    padding-top: 12px;
+    overflow-y: auto;
+}
+
+.bottom-sheet-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--mls-text-muted);
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    border-radius: var(--r-md);
+    transition: color 0.15s, background 0.15s;
+    font-family: var(--font-ui);
+    min-width: 52px;
+}
+
+.bottom-sheet-item:hover,
+.bottom-sheet-item--active {
+    color: var(--mls-cyan);
+    background: var(--mls-cyan-dim);
+}
+
+.bottom-sheet-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+/* ── Mobile top bar / hamburger ──────────────────────────────────────────── */
+.mobile-topbar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    padding-top: calc(10px + var(--safe-top));
+    background: var(--mls-surface);
+    border-bottom: 1px solid var(--mls-glass-border);
+    flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+    .mobile-topbar {
+        display: flex;
+    }
+}
+
+.hamburger-btn {
+    display: none;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--mls-glass-border);
+    background: var(--mls-surface-2);
+    color: var(--mls-text-muted);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+.hamburger-btn:hover {
+    background: var(--mls-surface-3);
+    color: var(--mls-text);
+}
+
+/* ── Mobile slide-in nav drawer ──────────────────────────────────────────── */
+.nav-drawer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 10002;
+    backdrop-filter: blur(4px);
+}
+
+.nav-drawer-overlay--open {
+    display: block;
+    animation: overlay-fade-in 200ms ease;
+}
+
+.nav-drawer {
+    position: fixed;
+    top: 0;
+    left: -260px;
+    bottom: 0;
+    width: 260px;
+    background: var(--mls-surface);
+    border-right: 1px solid var(--mls-glass-border);
+    z-index: 10003;
+    overflow-y: auto;
+    transition: transform 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+    padding-top: var(--safe-top);
+}
+
+.nav-drawer--open {
+    transform: translateX(260px);
+}
+
+@keyframes overlay-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ── Container queries (canvas-level responsiveness) ─────────────────────── */
+@container canvas (max-width: 480px) {
+    .document-window .window-btn-group {
+        gap: 2px;
+    }
+    .document-window .window-titlebar {
+        padding: 0 8px;
+    }
+    .window-title {
+        font-size: 0.65rem;
+    }
+}
+
+@container canvas (max-width: 320px) {
+    .document-window .window-btn--minimize,
+    .document-window .window-btn--maximize {
+        display: none;
+    }
+}
+
+/* ── Touch optimizations ─────────────────────────────────────────────────── */
+@media (pointer: coarse) {
+    /* Larger hit targets on touch devices */
+    .fab-btn {
+        width: 52px;
+        height: 52px;
+    }
+
+    .fab-menu-item {
+        padding: 10px 12px;
+        font-size: 0.82rem;
+    }
+
+    .taskbar-item {
+        padding: 8px 14px;
+        font-size: 0.72rem;
+    }
+
+    /* Disable hover effects that don't make sense on touch */
+    .document-window:hover {
+        box-shadow: none;
+    }
+}
+
+/* ── Print (hide all UI chrome) ──────────────────────────────────────────── */
+@media print {
+    .mls-nav,
+    .canvas-fab,
+    .window-taskbar,
+    .bottom-sheet,
+    .mobile-topbar,
+    .hamburger-btn,
+    .nav-drawer,
+    .nav-drawer-overlay {
+        display: none !important;
+    }
+
+    .mls-main {
+        width: 100% !important;
+    }
+
+    .document-window {
+        position: relative !important;
+        transform: none !important;
+        box-shadow: none !important;
+        border: 1px solid #ccc !important;
+        page-break-inside: avoid;
+    }
+}

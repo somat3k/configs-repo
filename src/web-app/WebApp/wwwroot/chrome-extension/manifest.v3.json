@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "MLS Trading Platform",
+  "version": "1.0.0",
+  "description": "Machine Learning Studio — Trading, Arbitrage & DeFi. Live charts, positions, and AI assistant in Chrome Side Panel.",
+
+  "icons": {
+    "16":  "icons/icon-16.svg",
+    "32":  "icons/icon-32.svg",
+    "48":  "icons/icon-48.svg",
+    "128": "icons/icon-128.svg"
+  },
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup/index.html",
+    "default_icon": {
+      "16":  "icons/icon-16.svg",
+      "32":  "icons/icon-32.svg",
+      "48":  "icons/icon-48.svg",
+      "128": "icons/icon-128.svg"
+    },
+    "default_title": "MLS Trading Platform"
+  },
+
+  "side_panel": {
+    "default_path": "sidebar/index.html"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.hyperliquid.xyz/*",
+        "https://hyperliquid.xyz/*",
+        "https://app.camelot.exchange/*",
+        "https://camelot.exchange/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "alarms",
+    "notifications",
+    "background",
+    "activeTab"
+  ],
+
+  "host_permissions": [
+    "https://app.hyperliquid.xyz/*",
+    "https://hyperliquid.xyz/*",
+    "https://app.camelot.exchange/*",
+    "https://camelot.exchange/*"
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["sidebar/*", "popup/*", "icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

@@ -3,8 +3,49 @@
 
 <FluentDesignTheme Mode="DesignThemeModes.Dark" />
 
+@* ── Mobile nav drawer overlay ──────────────────────────────────────────── *@
+@if (_navOpen)
+{
+    <div class="nav-drawer-overlay nav-drawer-overlay--open"
+         @onclick="CloseNav"
+         aria-hidden="true"></div>
+}
+
+@* ── Mobile slide-in drawer ──────────────────────────────────────────────── *@
+<nav class="nav-drawer @(_navOpen ? "nav-drawer--open" : "")"
+     aria-label="Mobile navigation"
+     aria-hidden="@(!_navOpen)">
+    <div class="nav-brand">
+        <div class="nav-brand-logo">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <path d="M14 2L26 8v12L14 26 2 20V8L14 2z"
+                      fill="none" stroke="url(#brand-grad-d)" stroke-width="1.5"/>
+                <path d="M8 14l4 4 8-8" stroke="url(#brand-grad-d)" stroke-width="2" stroke-linecap="round"/>
+                <defs>
+                    <linearGradient id="brand-grad-d" x1="2" y1="2" x2="26" y2="26" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stop-color="#00d4ff"/>
+                        <stop offset="100%" stop-color="#7c3aed"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+        </div>
+        <div class="nav-brand-text">
+            <span class="nav-brand-name">MLS</span>
+            <span class="nav-brand-sub">Trading Platform</span>
+        </div>
+    </div>
+    <FluentNavMenu Width="240" class="mls-fluent-nav">
+        @RenderNavLinks()
+    </FluentNavMenu>
+    <div class="nav-footer">
+        <div class="nav-status-dot"></div>
+        <span class="nav-status-text">Live</span>
+    </div>
+</nav>
+
 <div class="mls-shell">
-    <nav class="mls-nav">
+    @* ── Desktop sidebar nav ──────────────────────────────────────────────── *@
+    <nav class="mls-nav" aria-label="Desktop navigation">
         @* ── Brand strip ──────────────────────────────────────────────────── *@
         <div class="nav-brand">
             <div class="nav-brand-logo">
@@ -27,48 +68,7 @@
         </div>
 
         <FluentNavMenu Width="220" class="mls-fluent-nav">
-            <FluentNavLink Href="/" Match="NavLinkMatch.All">
-                Dashboard
-            </FluentNavLink>
-
-            <FluentNavGroup Title="Trading">
-                <FluentNavLink @onclick='() => WM.OpenPanel("TradingTerminal", "Trading Terminal")'>
-                    Terminal
-                </FluentNavLink>
-                <FluentNavLink @onclick='() => WM.OpenPanel("TradingChart", "Chart")'>
-                    Chart
-                </FluentNavLink>
-            </FluentNavGroup>
-
-            <FluentNavGroup Title="Arbitrage">
-                <FluentNavLink @onclick='() => WM.OpenPanel("ArbitrageScanner", "Arbitrage Scanner")'>
-                    Scanner
-                </FluentNavLink>
-                <FluentNavLink @onclick='() => WM.OpenPanel("PathVisualization", "Path Graph")'>
-                    Path Graph
-                </FluentNavLink>
-            </FluentNavGroup>
-
-            <FluentNavGroup Title="DeFi">
-                <FluentNavLink @onclick='() => WM.OpenPanel("DeFiPositions", "DeFi Positions")'>
-                    Positions
-                </FluentNavLink>
-                <FluentNavLink @onclick='() => WM.OpenPanel("HealthMonitor", "Health Monitor")'>
-                    Health Monitor
-                </FluentNavLink>
-            </FluentNavGroup>
-
-            <FluentNavGroup Title="Designer">
-                <FluentNavLink @onclick='() => WM.OpenPanel("DesignerCanvas", "Strategy Designer")'>
-                    Canvas
-                </FluentNavLink>
-            </FluentNavGroup>
-
-            <FluentNavGroup Title="ML">
-                <FluentNavLink Href="/ml">
-                    Model Registry
-                </FluentNavLink>
-            </FluentNavGroup>
+            @RenderNavLinks()
         </FluentNavMenu>
 
         <div class="nav-footer">
@@ -78,6 +78,30 @@
     </nav>
 
     <main class="mls-main">
+        @* ── Mobile top bar ───────────────────────────────────────────────── *@
+        <div class="mobile-topbar">
+            <button class="hamburger-btn"
+                    @onclick="ToggleNav"
+                    aria-label="@(_navOpen ? "Close navigation" : "Open navigation")"
+                    aria-expanded="@_navOpen">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    @if (_navOpen)
+                    {
+                        <line x1="3" y1="3" x2="15" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="15" y1="3" x2="3" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    }
+                    else
+                    {
+                        <line x1="3" y1="5"  x2="15" y2="5"  stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="3" y1="9"  x2="15" y2="9"  stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <line x1="3" y1="13" x2="15" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    }
+                </svg>
+            </button>
+            <span class="mobile-topbar-title">MLS Trading Platform</span>
+            <div class="nav-status-dot" style="margin-left:auto;"></div>
+        </div>
+
         @Body
     </main>
 </div>
@@ -207,11 +231,90 @@
         overflow: hidden;
         position: relative;
         min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ── Mobile top bar ──────────────────────────────────────────────────── */
+    .mobile-topbar-title {
+        font-size: 0.82rem;
+        font-weight: 600;
+        background: linear-gradient(135deg, #00d4ff, #7c3aed);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
 </style>
 
 @code {
     [Inject] private IJSRuntime? JS { get; set; }
+
+    private bool _navOpen;
+
+    private void ToggleNav() => _navOpen = !_navOpen;
+
+    private void CloseNav() => _navOpen = false;
+
+    private RenderFragment RenderNavLinks() =>
+        @<text>
+            <FluentNavLink Href="/" Match="NavLinkMatch.All">
+                Dashboard
+            </FluentNavLink>
+
+            <FluentNavGroup Title="Trading">
+                <FluentNavLink @onclick='() => OpenPanelAndClose("TradingTerminal", "Trading Terminal")'>
+                    Terminal
+                </FluentNavLink>
+                <FluentNavLink @onclick='() => OpenPanelAndClose("TradingChart", "Chart")'>
+                    Chart
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="Arbitrage">
+                <FluentNavLink @onclick='() => OpenPanelAndClose("ArbitrageScanner", "Arbitrage Scanner")'>
+                    Scanner
+                </FluentNavLink>
+                <FluentNavLink @onclick='() => OpenPanelAndClose("PathVisualization", "Path Graph")'>
+                    Path Graph
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="DeFi">
+                <FluentNavLink @onclick='() => OpenPanelAndClose("DeFiPositions", "DeFi Positions")'>
+                    Positions
+                </FluentNavLink>
+                <FluentNavLink @onclick='() => OpenPanelAndClose("HealthMonitor", "Health Monitor")'>
+                    Health Monitor
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="Designer">
+                <FluentNavLink @onclick='() => OpenPanelAndClose("DesignerCanvas", "Strategy Designer")'>
+                    Canvas
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="ML">
+                <FluentNavLink Href="/ml">
+                    Model Registry
+                </FluentNavLink>
+            </FluentNavGroup>
+
+            <FluentNavGroup Title="AI">
+                <FluentNavLink @onclick='() => OpenPanelAndClose("AIChatPanel", "AI Assistant")'>
+                    AI Assistant
+                </FluentNavLink>
+                <FluentNavLink @onclick='() => OpenPanelAndClose("ProviderSettings", "AI Providers")'>
+                    Providers
+                </FluentNavLink>
+            </FluentNavGroup>
+        </text>;
+
+    private void OpenPanelAndClose(string panelType, string title)
+    {
+        WM.OpenPanel(panelType, title);
+        _navOpen = false;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -220,7 +323,7 @@
         {
             var width = await JS!.InvokeAsync<double>("eval", "window.innerWidth")
                 .ConfigureAwait(false);
-            _ = width; // nav is always visible; used for future collapse support
+            _ = width; // nav collapse driven by CSS media queries
         }
         catch { /* non-critical */ }
     }
