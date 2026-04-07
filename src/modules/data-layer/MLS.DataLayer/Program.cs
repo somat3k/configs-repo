@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MLS.DataLayer.Configuration;
+using MLS.DataLayer.FeatureStore;
 using MLS.DataLayer.Hubs;
 using MLS.DataLayer.Hydra;
 using MLS.DataLayer.Persistence;
@@ -50,6 +51,8 @@ builder.Services.AddDbContext<DataLayerDbContext>(o =>
     o.UseNpgsql(pgConnStr));
 
 builder.Services.AddScoped<CandleRepository>();
+builder.Services.AddScoped<FeatureStoreRepository>();
+builder.Services.AddSingleton<FeatureEngineer>();
 
 // ── Hydra collectors (singleton — share HttpClient factory cache) ─────────────
 builder.Services.AddSingleton<HyperliquidFeedCollector>();

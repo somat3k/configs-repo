@@ -1,0 +1,179 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
+
+namespace MLS.DataLayer.FeatureStore;
+
+// ── Enumerations ──────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Identifies which model a feature vector is computed for.
+/// </summary>
+public enum ModelType
+{
+    /// <summary>Trading model (<c>model-t</c>) — used by the <c>trader</c> module.</summary>
+    Trading = 0,
+
+    /// <summary>Arbitrage model (<c>model-a</c>) — used by the <c>arbitrager</c> module.</summary>
+    Arbitrage = 1,
+
+    /// <summary>DeFi model (<c>model-d</c>) — used by the <c>defi</c> module.</summary>
+    DeFi = 2,
+}
+
+// ── Input candle ──────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Lightweight OHLCV candle value type used as input to <see cref="FeatureEngineer"/>.
+/// </summary>
+/// <param name="Open">Open price.</param>
+/// <param name="High">High price.</param>
+/// <param name="Low">Low price.</param>
+/// <param name="Close">Close price.</param>
+/// <param name="Volume">Base-asset volume.</param>
+public readonly record struct OhlcvCandle(
+    double Open,
+    double High,
+    double Low,
+    double Close,
+    double Volume);
+
+// ── Feature vectors ───────────────────────────────────────────────────────────
+
+/// <summary>
+/// 8-feature vector computed for the <b>Trading</b> model (<c>model-t</c>).
+/// </summary>
+/// <remarks>
+/// Schema version 1 defines the following ordered features:
+/// <list type="number">
+///   <item><see cref="Rsi14"/> — RSI(14), range [0, 100].</item>
+///   <item><see cref="MacdSignal"/> — MACD signal line, normalised by close price.</item>
+///   <item><see cref="BbPosition"/> — Price position within Bollinger Bands(20,2), range [0, 1].</item>
+///   <item><see cref="VolumeDelta"/> — Relative volume change vs prior candle (%).</item>
+///   <item><see cref="Momentum20"/> — 20-period price momentum (close[n]/close[n-20] − 1).</item>
+///   <item><see cref="AtrNormalised"/> — ATR(14) divided by close price.</item>
+///   <item><see cref="SpreadBps"/> — (High−Low)/Close × 10 000 (basis-point candle range).</item>
+///   <item><see cref="VwapDistance"/> — (Close−VWAP)/VWAP over the computation window.</item>
+/// </list>
+/// </remarks>
+/// <param name="Rsi14">Relative Strength Index over 14 periods.</param>
+/// <param name="MacdSignal">MACD signal line value (normalised by close).</param>
+/// <param name="BbPosition">Bollinger Band position (0 = lower band, 1 = upper band).</param>
+/// <param name="VolumeDelta">Relative volume change as a decimal fraction.</param>
+/// <param name="Momentum20">20-bar price momentum as a decimal fraction.</param>
+/// <param name="AtrNormalised">ATR(14) divided by close price.</param>
+/// <param name="SpreadBps">Candle high-low range in basis points.</param>
+/// <param name="VwapDistance">Fractional distance of close from VWAP.</param>
+/// <param name="ModelType">Model this vector was computed for.</param>
+/// <param name="SchemaVersion">Feature schema version — must match model input contract.</param>
+public sealed record FeatureVector(
+    double Rsi14,
+    double MacdSignal,
+    double BbPosition,
+    double VolumeDelta,
+    double Momentum20,
+    double AtrNormalised,
+    double SpreadBps,
+    double VwapDistance,
+    ModelType ModelType,
+    int SchemaVersion)
+{
+    /// <summary>
+    /// Returns the feature values as a fixed-size double array in schema order.
+    /// </summary>
+    public double[] ToArray() =>
+    [
+        Rsi14,
+        MacdSignal,
+        BbPosition,
+        VolumeDelta,
+        Momentum20,
+        AtrNormalised,
+        SpreadBps,
+        VwapDistance,
+    ];
+
+    /// <summary>Number of features in this vector.</summary>
+    public const int FeatureCount = 8;
+}
+
+// ── Feature store entity ──────────────────────────────────────────────────────
+
+/// <summary>
+/// Persisted feature vector row in the <c>feature_store</c> PostgreSQL table.
+/// </summary>
+[Table("feature_store")]
+public sealed class FeatureStoreEntity
+{
+    /// <summary>Surrogate primary key.</summary>
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
+
+    /// <summary>Exchange identifier, e.g. <c>hyperliquid</c>.</summary>
+    [Required]
+    [MaxLength(64)]
+    [Column("exchange")]
+    public string Exchange { get; set; } = string.Empty;
+
+    /// <summary>Normalised trading symbol, e.g. <c>BTC-USDT</c>.</summary>
+    [Required]
+    [MaxLength(32)]
+    [Column("symbol")]
+    public string Symbol { get; set; } = string.Empty;
+
+    /// <summary>Candle timeframe, e.g. <c>1h</c>.</summary>
+    [Required]
+    [MaxLength(8)]
+    [Column("timeframe")]
+    public string Timeframe { get; set; } = string.Empty;
+
+    /// <summary>Target model type.</summary>
+    [Required]
+    [MaxLength(16)]
+    [Column("model_type")]
+    public string ModelType { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Feature schema version — must match the ONNX model's expected input dimensions.
+    /// Increment when the feature set changes.
+    /// </summary>
+    [Column("schema_version")]
+    public int SchemaVersion { get; set; }
+
+    /// <summary>
+    /// Timestamp of the last candle included in this feature vector (UTC).
+    /// Matches <c>CandleEntity.OpenTime</c> of the most-recent candle in the window.
+    /// </summary>
+    [Column("feature_timestamp")]
+    public DateTimeOffset FeatureTimestamp { get; set; }
+
+    /// <summary>
+    /// Feature values serialised as a JSON array in schema order.
+    /// </summary>
+    [Required]
+    [Column("features_json", TypeName = "jsonb")]
+    public string FeaturesJson { get; set; } = "[]";
+
+    /// <summary>Row insert / compute timestamp (UTC).</summary>
+    [Column("computed_at")]
+    public DateTimeOffset ComputedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+// ── Schema version constants ──────────────────────────────────────────────────
+
+/// <summary>
+/// Current schema version constants per model type.
+/// Increment the relevant version whenever the corresponding feature set changes.
+/// </summary>
+public static class FeatureSchemaVersions
+{
+    /// <summary>Current schema version for <see cref="ModelType.Trading"/> (model-t).</summary>
+    public const int Trading = 1;
+
+    /// <summary>Current schema version for <see cref="ModelType.Arbitrage"/> (model-a).</summary>
+    public const int Arbitrage = 1;
+
+    /// <summary>Current schema version for <see cref="ModelType.DeFi"/> (model-d).</summary>
+    public const int DeFi = 1;
+}
