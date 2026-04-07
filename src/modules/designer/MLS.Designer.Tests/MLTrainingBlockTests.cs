@@ -12,6 +12,8 @@ namespace MLS.Designer.Tests;
 /// Unit tests for the ML Training domain blocks.
 /// Covers TrainSplitBlock split-ratio logic and HyperparamSearchBlock early-stop + best-trial
 /// selection, which contain non-trivial pure logic that benefits from direct test coverage.
+/// Also covers Optuna-mode dispatch: verifies a single search job is dispatched with the
+/// correct search_mode and search_space fields when strategy is "Bayesian".
 /// </summary>
 public sealed class MLTrainingBlockTests
 {
@@ -191,6 +193,113 @@ public sealed class MLTrainingBlockTests
         block.IsEarlyStop().Should().BeFalse("continuing improvement should NOT trigger early stop");
     }
 
+    // ── Optuna dispatch mode ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HyperparamSearchBlock_BayesianStrategy_DispatchesSingleOptunaSearchJob()
+    {
+        var dispatcher = new CapturingTrainingDispatcher();
+        var block      = HyperparamSearchBlockTestHarness.CreateBayesianBlock(dispatcher);
+
+        BlockSignal? output = null;
+        block.OutputProduced += (sig, _) => { output = sig; return ValueTask.CompletedTask; };
+
+        // Feed a feature vector
+        var featureSignal = MakeFeatureVectorSignal("model-t");
+        await block.ProcessAsync(featureSignal, CancellationToken.None);
+
+        // Exactly ONE job should be dispatched (the whole Optuna study)
+        dispatcher.Dispatched.Should().HaveCount(1,
+            "Bayesian strategy must dispatch a single Optuna search job, not N individual trials");
+
+        var hp = dispatcher.Dispatched[0].Hyperparams;
+
+        hp.TryGetProperty("search_mode", out var sm).Should().BeTrue("search_mode must be present");
+        sm.GetString().Should().Be("optuna");
+
+        hp.TryGetProperty("n_trials", out var nt).Should().BeTrue("n_trials must be present");
+        nt.GetInt32().Should().Be(5, "test block configured with n_trials=5");
+
+        hp.TryGetProperty("sampler", out var sampler).Should().BeTrue("sampler must be present");
+        sampler.GetString().Should().Be("tpe");
+
+        hp.TryGetProperty("pruner", out var pruner).Should().BeTrue("pruner must be present");
+        pruner.GetString().Should().Be("hyperband");
+
+        hp.TryGetProperty("search_space", out var ss).Should().BeTrue("search_space must be present");
+        ss.TryGetProperty("lr",      out _).Should().BeTrue("search_space.lr must be present");
+        ss.TryGetProperty("dropout", out _).Should().BeTrue("search_space.dropout must be present");
+        ss.TryGetProperty("hidden_dims", out _).Should().BeTrue("search_space.hidden_dims must be present");
+    }
+
+    [Fact]
+    public async Task HyperparamSearchBlock_BayesianStrategy_SearchStartedSignalHasOptunaMode()
+    {
+        var dispatcher = new CapturingTrainingDispatcher();
+        var block      = HyperparamSearchBlockTestHarness.CreateBayesianBlock(dispatcher);
+
+        BlockSignal? output = null;
+        block.OutputProduced += (sig, _) => { output = sig; return ValueTask.CompletedTask; };
+
+        await block.ProcessAsync(MakeFeatureVectorSignal("model-t"), CancellationToken.None);
+
+        output.Should().NotBeNull("block must emit SEARCH_STARTED immediately");
+        var val = output!.Value.Value;
+        val.TryGetProperty("is_optuna_mode", out var isOptuna).Should().BeTrue();
+        isOptuna.GetBoolean().Should().BeTrue("Bayesian strategy sets is_optuna_mode=true");
+        val.TryGetProperty("direction", out var dir).Should().BeTrue();
+        dir.GetString().Should().Be("maximize");
+    }
+
+    [Fact]
+    public async Task HyperparamSearchBlock_OptunaSearchComplete_EmitsSearchCompleteWithBestParams()
+    {
+        var dispatcher = new CapturingTrainingDispatcher();
+        var block      = HyperparamSearchBlockTestHarness.CreateBayesianBlock(dispatcher);
+
+        var emitted = new List<BlockSignal>();
+        block.OutputProduced += (sig, _) => { emitted.Add(sig); return ValueTask.CompletedTask; };
+
+        // Start the search
+        await block.ProcessAsync(MakeFeatureVectorSignal("model-t"), CancellationToken.None);
+
+        // Simulate the study-complete envelope from Shell VM
+        var jobId      = dispatcher.Dispatched[0].JobId;
+        var bestParams = JsonSerializer.SerializeToElement(new { lr = 0.001f, dropout = 0.2f });
+        var metrics    = JsonSerializer.SerializeToElement(new
+        {
+            best_value  = 0.73f,
+            n_pruned    = 3,
+            best_params = new { lr = 0.001f, dropout = 0.2f, hidden_dims = new[] { 64, 32 } },
+        });
+
+        var complete = new TrainingJobCompletePayload(
+            JobId:       jobId,
+            ModelType:   "model-t",
+            ModelId:     "model-t-optuna-best",
+            OnnxPath:    "",
+            JoblibPath:  "",
+            IpfsCid:     "",
+            Metrics:     metrics,
+            DurationMs:  12000);
+
+        await dispatcher.SimulateCompleteAsync(complete);
+
+        emitted.Should().HaveCountGreaterThanOrEqualTo(2,
+            "at least SEARCH_STARTED and SEARCH_COMPLETE must be emitted");
+
+        var last = emitted.Last().Value;
+        last.TryGetProperty("state", out var state).Should().BeTrue();
+        state.GetString().Should().Be("SEARCH_COMPLETE",
+            "study completion must emit SEARCH_COMPLETE");
+
+        last.TryGetProperty("best_metric", out var bm).Should().BeTrue();
+        bm.GetSingle().Should().BeApproximately(0.73f, 1e-4f, "best_metric must match best_value from study");
+
+        last.TryGetProperty("n_pruned", out var np).Should().BeTrue();
+        np.GetInt32().Should().Be(3, "n_pruned must be forwarded from study result");
+    }
+
     // ── ValidateModelBlock ────────────────────────────────────────────────────────
 
     [Fact]
@@ -352,6 +461,21 @@ public sealed class MLTrainingBlockTests
                 close  = 100.5f,
                 volume = 500f,
             }));
+
+    /// <summary>
+    /// Creates a minimal <see cref="BlockSignal"/> of type <see cref="BlockSocketType.FeatureVector"/>
+    /// carrying a <c>model_type</c> field — the minimum shape required by
+    /// <see cref="HyperparamSearchBlock.ProcessCoreAsync"/>.
+    /// </summary>
+    private static BlockSignal MakeFeatureVectorSignal(string modelType) =>
+        new(Guid.NewGuid(), "feature_input", BlockSocketType.FeatureVector,
+            JsonSerializer.SerializeToElement(new
+            {
+                model_type    = modelType,
+                feature_names = new[] { "f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7" },
+                samples       = new[] { new[] { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f } },
+                labels        = new[] { 0 },
+            }));
 }
 
 /// <summary>
@@ -363,7 +487,44 @@ internal sealed class HyperparamSearchBlockTestHarness
     private readonly bool _minimize;
     private readonly List<(JsonElement Hyperparams, float Metric)> _trialResults = [];
 
+    // Wraps real block for Optuna-mode tests
+    private HyperparamSearchBlock? _block;
+
+    public event Func<BlockSignal, CancellationToken, ValueTask>? OutputProduced
+    {
+        add    { if (_block is not null) _block.OutputProduced += value; }
+        remove { if (_block is not null) _block.OutputProduced -= value; }
+    }
+
     public HyperparamSearchBlockTestHarness(bool minimize) => _minimize = minimize;
+
+    /// <summary>
+    /// Creates a harness wrapping a real <see cref="HyperparamSearchBlock"/> wired to
+    /// <paramref name="dispatcher"/> with <c>SearchStrategy=Bayesian</c> and
+    /// <c>NTrials=5</c> for fast testing.
+    /// </summary>
+    public static HyperparamSearchBlockTestHarness CreateBayesianBlock(CapturingTrainingDispatcher dispatcher)
+    {
+        var block = new HyperparamSearchBlock(dispatcher);
+        // Use reflection to set DefaultValue on the immutable BlockParameter fields so
+        // the harness can configure strategy=Bayesian + n_trials=5 without needing a
+        // public setter (which we deliberately avoid in production code).
+        SetParameterDefaultViaReflection(block, "_searchStrategyParam", "Bayesian");
+        SetParameterDefaultViaReflection(block, "_nTrialsParam",        5);
+        SetParameterDefaultViaReflection(block, "_directionParam",      "maximize");
+        SetParameterDefaultViaReflection(block, "_samplerParam",        "tpe");
+        SetParameterDefaultViaReflection(block, "_prunerParam",         "hyperband");
+        SetParameterDefaultViaReflection(block, "_epochsPerTrialParam", 3);
+
+        return new HyperparamSearchBlockTestHarness(minimize: false) { _block = block };
+    }
+
+    /// <summary>Delegates <see cref="HyperparamSearchBlock.ProcessAsync"/> to the wrapped block.</summary>
+    public ValueTask ProcessAsync(BlockSignal signal, CancellationToken ct)
+    {
+        if (_block is null) throw new InvalidOperationException("Use CreateBayesianBlock to get a real block");
+        return _block.ProcessAsync(signal, ct);
+    }
 
     public void AddTrialResult(float lr, float metric)
     {
@@ -400,5 +561,47 @@ internal sealed class HyperparamSearchBlockTestHarness
             : recentTrials.Max(r => r.Metric);
 
         return _minimize ? bestRecent >= bestBeforeRecent : bestRecent <= bestBeforeRecent;
+    }
+
+    private static void SetParameterDefaultViaReflection<T>(
+        HyperparamSearchBlock block, string fieldName, T value)
+    {
+        var field = typeof(HyperparamSearchBlock)
+            .GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException($"Field {fieldName} not found");
+
+        var param = (MLS.Core.Designer.BlockParameter<T>)(field.GetValue(block)
+            ?? throw new InvalidOperationException($"Field {fieldName} is null"));
+
+        // BlockParameter<T> is a positional record; use 'with' cloning to produce a new
+        // instance with the overridden DefaultValue, then replace the readonly field via reflection.
+        var cloned = param with { DefaultValue = value };
+        field.SetValue(block, cloned);
+    }
+}
+
+/// <summary>
+/// Test double for <see cref="ITrainingDispatcher"/> that records all dispatched jobs and allows
+/// simulating <see cref="JobCompleted"/> events.
+/// </summary>
+internal sealed class CapturingTrainingDispatcher : ITrainingDispatcher
+{
+    private readonly List<TrainingJobStartPayload> _dispatched = [];
+
+    public IReadOnlyList<TrainingJobStartPayload> Dispatched => _dispatched;
+
+    public event Func<TrainingJobProgressPayload, CancellationToken, ValueTask>? ProgressReceived;
+    public event Func<TrainingJobCompletePayload,  CancellationToken, ValueTask>? JobCompleted;
+
+    public ValueTask<Guid> DispatchJobAsync(TrainingJobStartPayload payload, CancellationToken ct)
+    {
+        _dispatched.Add(payload);
+        return ValueTask.FromResult(payload.JobId);
+    }
+
+    public async Task SimulateCompleteAsync(TrainingJobCompletePayload complete)
+    {
+        if (JobCompleted is not null)
+            await JobCompleted(complete, CancellationToken.None).ConfigureAwait(false);
     }
 }

@@ -41,6 +41,9 @@ public sealed class HyperparamSearchBlock : BlockBase
     private int          _trialIndex  = 0;
     private Guid?        _activeTrial = null;
 
+    // Optuna-mode: a single search-job ID replaces N individual trial IDs
+    private Guid?        _optunaSearchJobId = null;
+
     // Track dispatched hyperparams so they can be paired with the trial result
     private readonly Dictionary<Guid, JsonElement> _pendingHyperparams = new();
 
@@ -50,7 +53,8 @@ public sealed class HyperparamSearchBlock : BlockBase
     private readonly BlockParameter<string> _searchStrategyParam =
         new("SearchStrategy",   "Search Strategy",    "Grid, Random, or Bayesian",                              "Random");
     private readonly BlockParameter<int>    _maxTrialsParam =
-        new("MaxTrials",        "Max Trials",          "Maximum number of trials",                               20, MinValue: 1,  MaxValue: 200);
+        new("MaxTrials",        "Max Trials",          "Maximum number of trials (used for Grid/Random strategies)",
+                                                                                                                  20, MinValue: 1,  MaxValue: 200);
     private readonly BlockParameter<int>    _epochsPerTrialParam =
         new("EpochsPerTrial",   "Epochs Per Trial",    "Epochs per trial run (neural network models only)",      50, MinValue: 1,  MaxValue: 1000);
     private readonly BlockParameter<string> _modelTypeParam =
@@ -59,6 +63,37 @@ public sealed class HyperparamSearchBlock : BlockBase
         new("OptimizeMetric",   "Optimize Metric",     "Metric to optimise (val_loss, accuracy, f1_macro)",      "val_loss");
     private readonly BlockParameter<bool>   _minimizeParam =
         new("Minimize",         "Minimize",            "True = minimise the metric; False = maximise",           true);
+
+    // ── Optuna-specific parameters ────────────────────────────────────────────
+
+    /// <summary>Number of Optuna trials (Bayesian strategy only).</summary>
+    private readonly BlockParameter<int>    _nTrialsParam =
+        new("NTrials",          "N Trials (Optuna)",   "Number of Optuna trials for Bayesian search",            50, MinValue: 1,  MaxValue: 500);
+    /// <summary>Optimisation direction: "maximize" or "minimize".</summary>
+    private readonly BlockParameter<string> _directionParam =
+        new("Direction",        "Direction",           "maximize or minimize the objective (Bayesian only)",     "maximize");
+    /// <summary>Optuna sampler algorithm. Supported: "tpe".</summary>
+    private readonly BlockParameter<string> _samplerParam =
+        new("Sampler",          "Sampler",             "Optuna sampler: tpe (TPE / Bayesian)",                   "tpe");
+    /// <summary>Optuna pruner algorithm. Supported: "hyperband".</summary>
+    private readonly BlockParameter<string> _prunerParam =
+        new("Pruner",           "Pruner",              "Optuna pruner: hyperband (HyperbandPruner)",             "hyperband");
+    /// <summary>Learning-rate lower bound for the Optuna search space.</summary>
+    private readonly BlockParameter<float>  _lrMinParam =
+        new("LrMin",            "LR Min",              "Learning-rate lower bound (Bayesian search space)",      1e-4f, MinValue: 1e-6f, MaxValue: 0.1f, IsOptimizable: false);
+    /// <summary>Learning-rate upper bound for the Optuna search space.</summary>
+    private readonly BlockParameter<float>  _lrMaxParam =
+        new("LrMax",            "LR Max",              "Learning-rate upper bound (Bayesian search space)",      1e-2f, MinValue: 1e-5f, MaxValue: 1.0f, IsOptimizable: false);
+    /// <summary>Dropout lower bound for the Optuna search space.</summary>
+    private readonly BlockParameter<float>  _dropoutMinParam =
+        new("DropoutMin",       "Dropout Min",         "Dropout lower bound (Bayesian search space)",            0.1f,  MinValue: 0f,    MaxValue: 0.8f, IsOptimizable: false);
+    /// <summary>Dropout upper bound for the Optuna search space.</summary>
+    private readonly BlockParameter<float>  _dropoutMaxParam =
+        new("DropoutMax",       "Dropout Max",         "Dropout upper bound (Bayesian search space)",            0.5f,  MinValue: 0f,    MaxValue: 0.8f, IsOptimizable: false);
+    /// <summary>JSON-encoded list of hidden-dim choices, e.g. <c>[[64,32],[128,64,32]]</c>.</summary>
+    private readonly BlockParameter<string> _hiddenDimsChoicesParam =
+        new("HiddenDimsChoices","Hidden Dims Choices",
+            "JSON array of hidden-dim arrays to try, e.g. [[64,32],[128,64,32]] (Bayesian only)",                "[[64,32],[128,64,32]]");
 
     // ── Algorithm + extended hyperparameter parameters ────────────────────────
 
@@ -76,7 +111,7 @@ public sealed class HyperparamSearchBlock : BlockBase
             "Fraction of samples per tree (GradientBoosting)",                                                   0.8f, MinValue: 0.1f, MaxValue: 1.0f, IsOptimizable: true);
     private readonly BlockParameter<float>  _dropoutRangeMaxParam =
         new("DropoutRangeMax",  "Dropout Range Max",
-            "Upper bound for dropout search range (NeuralNetwork)",                                              0.4f, MinValue: 0f,   MaxValue: 0.8f, IsOptimizable: true);
+            "Upper bound for dropout search range (Grid/Random strategies)",                                     0.4f, MinValue: 0f,   MaxValue: 0.8f, IsOptimizable: true);
     private readonly BlockParameter<float>  _weightDecayParam =
         new("WeightDecay",      "Weight Decay",
             "L2 regularisation / weight decay (NeuralNetwork)",                                                  1e-4f, MinValue: 0f, MaxValue: 0.1f, IsOptimizable: true);
@@ -92,6 +127,8 @@ public sealed class HyperparamSearchBlock : BlockBase
     public override IReadOnlyList<BlockParameter> Parameters =>
         [_searchStrategyParam, _maxTrialsParam, _epochsPerTrialParam,
          _modelTypeParam, _optimizeMetricParam, _minimizeParam,
+         _nTrialsParam, _directionParam, _samplerParam, _prunerParam,
+         _lrMinParam, _lrMaxParam, _dropoutMinParam, _dropoutMaxParam, _hiddenDimsChoicesParam,
          _algorithmTypeParam, _nEstimatorsParam, _maxDepthParam,
          _subsampleParam, _dropoutRangeMaxParam, _weightDecayParam, _cpuThreadsParam];
 
@@ -101,7 +138,8 @@ public sealed class HyperparamSearchBlock : BlockBase
         [BlockSocket.Output("search_output",  BlockSocketType.TrainingStatus)])
     {
         _dispatcher = dispatcher;
-        _dispatcher.JobCompleted += OnTrialCompletedAsync;
+        _dispatcher.JobCompleted    += OnTrialCompletedAsync;
+        _dispatcher.ProgressReceived += OnTrialProgressAsync;
     }
 
     /// <summary>Default constructor used by <see cref="Services.BlockRegistry"/> (requires factory).</summary>
@@ -110,10 +148,11 @@ public sealed class HyperparamSearchBlock : BlockBase
     /// <inheritdoc/>
     public override void Reset()
     {
-        _datasetSignal = null;
-        _modelType     = "model-t";
-        _trialIndex    = 0;
-        _activeTrial   = null;
+        _datasetSignal     = null;
+        _modelType         = "model-t";
+        _trialIndex        = 0;
+        _activeTrial       = null;
+        _optunaSearchJobId = null;
         _pendingHyperparams.Clear();
         _trialResults.Clear();
     }
@@ -121,7 +160,8 @@ public sealed class HyperparamSearchBlock : BlockBase
     /// <inheritdoc/>
     public override async ValueTask DisposeAsync()
     {
-        _dispatcher.JobCompleted -= OnTrialCompletedAsync;
+        _dispatcher.JobCompleted    -= OnTrialCompletedAsync;
+        _dispatcher.ProgressReceived -= OnTrialProgressAsync;
         await base.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -134,45 +174,124 @@ public sealed class HyperparamSearchBlock : BlockBase
         if (!ExtractModelType(signal.Value, out var modelType))
             return null;
 
-        // Store the dataset for subsequent trial dispatches
-        _datasetSignal = signal.Value;
-        _modelType     = string.IsNullOrWhiteSpace(modelType) ? _modelTypeParam.DefaultValue : modelType;
-        _trialIndex    = 0;
+        _datasetSignal     = signal.Value;
+        _modelType         = string.IsNullOrWhiteSpace(modelType) ? _modelTypeParam.DefaultValue : modelType;
+        _trialIndex        = 0;
+        _optunaSearchJobId = null;
         _trialResults.Clear();
 
-        // Emit SEARCH_STARTED status and dispatch the first trial
-        await DispatchNextTrialAsync(ct).ConfigureAwait(false);
+        bool isBayesian = _searchStrategyParam.DefaultValue
+            .Equals("Bayesian", StringComparison.OrdinalIgnoreCase);
 
+        if (isBayesian)
+        {
+            // Delegate the full Optuna study to hyperparam_search.py (single dispatch)
+            await DispatchOptunaSearchAsync(ct).ConfigureAwait(false);
+        }
+        else
+        {
+            // Grid / Random: dispatch first trial individually
+            await DispatchNextTrialAsync(ct).ConfigureAwait(false);
+        }
+
+        int maxTrials = isBayesian ? _nTrialsParam.DefaultValue : _maxTrialsParam.DefaultValue;
         var started = new SearchStatus(
-            ModelType:   _modelType,
-            State:       TrainingState.SearchStarted,
-            TrialIndex:  0,
-            MaxTrials:   _maxTrialsParam.DefaultValue,
-            BestMetric:  float.NaN,
-            BestHyperparams: null);
+            ModelType:       _modelType,
+            State:           TrainingState.SearchStarted,
+            TrialIndex:      0,
+            MaxTrials:       maxTrials,
+            BestMetric:      null,
+            BestHyperparams: null,
+            IsOptunaMode:    isBayesian,
+            NTrials:         isBayesian ? _nTrialsParam.DefaultValue : 0,
+            Direction:       _directionParam.DefaultValue,
+            NPruned:         0);
 
         return EmitObject(BlockId, "search_output", BlockSocketType.TrainingStatus, started);
     }
 
     // ── Trial lifecycle ───────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Handles <c>TRAINING_JOB_PROGRESS</c> events.  In Optuna mode the progress payload
+    /// carries per-trial fields (<c>trial_index</c>, <c>n_trials</c>, <c>best_value</c>,
+    /// <c>is_pruned</c>) that are re-emitted as <see cref="SearchStatus"/> signals so the
+    /// web-app can render live trial progress.
+    /// </summary>
+    private async ValueTask OnTrialProgressAsync(TrainingJobProgressPayload progress, CancellationToken ct)
+    {
+        if (_optunaSearchJobId is null || _optunaSearchJobId.Value != progress.JobId)
+            return;
+
+        var statusSignal = new SearchStatus(
+            ModelType:       _modelType,
+            State:           TrainingState.SearchRunning,
+            TrialIndex:      _trialIndex,
+            MaxTrials:       _nTrialsParam.DefaultValue,
+            BestMetric:      null,
+            BestHyperparams: null,
+            IsOptunaMode:    true,
+            NTrials:         _nTrialsParam.DefaultValue,
+            Direction:       _directionParam.DefaultValue,
+            NPruned:         0);
+
+        await EmitSignalAsync(
+            EmitObject(BlockId, "search_output", BlockSocketType.TrainingStatus, statusSignal), ct)
+            .ConfigureAwait(false);
+    }
+
     private async ValueTask OnTrialCompletedAsync(TrainingJobCompletePayload complete, CancellationToken ct)
     {
-        // Ignore completions from other jobs
+        // ── Optuna search-job complete ────────────────────────────────────────────
+        if (_optunaSearchJobId.HasValue && _optunaSearchJobId.Value == complete.JobId)
+        {
+            _optunaSearchJobId = null;
+
+            float?       bestValue  = null;
+            int          nPruned    = 0;
+            JsonElement? bestParams = null;
+
+            if (complete.Metrics.ValueKind == JsonValueKind.Object)
+            {
+                if (complete.Metrics.TryGetProperty("best_value", out var bv) && bv.TryGetSingle(out var bvf))
+                    bestValue = bvf;
+                if (complete.Metrics.TryGetProperty("n_pruned",   out var np) && np.TryGetInt32(out var npi))
+                    nPruned   = npi;
+                if (complete.Metrics.TryGetProperty("best_params", out var bp) &&
+                    bp.ValueKind == JsonValueKind.Object)
+                    bestParams = bp;
+            }
+
+            var best = new SearchStatus(
+                ModelType:       _modelType,
+                State:           TrainingState.SearchComplete,
+                TrialIndex:      _nTrialsParam.DefaultValue,
+                MaxTrials:       _nTrialsParam.DefaultValue,
+                BestMetric:      bestValue,
+                BestHyperparams: bestParams,
+                IsOptunaMode:    true,
+                NTrials:         _nTrialsParam.DefaultValue,
+                Direction:       _directionParam.DefaultValue,
+                NPruned:         nPruned);
+
+            await EmitSignalAsync(
+                EmitObject(BlockId, "search_output", BlockSocketType.TrainingStatus, best), ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        // ── Per-trial complete (Grid / Random strategies) ─────────────────────────
         if (_activeTrial is null || _activeTrial.Value != complete.JobId) return;
 
         _activeTrial = null;
 
-        // Retrieve hyperparams that were dispatched for this trial
         _pendingHyperparams.Remove(complete.JobId, out var hp);
         var trialHp = hp.ValueKind == JsonValueKind.Undefined
             ? JsonSerializer.SerializeToElement(new { })
             : hp;
 
         float metric = ExtractMetric(complete.Metrics, _optimizeMetricParam.DefaultValue);
-
         _trialResults.Add((trialHp, metric));
-
         _trialIndex++;
 
         if (_trialIndex >= _maxTrialsParam.DefaultValue || IsEarlyStop())
@@ -181,21 +300,23 @@ public sealed class HyperparamSearchBlock : BlockBase
             return;
         }
 
-        // Dispatch next trial
         await DispatchNextTrialAsync(ct).ConfigureAwait(false);
 
-        // Emit progress
         var (bestHp, bestMetric) = GetBestTrial();
-        var progress = new SearchStatus(
+        var progressStatus = new SearchStatus(
             ModelType:       _modelType,
             State:           TrainingState.SearchRunning,
             TrialIndex:      _trialIndex,
             MaxTrials:       _maxTrialsParam.DefaultValue,
             BestMetric:      bestMetric,
-            BestHyperparams: bestHp);
+            BestHyperparams: bestHp,
+            IsOptunaMode:    false,
+            NTrials:         0,
+            Direction:       _minimizeParam.DefaultValue ? "minimize" : "maximize",
+            NPruned:         0);
 
         await EmitSignalAsync(
-            EmitObject(BlockId, "search_output", BlockSocketType.TrainingStatus, progress), ct)
+            EmitObject(BlockId, "search_output", BlockSocketType.TrainingStatus, progressStatus), ct)
             .ConfigureAwait(false);
     }
 
@@ -207,7 +328,6 @@ public sealed class HyperparamSearchBlock : BlockBase
         var jobId       = Guid.NewGuid();
         _activeTrial    = jobId;
 
-        // Record hyperparams so they can be paired with the trial result on completion
         _pendingHyperparams[jobId] = hyperparams;
 
         var payload = new TrainingJobStartPayload(
@@ -215,6 +335,47 @@ public sealed class HyperparamSearchBlock : BlockBase
             ModelType:            _modelType,
             FeatureSchemaVersion: 1,
             Hyperparams:          hyperparams,
+            DataRange:            new TrainingDataRange(
+                                      From: DateTimeOffset.UtcNow.AddYears(-1),
+                                      To:   DateTimeOffset.UtcNow));
+
+        await _dispatcher.DispatchJobAsync(payload, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Dispatches a single <c>TRAINING_JOB_START</c> envelope carrying the full Optuna search
+    /// configuration.  The Shell VM routes this to <c>hyperparam_search.py</c> which runs the
+    /// complete Optuna study and streams results back.
+    /// </summary>
+    private async Task DispatchOptunaSearchAsync(CancellationToken ct)
+    {
+        if (_datasetSignal is null) return;
+
+        var jobId          = Guid.NewGuid();
+        _optunaSearchJobId = jobId;
+
+        var searchHyperparams = JsonSerializer.SerializeToElement(new
+        {
+            search_mode       = "optuna",
+            n_trials          = _nTrialsParam.DefaultValue,
+            direction         = _directionParam.DefaultValue,
+            sampler           = _samplerParam.DefaultValue,
+            pruner            = _prunerParam.DefaultValue,
+            epochs_per_trial  = _epochsPerTrialParam.DefaultValue,
+            batch_size        = 512,
+            search_space      = new
+            {
+                lr          = new[] { _lrMinParam.DefaultValue,      _lrMaxParam.DefaultValue },
+                dropout     = new[] { _dropoutMinParam.DefaultValue,  _dropoutMaxParam.DefaultValue },
+                hidden_dims = ParseHiddenDimsChoices(_hiddenDimsChoicesParam.DefaultValue),
+            },
+        });
+
+        var payload = new TrainingJobStartPayload(
+            JobId:                jobId,
+            ModelType:            _modelType,
+            FeatureSchemaVersion: 1,
+            Hyperparams:          searchHyperparams,
             DataRange:            new TrainingDataRange(
                                       From: DateTimeOffset.UtcNow.AddYears(-1),
                                       To:   DateTimeOffset.UtcNow));
@@ -232,7 +393,11 @@ public sealed class HyperparamSearchBlock : BlockBase
             TrialIndex:      _trialIndex,
             MaxTrials:       _maxTrialsParam.DefaultValue,
             BestMetric:      bestMetric,
-            BestHyperparams: bestHp);
+            BestHyperparams: bestHp,
+            IsOptunaMode:    false,
+            NTrials:         0,
+            Direction:       _minimizeParam.DefaultValue ? "minimize" : "maximize",
+            NPruned:         0);
 
         await EmitSignalAsync(
             EmitObject(BlockId, "search_output", BlockSocketType.TrainingStatus, best), ct)
@@ -424,15 +589,45 @@ public sealed class HyperparamSearchBlock : BlockBase
         return true;
     }
 
+    /// <summary>
+    /// Parses a JSON-encoded string of hidden-dim arrays into a jagged int array.
+    /// Falls back to <c>[[64,32],[128,64,32]]</c> on any parse error.
+    /// </summary>
+    private static int[][] ParseHiddenDimsChoices(string json)
+    {
+        try
+        {
+            var doc = JsonDocument.Parse(json);
+            return doc.RootElement
+                .EnumerateArray()
+                .Select(arr => arr.EnumerateArray().Select(x => x.GetInt32()).ToArray())
+                .ToArray();
+        }
+        catch
+        {
+            return [[64, 32], [128, 64, 32]];
+        }
+    }
+
     // ── Wire types ────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Status signal emitted by <see cref="HyperparamSearchBlock"/> on every meaningful
+    /// state transition (search started, per-trial progress, search complete).
+    /// Extends the base search-status fields with Optuna-specific metadata when
+    /// <see cref="IsOptunaMode"/> is <see langword="true"/>.
+    /// </summary>
     internal sealed record SearchStatus(
         [property: JsonPropertyName("model_type")]        string       ModelType,
         [property: JsonPropertyName("state")]             string       State,
         [property: JsonPropertyName("trial_index")]       int          TrialIndex,
         [property: JsonPropertyName("max_trials")]        int          MaxTrials,
-        [property: JsonPropertyName("best_metric")]       float        BestMetric,
-        [property: JsonPropertyName("best_hyperparams")]  JsonElement? BestHyperparams);
+        [property: JsonPropertyName("best_metric")]       float?       BestMetric,
+        [property: JsonPropertyName("best_hyperparams")]  JsonElement? BestHyperparams,
+        [property: JsonPropertyName("is_optuna_mode")]    bool         IsOptunaMode  = false,
+        [property: JsonPropertyName("n_trials")]          int          NTrials       = 0,
+        [property: JsonPropertyName("direction")]         string       Direction     = "maximize",
+        [property: JsonPropertyName("n_pruned")]          int          NPruned       = 0);
 
     // ── Null dispatcher (for registry introspection) ──────────────────────────────
 
