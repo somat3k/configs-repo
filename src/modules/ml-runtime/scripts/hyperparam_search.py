@@ -273,9 +273,10 @@ def _emit_study_complete(
         "n_pruned":    n_pruned,
         "duration_ms": duration_ms,
         "metrics": {
-            "best_value": round(best_value, 6),
-            "n_complete": float(n_complete),
-            "n_pruned":   float(n_pruned),
+            "best_value":  round(best_value, 6),
+            "best_params": best_params,
+            "n_complete":  int(n_complete),
+            "n_pruned":    int(n_pruned),
         },
         "is_hyperparam_search": True,
     }
@@ -392,8 +393,12 @@ def _train_trial(
         # TODO: differentiate by model type when Sharpe ratio data is available from Python pipeline.
         intermediate_value = accuracy
 
-        # Update running best
-        if math.isnan(best_value_ref[0]) or intermediate_value > best_value_ref[0]:
+        # Update running best using the configured study direction.
+        if math.isnan(best_value_ref[0]) or (
+            intermediate_value < best_value_ref[0]
+            if cfg.direction == "minimize"
+            else intermediate_value > best_value_ref[0]
+        ):
             best_value_ref[0] = intermediate_value
 
         _emit_trial_epoch(
@@ -594,8 +599,10 @@ def run_study(cfg: SearchConfig) -> None:
 
         elapsed_ms = int((time.monotonic() - study_start) * 1000)
 
-        # Update running best
-        if math.isnan(best_value_ref[0]) or value > best_value_ref[0]:
+        # Update running best using the configured study direction.
+        if math.isnan(best_value_ref[0]) or (
+            value > best_value_ref[0] if cfg.direction == "maximize" else value < best_value_ref[0]
+        ):
             best_value_ref[0] = value
 
         _emit_trial_summary(

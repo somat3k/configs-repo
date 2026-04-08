@@ -539,6 +539,9 @@
             _modelType = p.TryGetProperty("model_type", out var mt) ? mt.GetString() : _modelType;
             _nTrials   = p.TryGetProperty("n_trials",   out var nt) ? nt.GetInt32()  : _nTrials;
 
+            if (p.TryGetProperty("direction", out var dir) && dir.ValueKind == System.Text.Json.JsonValueKind.String)
+                _direction = dir.GetString() ?? _direction;
+
             if (p.TryGetProperty("trial_index", out var ti))
                 _currentTrial = ti.GetInt32() + 1;  // 0-based in Python → 1-based display
 

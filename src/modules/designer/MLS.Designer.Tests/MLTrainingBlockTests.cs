@@ -263,10 +263,11 @@ public sealed class MLTrainingBlockTests
         // Start the search
         await block.ProcessAsync(MakeFeatureVectorSignal("model-t"), CancellationToken.None);
 
-        // Simulate the study-complete envelope from Shell VM
-        var jobId      = dispatcher.Dispatched[0].JobId;
-        var bestParams = JsonSerializer.SerializeToElement(new { lr = 0.001f, dropout = 0.2f });
-        var metrics    = JsonSerializer.SerializeToElement(new
+        // Simulate the study-complete envelope from Shell VM.
+        // Metrics shape matches the real hyperparam_search.py _emit_study_complete output:
+        // best_params is nested inside metrics, n_pruned is an integer.
+        var jobId   = dispatcher.Dispatched[0].JobId;
+        var metrics = JsonSerializer.SerializeToElement(new
         {
             best_value  = 0.73f,
             n_pruned    = 3,

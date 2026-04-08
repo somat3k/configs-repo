@@ -39,6 +39,7 @@ public sealed class HyperparamSearchBlock : BlockBase
     private JsonElement? _datasetSignal;   // Stored split bundle from TrainSplitBlock
     private string       _modelType   = "model-t";
     private int          _trialIndex  = 0;
+    private int          _prunedCount = 0;   // Running count of pruned trials (Optuna mode)
     private Guid?        _activeTrial = null;
 
     // Optuna-mode: a single search-job ID replaces N individual trial IDs
@@ -177,7 +178,10 @@ public sealed class HyperparamSearchBlock : BlockBase
         _datasetSignal     = signal.Value;
         _modelType         = string.IsNullOrWhiteSpace(modelType) ? _modelTypeParam.DefaultValue : modelType;
         _trialIndex        = 0;
+        _prunedCount       = 0;
         _optunaSearchJobId = null;
+        _activeTrial       = null;
+        _pendingHyperparams.Clear();
         _trialResults.Clear();
 
         bool isBayesian = _searchStrategyParam.DefaultValue
@@ -227,6 +231,10 @@ public sealed class HyperparamSearchBlock : BlockBase
         if (progress.TrialIndex.HasValue)
             _trialIndex = progress.TrialIndex.Value;
 
+        // Count each pruned-trial summary message exactly once
+        if (progress.IsPruned == true)
+            _prunedCount++;
+
         var statusSignal = new SearchStatus(
             ModelType:       _modelType,
             State:           TrainingState.SearchRunning,
@@ -237,7 +245,7 @@ public sealed class HyperparamSearchBlock : BlockBase
             IsOptunaMode:    true,
             NTrials:         progress.NTrials ?? _nTrialsParam.DefaultValue,
             Direction:       _directionParam.DefaultValue,
-            NPruned:         0);
+            NPruned:         _prunedCount);
 
         await EmitSignalAsync(
             EmitObject(BlockId, "search_output", BlockSocketType.TrainingStatus, statusSignal), ct)
@@ -601,7 +609,8 @@ public sealed class HyperparamSearchBlock : BlockBase
     {
         try
         {
-            var doc = JsonDocument.Parse(json);
+            using var doc = JsonDocument.Parse(json);
+            // Materialise the arrays eagerly before the JsonDocument is disposed.
             return doc.RootElement
                 .EnumerateArray()
                 .Select(arr => arr.EnumerateArray().Select(x => x.GetInt32()).ToArray())
