@@ -1,6 +1,7 @@
 @using MLS.Core.Designer
 @using MLS.Core.Constants
 @using Microsoft.AspNetCore.Components.Web
+@using System.Collections.Concurrent
 @inject IJSRuntime JS
 @inject IBlockControllerHub Hub
 @implements IAsyncDisposable
@@ -89,7 +90,7 @@
                         <span id="blk-@(b.BlockId)-dot"
                               class="block-status-dot"
                               title="@(metrics?.Status.ToString() ?? "Active")"
-                              style="background:@GetStatusColor(metrics?.Status ?? BlockStatus.Active)"></span>
+                              style="background:@GetStatusColor(metrics?.Status ?? BlockStatus.Active); color:@GetStatusColor(metrics?.Status ?? BlockStatus.Active)"></span>
                     </div>
 
                     @* Input sockets (left side) *@
@@ -413,16 +414,20 @@
 
     private readonly List<BlockViewModel> _blocks = [];
     private readonly List<ConnectionViewModel> _connections = [];
+    // Guards _blocks and _connections against concurrent access from the signal-consumer task
+    private readonly object _syncRoot = new();
 
     // ── Live pulse / metrics ──────────────────────────────────────────────────
     private CancellationTokenSource _cts = new();
-    private readonly Dictionary<Guid, BlockMetrics> _blockMetrics = [];
+    private readonly ConcurrentDictionary<Guid, BlockMetrics> _blockMetrics = new();
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
+        if (!Hub.IsConnected)
+            await Hub.ConnectAsync(_cts.Token).ConfigureAwait(false);
+
         _ = ConsumeBlockSignalsAsync(_cts.Token);
         _ = RunBadgeFlushLoopAsync(_cts.Token);
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -445,14 +450,26 @@
                     ? snProp.GetString() ?? ""
                     : "";
 
+                // ── Take immutable snapshots of UI-thread lists ───────────────
+                // _blocks and _connections are mutated on the Blazor UI thread
+                // (palette drag/drop, connection drawing). Take copies here so
+                // the background loop never races against those mutations.
+                BlockViewModel[] blockSnapshot;
+                ConnectionViewModel[] connSnapshot;
+                lock (_syncRoot)
+                {
+                    blockSnapshot = [.. _blocks];
+                    connSnapshot  = [.. _connections];
+                }
+
                 // ── Find matching connection ──────────────────────────────────
-                var block = _blocks.FirstOrDefault(b => b.BlockId == blockId);
+                var block = blockSnapshot.FirstOrDefault(b => b.BlockId == blockId);
                 if (block is not null)
                 {
                     var socket = block.OutputSockets.FirstOrDefault(s => s.Name == socketName);
                     if (socket is not null)
                     {
-                        var conn = _connections.FirstOrDefault(
+                        var conn = connSnapshot.FirstOrDefault(
                             c => c.FromBlockId == blockId && c.FromSocketId == socket.SocketId);
 
                         if (conn is not null)
@@ -467,12 +484,8 @@
                         }
                     }
 
-                    // ── Record metrics ────────────────────────────────────────
-                    if (!_blockMetrics.TryGetValue(blockId, out var metrics))
-                    {
-                        metrics = new BlockMetrics();
-                        _blockMetrics[blockId] = metrics;
-                    }
+                    // ── Record metrics (ConcurrentDictionary, GetOrAdd) ───────
+                    var metrics = _blockMetrics.GetOrAdd(blockId, _ => new BlockMetrics());
 
                     // Estimate latency from envelope timestamp if available
                     var latencyMs = env.Payload.TryGetProperty("timestamp", out var tsProp) &&
@@ -500,7 +513,7 @@
         {
             while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
             {
-                foreach (var (blockId, metrics) in _blockMetrics)
+                foreach (var (blockId, metrics) in _blockMetrics.ToArray())
                 {
                     metrics.Flush();
                     await JS.InvokeVoidAsync(
@@ -542,7 +555,9 @@
 
     private async Task FitToView()
     {
-        if (_blocks.Count == 0) return;
+        bool hasBlocks;
+        lock (_syncRoot) hasBlocks = _blocks.Count > 0;
+        if (!hasBlocks) return;
         _panX = 20; _panY = 20; _zoom = 1.0;
         await JS.InvokeVoidAsync("mlsCanvas.fitToView").ConfigureAwait(false);
     }
@@ -609,7 +624,9 @@
 
     private void OnSocketMouseDown(MouseEventArgs args, Guid blockId, Guid socketId)
     {
-        var block = _blocks.First(b => b.BlockId == blockId);
+        BlockViewModel block;
+        lock (_syncRoot)
+            block = _blocks.First(b => b.BlockId == blockId);
         var sockIdx = block.OutputSockets.FindIndex(s => s.SocketId == socketId);
         var startY = block.Y + 32 + sockIdx * 22 + 11;
         _pendingConnection = new(blockId, socketId, block.X + 180, startY, args.ClientX, args.ClientY);
@@ -618,30 +635,40 @@
     private void OnSocketMouseUp(Guid blockId, Guid socketId, bool isInput)
     {
         if (_pendingConnection is null || !isInput) return;
-        _connections.Add(new ConnectionViewModel(
-            Guid.NewGuid(),
-            _pendingConnection.FromBlockId,
-            _pendingConnection.FromSocketId,
-            blockId,
-            socketId));
+        lock (_syncRoot)
+        {
+            _connections.Add(new ConnectionViewModel(
+                Guid.NewGuid(),
+                _pendingConnection.FromBlockId,
+                _pendingConnection.FromSocketId,
+                blockId,
+                socketId));
+        }
         _pendingConnection = null;
     }
 
     private void OnPaletteBlockDragStart(string blockType)
     {
         // Add block at a default position; refined in OnDrop
-        var block = CreateBlock(blockType, 200 + _blocks.Count * 30, 100 + _blocks.Count * 20);
-        _blocks.Add(block);
+        BlockViewModel block;
+        lock (_syncRoot)
+        {
+            block = CreateBlock(blockType, 200 + _blocks.Count * 30, 100 + _blocks.Count * 20);
+            _blocks.Add(block);
+        }
     }
 
     private void OnDrop(DragEventArgs args)
     {
         // If a palette drag is in progress, position the last-added block at drop point
-        if (_blocks.Count > 0)
+        lock (_syncRoot)
         {
-            var last = _blocks[^1];
-            last.X = (args.ClientX - _panX) / _zoom - 90;
-            last.Y = (args.ClientY - _panY) / _zoom - 20;
+            if (_blocks.Count > 0)
+            {
+                var last = _blocks[^1];
+                last.X = (args.ClientX - _panX) / _zoom - 90;
+                last.Y = (args.ClientY - _panY) / _zoom - 20;
+            }
         }
     }
 

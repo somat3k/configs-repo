@@ -67,7 +67,9 @@
         animMotion.setAttribute('rotate', 'auto');
 
         const mpath = document.createElementNS(NS, 'mpath');
-        mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#' + pathId);
+        // Set both SVG 1.1 (xlink:href) and SVG 2 (href) for maximum browser compatibility
+        mpath.setAttribute('href', '#' + pathId);
+        mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#' + pathId);
         animMotion.appendChild(mpath);
         circle.appendChild(animMotion);
 
@@ -80,8 +82,8 @@
         animOpacity.setAttribute('fill', 'remove');
         circle.appendChild(animOpacity);
 
-        // ── Glow using filter (no layout reflow) ─────────────────────────────
-        const filterId = 'pulse-glow-' + connectionId;
+        // ── Glow using a single shared filter per SVG (no layout reflow) ────────
+        const filterId = 'pulse-glow';
         let filter = svg.querySelector('#' + filterId);
         if (!filter) {
             const defs = svg.querySelector('defs') || (() => {
@@ -144,7 +146,10 @@
         _setText(prefix + '-err', errorRatePct.toFixed(1) + '%');
 
         const dot = document.getElementById(prefix + '-dot');
-        if (dot) dot.style.background = statusColor;
+        if (dot) {
+            dot.style.background = statusColor;
+            dot.style.color = statusColor;
+        }
     };
 
     // ── LiveOverlay direct-DOM update ─────────────────────────────────────────
