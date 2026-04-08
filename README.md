@@ -43,42 +43,7 @@ Each workflow page is **self-contained**: it fetches live data, runs the same fu
 
 ## 🏗️ Architecture Overview
 
-```
-┌─────────────────── Web App (Blazor MDI) ──────────────────────┐
-│   Trader │ Arbitrager │ DeFi │ Network │ Observatory │ Config  │
-└───────────────────────┬───────────────────────────────────────┘
-                        │ SignalR/WebSocket
-          ┌─────────────▼──────────────┐
-          │     Block Controller       │  ← Orchestration Hub
-          │      (port 5100/6100)      │
-          └──────┬────────┬────────────┘
-      ┌──────────┤        └────────────────┐
-      │          │                         │
- ┌────▼───┐ ┌───▼────┐ ┌───────┐ ┌───────▼──────┐
- │ Trader │ │  Arb   │ │ DeFi  │ │  ML Runtime  │
- │  5300  │ │  5400  │ │ 5500  │ │   5600/6600  │
- └────────┘ └────────┘ └───────┘ └──────────────┘
-          │          │         │
-     ┌────▼──────────▼─────────▼────┐
-     │        Data-Driven Layer     │
-     │  PostgreSQL │ Redis │  IPFS  │
-     └──────────────────────────────┘
-```
-
-## 📦 Modules
-
-| Module | Port (HTTP/WS) | Role | Status |
-|--------|----------------|------|--------|
-| [block-controller](src/block-controller/README.md) | 5100/6100 | Orchestration hub | ✅ Active |
-| [web-app](src/web-app/README.md) | 5200/6200 | Blazor MDI UI | ✅ Active |
-| [designer](src/modules/designer/README.md) | 5250/6250 | Block graph composer | ✅ Active |
-| [trader](src/modules/trader/README.md) | 5300/6300 | Algo trading model | 🔧 Scaffold |
-| [arbitrager](src/modules/arbitrager/README.md) | 5400/6400 | Arbitrage model | 🔧 Scaffold |
-| [defi](src/modules/defi/README.md) | 5500/6500 | DeFi services | 🔧 Scaffold |
-| [ml-runtime](src/modules/ml-runtime/README.md) | 5600/6600 | ML training & inference | 🔧 Scaffold |
-| [data-layer](src/modules/data-layer/README.md) | 5700/6700 | Hydra OHLCV feed collection, gap detection, backfill | ✅ Active |
-| [ai-hub](src/modules/ai-hub/README.md) | 5750/6750 | AI chat & canvas dispatch | ✅ Active |
-| [broker](src/modules/broker/README.md) | 5800/6800 | Broker integration (HYPERLIQUID) | 🔧 Scaffold |
+> For the canonical platform diagram, module inventory, and startup details, see the primary **Architecture Overview** and **Modules** sections later in this README. This avoids maintaining duplicate documentation blocks in multiple places.
 | [transactions](src/modules/transactions/README.md) | 5900/6900 | Transaction manager | 🔧 Scaffold |
 | [network-modules](src/network-modules/README.md) | — | ID gen, registry, runtime, VM | 🔧 Scaffold |
 | **[workflow-demo](src/workflow-demo/MLS.WorkflowDemo/)** | **5099** | **Standalone workflow examples (this session)** | ✅ **New** |
