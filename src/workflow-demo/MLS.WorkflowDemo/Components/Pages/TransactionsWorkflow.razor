@@ -111,7 +111,7 @@
             var type   = i % 3 == 0 ? "SWAP" : i % 3 == 1 ? "PERP_OPEN" : "WITHDRAW";
             var hash   = $"0x{Math.Abs(m.Symbol.GetHashCode(StringComparison.Ordinal) ^ i):x8}…";
             var val    = $"${Math.Round(m.Mid * 0.1m, 2)}";
-            var gas    = $"${Math.Round(_gasPrice * 21000m / 1e9m * m.Mid, 4)}";
+            var gas    = $"${Math.Round(_gasPrice * 21000m / 1_000_000_000m * m.Mid, 4)}";
             var status = i == 0 ? "PENDING" : "CONFIRMED";
             var block  = i == 0 ? "—" : $"#{200_000_000 + i * 7}";
             return new TxEntry(hash, type, m.Symbol, val, gas, status, block);

@@ -63,8 +63,29 @@ public sealed class WorkflowDataService(
         try   { return await pipeline().ConfigureAwait(false); }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "External API unreachable — using built-in market snapshot");
+            logger.LogWarning(ex, "External API unreachable — using built-in fallback data");
             return fallback();
+        }
+    }
+
+    /// <summary>
+    /// Process-stable FNV-1a 32-bit hash. Avoids relying on
+    /// <see cref="string.GetHashCode()"/> which is randomised per-process in .NET.
+    /// </summary>
+    private static int FnvHash(string s)
+    {
+        unchecked
+        {
+            const uint fnvPrime  = 16_777_619u;
+            uint       hash      = 2_166_136_261u;
+            foreach (char c in s)
+            {
+                hash ^= (byte)(c & 0xFF);
+                hash *= fnvPrime;
+                hash ^= (byte)(c >> 8);
+                hash *= fnvPrime;
+            }
+            return (int)(hash & 0x7FFF_FFFFu);
         }
     }
 
@@ -110,9 +131,10 @@ public sealed class WorkflowDataService(
     private static IReadOnlyList<Candle> BuiltInCandles(string coin)
     {
         // Generate 60 realistic 1m OHLCV bars by walking from a seed price.
+        // FnvHash ensures the sequence is identical across process restarts.
         var markets = BuiltInMarkets();
         var seed    = markets.FirstOrDefault(m => m.Symbol == coin)?.Mid ?? 3_441m;
-        var rng     = new Random(Math.Abs(coin.GetHashCode(StringComparison.Ordinal)));
+        var rng     = new Random(FnvHash(coin));
         var candles = new List<Candle>(60);
         var price   = seed * 0.98m;
         var baseMs  = DateTimeOffset.UtcNow.AddMinutes(-60).ToUnixTimeMilliseconds();
@@ -148,9 +170,9 @@ public sealed class WorkflowDataService(
         new("GMX",           620_000_000, "Derivatives",    3.8,  ["Arbitrum","Avalanche"]),
         new("Aave",        10_800_000_000,"Lending",        1.2,  ["Ethereum","Arbitrum","Polygon"]),
         new("Curve",       3_100_000_000, "DEX",           -0.8,  ["Ethereum","Arbitrum"]),
-        new("Uniswap",     5_900_000_000, "DEX",            6.1,  ["Ethereum","Arbitrum","Base"]),
         new("DFYN",           12_000_000, "DEX",            8.3,  ["Arbitrum","Polygon"]),
         new("Radiant",       140_000_000, "Lending",        5.5,  ["Arbitrum","BNB"]),
+        new("Pendle",        420_000_000, "Yield",         11.2,  ["Arbitrum","Ethereum"]),
     ];
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -225,14 +247,14 @@ public sealed class WorkflowDataService(
         {
             using var c = CreateClient();
             var all = await HttpGet<List<DefiProtocol>>()(c, LlamaUri.ToString(), ct);
-            // Filter to protocols relevant to MLS (Arbitrum-adjacent DeFi)
+            // Filter to protocols relevant to MLS (Arbitrum-adjacent DeFi, no Uniswap)
             var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "Hyperliquid", "Camelot", "Balancer", "Morpho", "GMX",
-                "Arbitrum Bridge", "Uniswap", "Aave", "DFYN", "Curve"
+                "Arbitrum Bridge", "Aave", "DFYN", "Curve", "Radiant", "Pendle"
             };
             return (IReadOnlyList<DefiProtocol>)all
-                .Where(p => targets.Contains(p.Name) && p.Tvl > 0)
+                .Where(p => targets.Contains(p.Name) && (p.Tvl ?? 0) > 0)
                 .OrderByDescending(static p => p.Tvl)
                 .Take(10)
                 .ToList()
@@ -242,8 +264,12 @@ public sealed class WorkflowDataService(
     // ── Functional feature-engineering pipeline ───────────────────────────────
 
     /// <summary>
-    /// Derives a <see cref="FeatureVector"/> from a candle slice using pure
-    /// functional transforms identical to the <c>MLS.DataLayer.FeatureEngineer</c>.
+    /// Derives a <see cref="FeatureVector"/> from a candle slice using the same
+    /// 8-feature approach as <c>MLS.DataLayer.FeatureEngineer</c> (RSI-14, MACD signal,
+    /// Bollinger-Band position, volume delta, momentum-20, ATR normalised, spread bps,
+    /// VWAP distance). The formulas here are a simplified demo variant — the production
+    /// implementation in <c>MLS.DataLayer</c> requires a minimum window of 34 candles
+    /// and applies Wilder's smoothing in a single pass.
     /// </summary>
     public static FeatureVector EngineerFeatures(string symbol, IReadOnlyList<Candle> candles)
     {
@@ -327,11 +353,9 @@ public sealed class WorkflowDataService(
     public static IReadOnlyList<ArbOpportunity> ComputeArbOpportunities(
         IReadOnlyList<AssetMarket> markets)
     {
-        // Deterministic venue offset factors derived from symbol hash
-        // so results are stable across renders for the same market state.
+        // Deterministic venue offset derived from FNV-1a hash (stable across process restarts).
         static decimal VenueOffset(string symbol, string venue) =>
-            ((symbol.GetHashCode(StringComparison.Ordinal) ^ venue.GetHashCode(StringComparison.Ordinal)) & 0xFF)
-            / 100_000m; // ±0.00001 to ±0.00255 — realistic for CEX/DEX spread
+            (FnvHash(symbol + venue) & 0xFF) / 100_000m; // ±0.00001 to ±0.00255 — realistic for CEX/DEX spread
 
         var venues = new[] { ("Camelot", 0.80m), ("DFYN", 0.55m), ("Hyperliquid", 1.2m), ("nHOP", 0.40m) };
 
@@ -351,7 +375,7 @@ public sealed class WorkflowDataService(
                 var worst = g.OrderBy(x => x.venuePrice).First();
                 var spread = best.m.Mid == 0m ? 0m
                     : (best.venuePrice - worst.venuePrice) / worst.venuePrice * 10_000m;
-                var gasUsd = 1.20m + (decimal)(g.Key.GetHashCode(StringComparison.Ordinal) & 0x3F) / 100m;
+                var gasUsd = 1.20m + (decimal)(FnvHash(g.Key) & 0x3F) / 100m;
                 var notional = worst.venuePrice * 1m; // 1 unit
                 var grossPnl = best.venuePrice - worst.venuePrice;
                 return new ArbOpportunity(

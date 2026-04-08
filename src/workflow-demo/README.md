@@ -60,14 +60,17 @@ Pages/
 ## Playwright Screenshots
 
 ```bash
-# 1. Start the demo app
+# 1. Start the demo app (from repo root)
 dotnet run --project src/workflow-demo/MLS.WorkflowDemo &
 
-# 2. Install Playwright
-cd /tmp && mkdir pw && cd pw && npm init -y && npm install playwright
+# 2. Install Playwright (also from repo root)
+cd src/workflow-demo
+npm init -y
+npm install playwright
 npx playwright install chromium
+cd ../..
 
-# 3. Run the screenshot script
+# 3. Run the screenshot script from the repo root
 node src/workflow-demo/playwright-screenshot.js
 
 # Screenshots saved to docs/screenshots/
@@ -77,6 +80,6 @@ node src/workflow-demo/playwright-screenshot.js
 
 - **Universal function-based**: all data transforms are pure functions (`Func<T>` composition, LINQ, static methods). No side-effects in the data pipeline.
 - **Self-contained**: zero dependencies on other MLS modules. One `dotnet run` is all that's needed.
-- **Identical pipeline**: `WorkflowDataService.EngineerFeatures()` uses the same 8 formulas as `MLS.DataLayer.FeatureEngineer`.
+- **Demo pipeline**: `WorkflowDataService.EngineerFeatures()` demonstrates the same 8 features as `MLS.DataLayer.FeatureEngineer` using a simplified variant (14-candle minimum vs 34 in production).
 - **Graceful fallback**: `SafeAsync` catches network failures and returns `BuiltIn*()` data so every page always renders.
 - **Playwright sentinel**: every data-loading page renders `<div id="data-loaded">` when `OnInitializedAsync` completes, giving Playwright a reliable wait target.

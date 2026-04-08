@@ -27,7 +27,8 @@ app.MapRazorComponents<App>()
 
 app.MapHealthChecks("/health");
 
-app.Urls.Add("http://0.0.0.0:5099");
+// Default to localhost; override with ASPNETCORE_URLS for LAN / container access.
+app.Urls.Add("http://localhost:5099");
 
 app.Logger.LogInformation("MLS WorkflowDemo starting on http://localhost:5099");
 app.Logger.LogInformation("Workflow index: http://localhost:5099/workflow");
