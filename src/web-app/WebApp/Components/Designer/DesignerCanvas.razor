@@ -624,9 +624,10 @@
 
     private void OnSocketMouseDown(MouseEventArgs args, Guid blockId, Guid socketId)
     {
-        BlockViewModel block;
+        BlockViewModel? block;
         lock (_syncRoot)
-            block = _blocks.First(b => b.BlockId == blockId);
+            block = _blocks.FirstOrDefault(b => b.BlockId == blockId);
+        if (block is null) return;
         var sockIdx = block.OutputSockets.FindIndex(s => s.SocketId == socketId);
         var startY = block.Y + 32 + sockIdx * 22 + 11;
         _pendingConnection = new(blockId, socketId, block.X + 180, startY, args.ClientX, args.ClientY);

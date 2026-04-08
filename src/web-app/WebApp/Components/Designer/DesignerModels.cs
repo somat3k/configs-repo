@@ -1,3 +1,4 @@
+using MLS.Core.Constants;
 using MLS.Core.Designer;
 
 namespace MLS.WebApp.Components.Designer;
@@ -128,11 +129,11 @@ public sealed class BlockMetrics
                 : 0;
         }
 
-        Status = ErrorRatePct >= 20
+        Status = ErrorRatePct >= BlockStatusThresholds.ErrorRatePct
             ? BlockStatus.Error
             : MessagesPerSecond == 0 && LatencyMs == 0
                 ? BlockStatus.Active          // idle — no data yet, show green
-                : ErrorRatePct >= 5
+                : ErrorRatePct >= BlockStatusThresholds.DegradedRatePct
                     ? BlockStatus.Degraded
                     : BlockStatus.Active;
     }
