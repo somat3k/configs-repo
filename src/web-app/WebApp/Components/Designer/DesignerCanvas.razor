@@ -461,9 +461,9 @@
                             var color = GetSocketColor(socket.SocketType);
                             await JS.InvokeVoidAsync(
                                 "mlsPulse.triggerPulse",
-                                ct,
                                 conn.ConnectionId.ToString(),
-                                color).ConfigureAwait(false);
+                                color,
+                                ct).ConfigureAwait(false);
                         }
                     }
 
@@ -505,12 +505,12 @@
                     metrics.Flush();
                     await JS.InvokeVoidAsync(
                         "mlsPulse.updateBlockBadge",
-                        ct,
                         blockId.ToString(),
                         metrics.LatencyMs,
                         metrics.MessagesPerSecond,
                         metrics.ErrorRatePct,
-                        GetStatusColor(metrics.Status)).ConfigureAwait(false);
+                        GetStatusColor(metrics.Status),
+                        ct).ConfigureAwait(false);
                 }
             }
         }

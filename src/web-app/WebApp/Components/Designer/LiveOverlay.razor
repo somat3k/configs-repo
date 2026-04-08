@@ -145,10 +145,10 @@
                 // Direct DOM update — no Blazor StateHasChanged
                 await JS.InvokeVoidAsync(
                     "mlsPulse.updateOverlay",
-                    ct,
                     _infPerSec,
                     _fillRatePct,
-                    (object?)_plDelta).ConfigureAwait(false);
+                    (object?)_plDelta,
+                    ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { /* clean shutdown */ }
