@@ -13,6 +13,7 @@
     <Version>1.0.0</Version>
     <PublishSingleFile>false</PublishSingleFile>
     <!-- No RuntimeIdentifier: benchmark project is portable -->
+    <StartupObject>MLS.Benchmarks.BenchmarkProgram</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />

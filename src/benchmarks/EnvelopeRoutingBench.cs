@@ -42,7 +42,7 @@ public class EnvelopeRoutingBench
     {
         _table = new InProcessSubscriptionTable();
 
-        // Populate 1 000 topics, each with 4 subscribers — realistic production scale
+        // Populate 1 000 strategy-scoped topics, each with 4 subscribers
         for (int i = 0; i < 1_000; i++)
         {
             var topic = $"strategy/{Guid.NewGuid():N}/block_{i}/out";
@@ -50,18 +50,23 @@ public class EnvelopeRoutingBench
                 _table.Add(topic, Guid.NewGuid());
 
             if (i == 500)
-                _populatedTopic = topic; // a real "hot" topic
+                _populatedTopic = topic; // a real "hot" strategy topic
         }
 
         _hotTopic = _populatedTopic;
 
-        // Pre-build an envelope and serialise to JSON bytes for the parse bench
+        // Pre-build an envelope serialised to JSON bytes for the parse bench
         _prebuiltEnvelope = EnvelopePayload.Create(
             MessageTypes.TradeSignal,
             "trader",
             new { signal = "BUY", confidence = 0.87, symbol = "BTC-USDT" });
 
         _envelopeJson = JsonSerializer.SerializeToUtf8Bytes(_prebuiltEnvelope);
+
+        // Also register 4 subscribers keyed by envelope.Type so the E2E bench
+        // exercises the subscriber-iteration path (hit path) rather than the miss path.
+        for (int j = 0; j < 4; j++)
+            _table.Add(MessageTypes.TradeSignal, Guid.NewGuid());
     }
 
     // ── Benchmarks ────────────────────────────────────────────────────────────

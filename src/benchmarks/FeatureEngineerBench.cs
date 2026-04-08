@@ -23,6 +23,10 @@ public class FeatureEngineerBench
     private OhlcvCandle[] _window100 = null!;
     private OhlcvCandle[] _window200 = null!;   // target production window
 
+    // Fixed timestamp captured once in Setup so the ToPlotSamples benchmark
+    // measures only projection/allocation cost, not DateTimeOffset.UtcNow overhead.
+    private DateTimeOffset _fixedTimestamp;
+
     // ── Setup ─────────────────────────────────────────────────────────────────
 
     [GlobalSetup]
@@ -34,6 +38,8 @@ public class FeatureEngineerBench
         _window34  = BuildCandles(rng, FeatureEngineer.MinWindowLength, 50_000.0);
         _window100 = BuildCandles(rng, 100, 50_000.0);
         _window200 = BuildCandles(rng, 200, 50_000.0);
+
+        _fixedTimestamp = DateTimeOffset.UtcNow;
     }
 
     // ── Benchmarks ────────────────────────────────────────────────────────────
@@ -65,12 +71,14 @@ public class FeatureEngineerBench
     /// Converts a computed feature vector to chart-ready plot samples.
     /// Exercises the <see cref="FeatureEngineer.ToPlotSamples"/> allocation path.
     /// Returns the full sample list to prevent the JIT from eliding the call.
+    /// Uses a fixed timestamp captured in <see cref="Setup"/> to avoid
+    /// <see cref="DateTimeOffset.UtcNow"/> overhead skewing results.
     /// </summary>
     [Benchmark(Description = "ToPlotSamples — project FeatureVector to 8 IndicatorPlotSamples")]
     public IReadOnlyList<IndicatorPlotSample> ToPlotSamples()
     {
-        var vector  = _engineer.ComputeModelT(_window200);
-        return FeatureEngineer.ToPlotSamples(vector, DateTimeOffset.UtcNow);
+        var vector = _engineer.ComputeModelT(_window200);
+        return FeatureEngineer.ToPlotSamples(vector, _fixedTimestamp);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

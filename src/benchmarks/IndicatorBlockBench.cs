@@ -43,6 +43,10 @@ public class IndicatorBlockBench
     // 200 candles: realistic live-window size
     private (double High, double Low, double Close, double Volume)[] _candles200 = null!;
 
+    // Precomputed close-price arrays derived from _candles200 — avoid per-iteration
+    // Array.ConvertAll allocation that would inflate timing and allocation stats.
+    private double[] _closes200 = null!;
+
     [GlobalSetup]
     public void Setup()
     {
@@ -67,6 +71,9 @@ public class IndicatorBlockBench
             _candles200[i] = (high, low, close, vol);
             price = close;
         }
+
+        // Precompute the close-price array once so benchmark methods are allocation-free
+        _closes200 = Array.ConvertAll(_candles200, c => c.Close);
     }
 
     // ── RSI ───────────────────────────────────────────────────────────────────
@@ -86,8 +93,7 @@ public class IndicatorBlockBench
     /// </summary>
     [Benchmark(Description = "RSI(14) full 200-price window")]
     [BenchmarkCategory("RSI")]
-    public double Rsi14Full200() => ComputeRsi(
-        Array.ConvertAll(_candles200, c => c.Close), RsiPeriod);
+    public double Rsi14Full200() => ComputeRsi(_closes200, RsiPeriod);
 
     // ── MACD ──────────────────────────────────────────────────────────────────
 
@@ -104,8 +110,7 @@ public class IndicatorBlockBench
     /// </summary>
     [Benchmark(Description = "MACD full compute (200 prices)")]
     [BenchmarkCategory("MACD")]
-    public double MacdFull200() => ComputeMacdSignal(
-        Array.ConvertAll(_candles200, c => c.Close));
+    public double MacdFull200() => ComputeMacdSignal(_closes200);
 
     // ── Bollinger Bands ───────────────────────────────────────────────────────
 
@@ -115,8 +120,7 @@ public class IndicatorBlockBench
     /// </summary>
     [Benchmark(Description = "Bollinger Band position BB(20,2) — 200 candles")]
     [BenchmarkCategory("BB")]
-    public double BbPosition200() => ComputeBollingerPosition(
-        Array.ConvertAll(_candles200, c => c.Close), BbPeriod, BbStdDev);
+    public double BbPosition200() => ComputeBollingerPosition(_closes200, BbPeriod, BbStdDev);
 
     // ── ATR ───────────────────────────────────────────────────────────────────
 

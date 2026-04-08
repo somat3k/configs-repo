@@ -31,7 +31,13 @@ internal static class MinimalIdentityModel
     //
     // protobuf field encoding: (field_number << 3) | wire_type
     //   wire_type 0 = varint, 2 = length-delimited
-    public static ReadOnlySpan<byte> Bytes => _model;
+
+    /// <summary>
+    /// Raw ONNX model bytes.  Returned as <see cref="byte[]"/> so callers can pass it
+    /// directly to <see cref="Microsoft.ML.OnnxRuntime.InferenceSession"/> without an
+    /// extra copy (the constructor accepts <c>byte[]</c>).
+    /// </summary>
+    public static byte[] ModelBytes => _model;
 
     private static readonly byte[] _model =
     [

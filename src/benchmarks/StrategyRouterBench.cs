@@ -28,14 +28,21 @@ public class StrategyRouterBench
 
     private string _hotTopic = null!;
 
+    // Pre-generated GUIDs for BuildTopic benchmark — isolate string-format cost
+    // from Guid.NewGuid() cost (which is ~200-400 ns on its own).
+    private Guid _benchStrategyId;
+    private Guid _benchBlockId;
+
     /// <summary>Graph with 100 blocks connected linearly (maximum test load).</summary>
     private MLS.Core.Contracts.Designer.StrategyGraphPayload _graph100 = null!;
     private MLS.Core.Contracts.Designer.StrategyGraphPayload _graph10  = null!;
 
     // ── Setup ─────────────────────────────────────────────────────────────────
 
+    // BenchmarkDotNet supports Task-returning [GlobalSetup] — prefer async to avoid
+    // sync-over-async risks if AddAsync ever becomes truly asynchronous.
     [GlobalSetup]
-    public void Setup()
+    public async Task Setup()
     {
         _subscriptionTable = new SubscriptionTable();
         _router            = new StrategyRouter(
@@ -48,16 +55,17 @@ public class StrategyRouterBench
         for (int i = 0; i < 1_000; i++)
         {
             var topic = StrategyRouter.BuildTopic(strategyId, Guid.NewGuid(), $"output_{i}");
-            // SubscriptionTable.AddAsync is implemented synchronously (returns ValueTask.CompletedTask).
-            // GlobalSetup is a synchronous method so we drain the completed ValueTask here.
-            // This is the correct pattern for consuming a synchronously-completed ValueTask in
-            // a non-async context; no thread-pool blocking occurs.
-            _subscriptionTable.AddAsync(topic, Guid.NewGuid()).GetAwaiter().GetResult();
+            await _subscriptionTable.AddAsync(topic, Guid.NewGuid()).ConfigureAwait(false);
             if (i == 500) _hotTopic = topic;
         }
 
         _graph10  = BuildGraph(10);
         _graph100 = BuildGraph(100);
+
+        // Pre-generate GUIDs used by the BuildTopic benchmark so we measure only the
+        // string-format call, not GUID generation.
+        _benchStrategyId = Guid.NewGuid();
+        _benchBlockId    = Guid.NewGuid();
     }
 
     // ── Benchmarks ────────────────────────────────────────────────────────────
@@ -72,11 +80,12 @@ public class StrategyRouterBench
 
     /// <summary>
     /// Topic key construction: <c>StrategyRouter.BuildTopic</c>.
-    /// Verifies the string interpolation has no hidden alloc surprises under load.
+    /// Uses pre-generated GUIDs (from <see cref="Setup"/>) so the measurement
+    /// isolates only the string-format cost, not <see cref="Guid.NewGuid"/> overhead.
     /// </summary>
-    [Benchmark(Description = "BuildTopic — string format Guid/Guid/socketName")]
+    [Benchmark(Description = "BuildTopic — string format Guid/Guid/socketName (pre-generated GUIDs)")]
     public string BuildTopic() =>
-        StrategyRouter.BuildTopic(Guid.NewGuid(), Guid.NewGuid(), "signal_out");
+        StrategyRouter.BuildTopic(_benchStrategyId, _benchBlockId, "signal_out");
 
     /// <summary>
     /// Strategy deploy with a 10-block graph — baseline for small strategies.

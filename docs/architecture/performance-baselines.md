@@ -81,8 +81,8 @@ Intel(R) Xeon(R) E5-2690 v3 @ 2.60GHz (or equivalent)
 | ATR(14) incremental single-candle Wilder update | ~12 ns | ±1 ns | ±0.5 ns | 0 | < 200ns | ✅ |
 
 **Notes:**
-- All methods report 0 bytes allocated — indicator computations are fully stack-local.
-- Full-window ATR over 200 candles takes ~900 ns; this is expected for a batch computation. The live-trading hot path is the **incremental** Wilder update (a single multiply-add per candle) which completes in ~12 ns, well within the 200ns target.
+- Scalar computations (RSI, MACD, BB, ATR) are fully stack-local with zero heap allocation in the benchmark methods. The previously-present `Array.ConvertAll(...)` calls (which allocated per-iteration) have been removed — closes arrays are precomputed in `GlobalSetup`.
+- Full-window ATR over 200 candles takes ~900 ns; this is expected for a batch computation and is **not** the live-trading hot path. The **incremental** Wilder update (single multiply-add) completes in ~12 ns, well within the 200ns target.
 
 ---
 

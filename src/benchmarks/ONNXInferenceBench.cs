@@ -7,14 +7,15 @@ namespace MLS.Benchmarks;
 
 /// <summary>
 /// Benchmarks for model-t ONNX inference on the C# hot path using
-/// <see cref="Microsoft.ML.OnnxRuntime"/> with pre-allocated <see cref="OrtValue"/> tensors.
+/// <see cref="Microsoft.ML.OnnxRuntime"/> with a pre-allocated <see cref="DenseTensor{T}"/>
+/// that wraps a reused <see cref="float"/> buffer.
 /// <para>
 /// Performance target: &lt; 10ms p95 for a single 8-feature inference call (CPU EP).
 /// </para>
 /// <para>
 /// The model used here is an embedded minimal Identity ONNX model (float32 [1,8] → [1,8])
 /// that exercises the full ONNX Runtime session path without requiring an external file.
-/// Replace <see cref="MinimalIdentityModel.Bytes"/> with the real model-t artifact
+/// Replace <see cref="MinimalIdentityModel.ModelBytes"/> with the real model-t artifact
 /// (loaded from IPFS / <c>ml-runtime</c>) for accurate production latency numbers.
 /// </para>
 /// </summary>
@@ -26,11 +27,24 @@ public class ONNXInferenceBench
 
     private InferenceSession _session = null!;
 
-    /// <summary>Pre-allocated input buffer — reused across every inference call.</summary>
+    /// <summary>Pre-allocated input buffer — mutated between calls, never re-allocated.</summary>
     private float[] _inputBuffer = null!;
 
     /// <summary>Pre-allocated output buffer — reused across every inference call.</summary>
     private float[] _outputBuffer = null!;
+
+    /// <summary>
+    /// Pre-allocated <see cref="DenseTensor{T}"/> that wraps <see cref="_inputBuffer"/>.
+    /// Because <see cref="DenseTensor{T}"/> accesses the backing array by reference,
+    /// mutating <see cref="_inputBuffer"/> between calls is reflected automatically.
+    /// </summary>
+    private DenseTensor<float> _inputTensor = null!;
+
+    /// <summary>
+    /// Pre-allocated inputs list created once in <see cref="Setup"/>.
+    /// Reused on every inference call to avoid per-call allocations.
+    /// </summary>
+    private List<NamedOnnxValue> _inputs = null!;
 
     // DenseTensor<T> uses int[] dimensions (not long[])
     private static readonly int[] TensorShape = [1, 8];
@@ -40,17 +54,22 @@ public class ONNXInferenceBench
     [GlobalSetup]
     public void Setup()
     {
-        var options = new SessionOptions();
+        // SessionOptions is IDisposable — dispose with 'using' after session creation
+        using var options = new SessionOptions();
         options.AppendExecutionProvider_CPU(0);
         options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
         options.EnableMemoryPattern     = true;
 
-        // InferenceSession requires a byte[] (not ReadOnlySpan<byte>)
-        _session = new InferenceSession(MinimalIdentityModel.Bytes.ToArray(), options);
+        // ModelBytes is already a byte[] — no extra copy needed
+        _session = new InferenceSession(MinimalIdentityModel.ModelBytes, options);
 
-        // Pre-allocate tensors once — zero allocation on the hot path
+        // Allocate input buffer once; it is mutated between calls, never re-created
         _inputBuffer  = new float[8] { 55.0f, 0.0012f, 0.62f, 0.05f, 0.018f, 0.009f, 23.5f, 0.003f };
         _outputBuffer = new float[8];
+
+        // Pre-allocate tensor and input collection — DenseTensor wraps _inputBuffer by ref
+        _inputTensor = new DenseTensor<float>(_inputBuffer, TensorShape);
+        _inputs      = [NamedOnnxValue.CreateFromTensor("input", _inputTensor)];
     }
 
     [GlobalCleanup]
@@ -59,24 +78,16 @@ public class ONNXInferenceBench
     // ── Benchmarks ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Single inference call using pre-allocated DenseTensor — simulates the
-    /// production inference path with reused memory.
+    /// Single inference call reusing pre-allocated <see cref="DenseTensor{T}"/>
+    /// and inputs collection — simulates the production inference path.
     /// Target: &lt; 10ms p95.
     /// </summary>
-    [Benchmark(Description = "model-t ONNX inference — pre-allocated DenseTensor")]
+    [Benchmark(Description = "model-t ONNX inference — pre-allocated DenseTensor (reused)")]
     public float[] InferencePreAllocatedTensor()
     {
-        // Reuse the pre-allocated input tensor each call — zero allocation
-        var inputTensor = new DenseTensor<float>(_inputBuffer, TensorShape);
+        using var results = _session.Run(_inputs);
 
-        var inputs = new List<NamedOnnxValue>
-        {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor),
-        };
-
-        using var results = _session.Run(inputs);
-
-        // Copy output into pre-allocated buffer — no heap allocation on the result path
+        // Copy output into pre-allocated buffer
         var outputTensor = results[0].AsEnumerable<float>();
         int i = 0;
         foreach (float v in outputTensor)
@@ -86,32 +97,26 @@ public class ONNXInferenceBench
     }
 
     /// <summary>
-    /// Batch inference: 10 requests in a tight loop — simulates burst inference
-    /// during a live trading window.
+    /// Burst of 10 inference calls reusing the same tensor + inputs collection —
+    /// simulates burst inference during a live trading window.
     /// </summary>
-    [Benchmark(Description = "model-t ONNX inference — 10-request burst")]
+    [Benchmark(Description = "model-t ONNX inference — 10-request burst (reused tensor)")]
     public float[] InferenceBurst10()
     {
-        float[] lastOutput = _outputBuffer;
         for (int call = 0; call < 10; call++)
         {
-            // Slightly perturb the RSI feature to prevent JIT constant-folding
+            // Slightly perturb the RSI feature to prevent JIT constant-folding.
+            // Because DenseTensor wraps _inputBuffer by reference, this change is
+            // visible to ORT without re-creating the tensor.
             _inputBuffer[0] = 50.0f + call;
 
-            var inputTensor = new DenseTensor<float>(_inputBuffer, TensorShape);
-            var inputs = new List<NamedOnnxValue>
-            {
-                NamedOnnxValue.CreateFromTensor("input", inputTensor),
-            };
-
-            using var results = _session.Run(inputs);
+            using var results = _session.Run(_inputs);
             var outputTensor = results[0].AsEnumerable<float>();
             int i = 0;
             foreach (float v in outputTensor)
                 _outputBuffer[i++] = v;
-
-            lastOutput = _outputBuffer;
         }
-        return lastOutput;
+
+        return _outputBuffer;
     }
 }
