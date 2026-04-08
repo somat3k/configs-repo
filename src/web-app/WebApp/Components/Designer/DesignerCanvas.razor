@@ -1,6 +1,9 @@
 @using MLS.Core.Designer
+@using MLS.Core.Constants
 @using Microsoft.AspNetCore.Components.Web
 @inject IJSRuntime JS
+@inject IBlockControllerHub Hub
+@implements IAsyncDisposable
 
 <div class="designer-canvas-wrapper" @ref="_wrapperRef">
 
@@ -70,6 +73,7 @@
             @foreach (var block in _blocks)
             {
                 var b = block;
+                var metrics = _blockMetrics.GetValueOrDefault(b.BlockId);
                 <div class="block-node @(b.BlockId == _selectedBlockId ? "selected" : "")"
                      style="left:@(b.X)px; top:@(b.Y)px; --block-accent:@GetBlockColor(b.BlockType);"
                      @key="b.BlockId"
@@ -81,6 +85,11 @@
                             @GetBlockCategory(b.BlockType)
                         </span>
                         <span class="block-name">@b.BlockType</span>
+                        @* Status dot — updated at 1Hz via JS, no re-render *@
+                        <span id="blk-@(b.BlockId)-dot"
+                              class="block-status-dot"
+                              title="@(metrics?.Status.ToString() ?? "Active")"
+                              style="background:@GetStatusColor(metrics?.Status ?? BlockStatus.Active)"></span>
                     </div>
 
                     @* Input sockets (left side) *@
@@ -113,9 +122,29 @@
                             </div>
                         }
                     </div>
+
+                    @* ── Live latency badge — DOM updated at 1Hz via JS ──────────── *@
+                    <div class="block-stats-badge">
+                        <span class="bsb-item">
+                            <span class="bsb-label">lat</span>
+                            <span id="blk-@(b.BlockId)-lat" class="bsb-val">—</span>
+                        </span>
+                        <span class="bsb-item">
+                            <span class="bsb-label">msg/s</span>
+                            <span id="blk-@(b.BlockId)-mps" class="bsb-val">—</span>
+                        </span>
+                        <span class="bsb-item">
+                            <span class="bsb-label">err</span>
+                            <span id="blk-@(b.BlockId)-err" class="bsb-val">—</span>
+                        </span>
+                    </div>
                 </div>
             }
         </div>
+
+        @* ── Live overlay (top-right of canvas) ───────────────────────────── *@
+        <LiveOverlay />
+
     </div>
 
     @* ── Block palette drawer ─────────────────────────────────────────────── *@
@@ -305,6 +334,62 @@
 
     .socket-label { white-space: nowrap; font-family: var(--font-ui, sans-serif); }
     .socket-output { flex-direction: row-reverse; }
+
+    /* ── Block status dot ──────────────────────────────────────────────────── */
+    .block-status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-left: auto;
+        box-shadow: 0 0 4px currentColor;
+    }
+
+    /* ── Block stats badge ─────────────────────────────────────────────────── */
+    .block-stats-badge {
+        display: flex;
+        gap: 8px;
+        padding: 3px 10px 4px;
+        background: rgba(0, 0, 0, 0.18);
+        border-top: 1px solid rgba(255, 255, 255, 0.04);
+        font-size: 0.60rem;
+        font-family: var(--font-mono, monospace);
+    }
+
+    .bsb-item {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+    }
+
+    .bsb-label {
+        color: var(--mls-text-muted, #64748b);
+        text-transform: uppercase;
+        font-size: 0.56rem;
+        letter-spacing: 0.05em;
+    }
+
+    .bsb-val {
+        color: var(--mls-text, #e2e8f0);
+    }
+
+    /* Animation guard: only animate when motion is acceptable */
+    @@media (prefers-reduced-motion: no-preference) {
+        .block-status-dot {
+            transition: background 0.3s;
+        }
+        .bsb-val {
+            transition: color 0.2s;
+        }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .block-status-dot,
+        .bsb-val {
+            transition: none !important;
+            animation: none !important;
+        }
+    }
 </style>
 
 @code {
@@ -328,6 +413,122 @@
 
     private readonly List<BlockViewModel> _blocks = [];
     private readonly List<ConnectionViewModel> _connections = [];
+
+    // ── Live pulse / metrics ──────────────────────────────────────────────────
+    private CancellationTokenSource _cts = new();
+    private readonly Dictionary<Guid, BlockMetrics> _blockMetrics = [];
+
+    protected override Task OnInitializedAsync()
+    {
+        _ = ConsumeBlockSignalsAsync(_cts.Token);
+        _ = RunBadgeFlushLoopAsync(_cts.Token);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Consumes BLOCK_SIGNAL envelopes, triggers SVG pulse animation via JS
+    /// (≤50ms after envelope routing), and records metrics for the 1Hz badge.
+    /// </summary>
+    private async Task ConsumeBlockSignalsAsync(CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var env in Hub
+                .GetEnvelopeStreamAsync([MessageTypes.BlockSignal], ct)
+                .ConfigureAwait(false))
+            {
+                if (!env.Payload.TryGetProperty("block_id", out var bidProp) ||
+                    !Guid.TryParse(bidProp.GetString(), out var blockId))
+                    continue;
+
+                var socketName = env.Payload.TryGetProperty("socket_name", out var snProp)
+                    ? snProp.GetString() ?? ""
+                    : "";
+
+                // ── Find matching connection ──────────────────────────────────
+                var block = _blocks.FirstOrDefault(b => b.BlockId == blockId);
+                if (block is not null)
+                {
+                    var socket = block.OutputSockets.FirstOrDefault(s => s.Name == socketName);
+                    if (socket is not null)
+                    {
+                        var conn = _connections.FirstOrDefault(
+                            c => c.FromBlockId == blockId && c.FromSocketId == socket.SocketId);
+
+                        if (conn is not null)
+                        {
+                            // ── Trigger pulse — no Blazor re-render ───────────
+                            var color = GetSocketColor(socket.SocketType);
+                            await JS.InvokeVoidAsync(
+                                "mlsPulse.triggerPulse",
+                                ct,
+                                conn.ConnectionId.ToString(),
+                                color).ConfigureAwait(false);
+                        }
+                    }
+
+                    // ── Record metrics ────────────────────────────────────────
+                    if (!_blockMetrics.TryGetValue(blockId, out var metrics))
+                    {
+                        metrics = new BlockMetrics();
+                        _blockMetrics[blockId] = metrics;
+                    }
+
+                    // Estimate latency from envelope timestamp if available
+                    var latencyMs = env.Payload.TryGetProperty("timestamp", out var tsProp) &&
+                                    DateTimeOffset.TryParse(tsProp.GetString(), out var ts)
+                        ? (DateTimeOffset.UtcNow - ts).TotalMilliseconds
+                        : 0.0;
+
+                    var isError = env.Payload.TryGetProperty("is_error", out var errProp) &&
+                                  errProp.GetBoolean();
+                    metrics.RecordSignal(latencyMs, isError);
+                }
+            }
+        }
+        catch (OperationCanceledException) { /* clean shutdown */ }
+    }
+
+    /// <summary>
+    /// Flushes BlockMetrics and updates block badge DOM nodes at 1 Hz via JS
+    /// without triggering a full Blazor render.
+    /// </summary>
+    private async Task RunBadgeFlushLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+            {
+                foreach (var (blockId, metrics) in _blockMetrics)
+                {
+                    metrics.Flush();
+                    await JS.InvokeVoidAsync(
+                        "mlsPulse.updateBlockBadge",
+                        ct,
+                        blockId.ToString(),
+                        metrics.LatencyMs,
+                        metrics.MessagesPerSecond,
+                        metrics.ErrorRatePct,
+                        GetStatusColor(metrics.Status)).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (OperationCanceledException) { /* clean shutdown */ }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+
+    private static string GetStatusColor(BlockStatus status) => status switch
+    {
+        BlockStatus.Degraded => "#f59e0b",
+        BlockStatus.Error    => "#ef4444",
+        _                    => "#22c55e",
+    };
 
     private void TogglePalette() => _paletteOpen = !_paletteOpen;
 
