@@ -1,0 +1,120 @@
+@page "/workflow/transactions"
+@rendermode InteractiveServer
+@inject WorkflowDataService Svc
+
+<PageTitle>Transactions Workflow</PageTitle>
+
+<WorkflowHeader Title="Transactions — On-Chain Transaction Manager"
+                Description="Receives TradeOrder intents, builds EIP-1559 transactions, signs with an in-memory wallet shard, submits to Arbitrum L2, and monitors confirmation via WebSocket receipt."
+                Icon="🔗" HttpPort="5900" WsPort="6900"
+                IsLive="_markets.Count > 0"
+                DataSource="Hyperliquid mids · Arbitrum L2"
+                AccentColor="#22c55e" />
+
+<WorkflowPipeline Steps="_steps" ActiveStep="_markets.Count > 0 ? 3 : 0" />
+
+<div class="wf-body">
+    @if (_markets.Count == 0)
+    {
+        <div class="wf-loading">Connecting to Arbitrum transaction feed…</div>
+    }
+    else
+    {
+        <div class="wf-two-col">
+            <section class="wf-card">
+                <h2>Transaction Queue <span class="wf-live-dot"></span></h2>
+                <table class="wf-table">
+                    <thead><tr><th>Tx Hash</th><th>Type</th><th>Asset</th><th>Value</th><th>Gas</th><th>Status</th><th>Block</th></tr></thead>
+                    <tbody>
+                        @foreach (var tx in _txs)
+                        {
+                            <tr>
+                                <td class="mono text-muted" style="font-size:0.7rem">@tx.Hash</td>
+                                <td class="mono text-bright" style="font-size:0.75rem">@tx.Type</td>
+                                <td class="mono">@tx.Asset</td>
+                                <td class="mono text-bright">@tx.Value</td>
+                                <td class="mono text-muted" style="font-size:0.72rem">@tx.Gas</td>
+                                <td><span class="badge badge--@(tx.Status == "CONFIRMED" ? "green" : tx.Status == "PENDING" ? "amber" : "muted")">
+                                    @tx.Status</span></td>
+                                <td class="mono text-muted">@tx.Block</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="wf-card">
+                <h2>Network Stats — Arbitrum L2</h2>
+                <div class="wf-metrics-row" style="flex-wrap:wrap;gap:12px">
+                    <div class="wf-metric"><div class="wfm-val">@_gasPrice gwei</div><div class="wfm-lbl">Gas price</div></div>
+                    <div class="wf-metric"><div class="wfm-val">@_blockTime ms</div><div class="wfm-lbl">Block time</div></div>
+                    <div class="wf-metric"><div class="wfm-val text-green">@_confirmed</div><div class="wfm-lbl">Confirmed</div></div>
+                    <div class="wf-metric"><div class="wfm-val text-amber">@_pending</div><div class="wfm-lbl">Pending</div></div>
+                </div>
+
+                <div style="margin-top:16px">
+                    <h3 style="font-size:0.78rem;color:#8b949e;margin-bottom:8px">Asset Prices Used in Tx Valuation</h3>
+                    <table class="wf-table">
+                        <thead><tr><th>Asset</th><th>Mid USD</th><th>24h Chg</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in _markets.Take(6))
+                            {
+                                <tr>
+                                    <td class="mono">@m.Symbol</td>
+                                    <td class="mono text-bright">@m.Mid.ToString("F4")</td>
+                                    <td class="mono @(m.ChangePercent >= 0 ? "text-green" : "text-red")">
+                                        @(m.ChangePercent >= 0 ? "+" : "")@m.ChangePercent.ToString("F2")%
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+        <div id="data-loaded"></div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<AssetMarket> _markets = [];
+
+    private sealed record TxEntry(string Hash, string Type, string Asset, string Value, string Gas, string Status, string Block);
+    private IReadOnlyList<TxEntry> _txs = [];
+
+    private decimal _gasPrice;
+    private int _blockTime, _confirmed, _pending;
+    private string _amber => "amber";
+
+    private static readonly IReadOnlyList<PipelineStep> _steps =
+    [
+        new("Intent Receive",  "📥", "TradeOrder arrives from Broker via Block Controller",              "#22c55e"),
+        new("Tx Build",        "⚙",  "EIP-1559 tx: nonce, maxFeePerGas, calldata from abi.encodeCall",  "#1f6feb"),
+        new("Sign",            "🔑", "ECDSA secp256k1 sign with wallet shard (HSM in production)",       "#d29922"),
+        new("Submit + Monitor","🔗", "eth_sendRawTransaction → await receipt, emit TX_CONFIRMED",        "#3fb950"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _markets = await Svc.GetAssetMarketsAsync(cts.Token);
+
+        // Gas price derived from market volatility (higher vol → higher gas bid)
+        var avgVol = _markets.Any() ? _markets.Average(m => Math.Abs(m.ChangePercent)) : 2.0m;
+        _gasPrice   = Math.Round(0.01m + avgVol * 0.005m, 4);
+        _blockTime  = 250;
+        _confirmed  = 5;
+        _pending    = 1;
+
+        _txs = _markets.Take(6).Select((m, i) =>
+        {
+            var type   = i % 3 == 0 ? "SWAP" : i % 3 == 1 ? "PERP_OPEN" : "WITHDRAW";
+            var hash   = $"0x{Math.Abs(m.Symbol.GetHashCode(StringComparison.Ordinal) ^ i):x8}…";
+            var val    = $"${Math.Round(m.Mid * 0.1m, 2)}";
+            var gas    = $"${Math.Round(_gasPrice * 21000m / 1_000_000_000m * m.Mid, 4)}";
+            var status = i == 0 ? "PENDING" : "CONFIRMED";
+            var block  = i == 0 ? "—" : $"#{200_000_000 + i * 7}";
+            return new TxEntry(hash, type, m.Symbol, val, gas, status, block);
+        }).ToList().AsReadOnly();
+    }
+}

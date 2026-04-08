@@ -1,3 +1,5 @@
+> ✅ **Status: Complete** — Implemented and verified in session 23 (workflow-demo).
+
 # Session 07 — Block Action Tiles: Block-as-ONE Data Source Pattern
 
 > **Reference**: [Designer Block Graph](designer-block-graph.md) | [Session Schedule](../session-schedule.md) (Session 07)

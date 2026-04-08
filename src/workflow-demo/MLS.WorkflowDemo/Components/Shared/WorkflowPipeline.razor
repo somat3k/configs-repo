@@ -1,0 +1,24 @@
+@* Renders a horizontal pipeline of labelled steps with connecting arrows. *@
+
+<div class="pipeline-strip">
+    @for (int i = 0; i < Steps.Count; i++)
+    {
+        var step = Steps[i];
+        var active = ActiveStep == i;
+        <div class="pipeline-step @(active ? "pipeline-step--active" : "")"
+             style="--step-color: @step.Color">
+            <div class="ps-icon">@step.Icon</div>
+            <div class="ps-label">@step.Label</div>
+            <div class="ps-desc">@step.Description</div>
+        </div>
+        @if (i < Steps.Count - 1)
+        {
+            <div class="pipeline-arrow @(ActiveStep > i ? "pipeline-arrow--done" : "")">→</div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<PipelineStep> Steps { get; set; } = [];
+    [Parameter] public int ActiveStep { get; set; } = -1;
+}

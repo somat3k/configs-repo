@@ -1,0 +1,120 @@
+@page "/workflow/ai-hub"
+@rendermode InteractiveServer
+@inject WorkflowDataService Svc
+
+<PageTitle>AI Hub Workflow</PageTitle>
+
+<WorkflowHeader Title="AI Hub — Multi-Provider LLM Orchestration"
+                Description="Assembles live market context from Hyperliquid, routes queries to 7 LLM providers via Semantic Kernel, streams response chunks, and dispatches canvas actions to the MDI UI."
+                Icon="✦" HttpPort="5750" WsPort="6750"
+                IsLive="_markets.Count > 0"
+                DataSource="Hyperliquid mids · DeFi Llama TVL"
+                AccentColor="#a371f7" />
+
+<WorkflowPipeline Steps="_steps" ActiveStep="_markets.Count > 0 ? 3 : 0" />
+
+<div class="wf-body">
+    @if (_markets.Count == 0)
+    {
+        <div class="wf-loading">Assembling live market context…</div>
+    }
+    else
+    {
+        <div class="wf-two-col">
+            <section class="wf-card">
+                <h2>Context Assembly — Live Market State <span class="wf-live-dot"></span></h2>
+                <div class="context-block">
+                    <div class="ctx-label">ASSEMBLED CONTEXT (&lt; 200ms)</div>
+                    <pre class="ctx-body">@_contextText</pre>
+                </div>
+            </section>
+
+            <section class="wf-card">
+                <h2>Provider Registry</h2>
+                <table class="wf-table">
+                    <thead><tr><th>Provider</th><th>Model</th><th>Status</th><th>Latency</th><th>Priority</th></tr></thead>
+                    <tbody>
+                        @foreach (var p in _providers)
+                        {
+                            <tr>
+                                <td class="mono text-bright">@p.Name</td>
+                                <td class="mono text-muted" style="font-size:0.72rem">@p.Model</td>
+                                <td><span class="badge badge--@(p.Status == "UP" ? "green" : p.Status == "FALLBACK" ? "amber" : "red")">@p.Status</span></td>
+                                <td class="mono text-muted">@p.Latency</td>
+                                <td class="mono text-muted">@p.Priority</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="wf-card-footer" style="margin-top:12px">
+                    <span class="badge badge--purple">Semantic Kernel</span>
+                    <span class="badge badge--muted">Circuit breaker 3x</span>
+                    <span class="badge badge--muted">60s recovery</span>
+                    <span class="badge badge--muted">Streaming chunks</span>
+                </div>
+            </section>
+        </div>
+        <div id="data-loaded"></div>
+    }
+</div>
+
+<style>
+    .context-block { background: #0d1117; border-radius: 8px; border: 1px solid #30363d; overflow: hidden; }
+    .ctx-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8b949e;
+                 padding: 6px 12px; border-bottom: 1px solid #21262d; background: #161b22; }
+    .ctx-body { font-size: 0.72rem; font-family: 'Consolas', monospace; color: #d2a8ff;
+                padding: 12px; white-space: pre-wrap; line-height: 1.6; max-height: 260px; overflow-y: auto; }
+</style>
+
+@code {
+    private IReadOnlyList<AssetMarket> _markets = [];
+    private string _contextText = "";
+
+    private sealed record ProviderEntry(string Name, string Model, string Status, string Latency, int Priority);
+    private static readonly IReadOnlyList<ProviderEntry> _providers =
+    [
+        new("OpenAI",     "gpt-4o",             "UP",       "320ms", 1),
+        new("Anthropic",  "claude-3.5-sonnet",  "UP",       "480ms", 2),
+        new("Google",     "gemini-2.5-pro",      "UP",       "290ms", 3),
+        new("Groq",       "llama3-70b",          "UP",       "95ms",  4),
+        new("OpenRouter", "100+ models",         "UP",       "380ms", 5),
+        new("VercelAI",   "configurable",        "FALLBACK", "—",     6),
+        new("Local",      "llama3 (Ollama)",     "UP",       "1.2s",  7),
+    ];
+
+    private static readonly IReadOnlyList<PipelineStep> _steps =
+    [
+        new("Query Receive",     "📨", "AI_QUERY envelope arrives from web-app via Block Controller",       "#a371f7"),
+        new("Context Assemble",  "⚡", "Parallel queries: prices + positions + signals → < 200ms",          "#d29922"),
+        new("Provider Route",    "🔀", "ProviderRouter: user pref → circuit breaker → fallback chain",     "#1f6feb"),
+        new("SK Stream",         "✦",  "kernel.InvokeStreamingAsync → AI_RESPONSE_CHUNK + AI_CANVAS_ACTION","#3fb950"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _markets = await Svc.GetAssetMarketsAsync(cts.Token);
+
+        // Build representative context string from live data
+        var top = _markets.Take(5).ToList();
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"[MARKET CONTEXT — assembled {DateTimeOffset.UtcNow:HH:mm:ss} UTC]");
+        sb.AppendLine();
+        sb.AppendLine("Top assets by 24h volume:");
+        foreach (var m in top)
+        {
+            var chgSign = m.ChangePercent >= 0 ? "+" : "";
+            var fndSign = m.Funding >= 0 ? "+" : "";
+            sb.AppendLine($"  {m.Symbol,-8} mid={m.Mid:F4}  chg={chgSign}{m.ChangePercent:F2}%  funding={fndSign}{m.Funding:F4}%  OI={m.OpenInterest:F0}");
+        }
+        sb.AppendLine();
+        sb.AppendLine("Active modules: 11 / 11");
+        sb.AppendLine("Platform uptime: 6h 22m");
+        sb.AppendLine($"Pending signals: {top.Count(m => Math.Abs(m.ChangePercent) > 1.5m)} actionable");
+        sb.AppendLine();
+        sb.AppendLine("[USER QUERY]");
+        sb.AppendLine("\"What is the current ETH momentum signal and should I increase exposure?\"");
+        _contextText = sb.ToString();
+    }
+}

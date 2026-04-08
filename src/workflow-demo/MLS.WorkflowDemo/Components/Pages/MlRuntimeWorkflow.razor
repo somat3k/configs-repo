@@ -1,0 +1,111 @@
+@page "/workflow/ml-runtime"
+@rendermode InteractiveServer
+@inject WorkflowDataService Svc
+
+<PageTitle>ML Runtime Workflow</PageTitle>
+
+<WorkflowHeader Title="ML Runtime — Training &amp; ONNX Inference"
+                Description="Collects live OHLCV from Hyperliquid, runs the FeatureEngineer pipeline, reports model-t feature statistics, and shows the training-to-inference workflow."
+                Icon="🧠" HttpPort="5600" WsPort="6600"
+                IsLive="_candles.Count > 0"
+                DataSource="Hyperliquid candleSnapshot · ETH 1m"
+                AccentColor="#0e7490" />
+
+<WorkflowPipeline Steps="_steps" ActiveStep="_features is not null ? 4 : (_candles.Count > 0 ? 1 : 0)" />
+
+<div class="wf-body">
+    @if (_candles.Count == 0)
+    {
+        <div class="wf-loading">Loading OHLCV training data from Hyperliquid…</div>
+    }
+    else
+    {
+        <div class="wf-two-col">
+            <section class="wf-card">
+                <h2>Training Data — ETH 1m OHLCV <span class="wf-live-dot"></span></h2>
+                <div class="wf-metrics-row" style="margin-bottom:12px">
+                    <div class="wf-metric"><div class="wfm-val">@_candles.Count</div><div class="wfm-lbl">Candles</div></div>
+                    <div class="wf-metric"><div class="wfm-val">@_candles.Min(c=>c.O).ToString("F2")</div><div class="wfm-lbl">Low (open)</div></div>
+                    <div class="wf-metric"><div class="wfm-val">@_candles.Max(c=>c.C).ToString("F2")</div><div class="wfm-lbl">High (close)</div></div>
+                    <div class="wf-metric"><div class="wfm-val">@_candles.Sum(c=>c.V).ToString("F0")</div><div class="wfm-lbl">Total volume</div></div>
+                </div>
+
+                <h3 style="font-size:0.78rem;color:#8b949e;margin-bottom:8px">OHLCV Sample (last 10 bars)</h3>
+                <table class="wf-table">
+                    <thead><tr><th>Time</th><th>O</th><th>H</th><th>L</th><th>C</th><th>V</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in _candles.TakeLast(10).Reverse())
+                        {
+                            <tr class="@(c.C >= c.O ? "row-up" : "row-dn")">
+                                <td class="mono text-muted">@c.OpenDt.ToString("HH:mm")</td>
+                                <td class="mono">@c.O.ToString("F2")</td>
+                                <td class="mono text-green">@c.H.ToString("F2")</td>
+                                <td class="mono text-red">@c.L.ToString("F2")</td>
+                                <td class="mono @(c.C>=c.O?"text-green":"text-red")">@c.C.ToString("F2")</td>
+                                <td class="mono text-muted">@c.V.ToString("F2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            @if (_features is not null)
+            {
+                <section class="wf-card">
+                    <h2>Feature Engineering Output (model-t)</h2>
+                    <table class="wf-table">
+                        <thead><tr><th>Feature</th><th>Value</th><th>Normalised</th></tr></thead>
+                        <tbody>
+                            <tr><td class="mono">rsi_14</td><td class="mono text-bright">@_features.Rsi14.ToString("F4")</td>
+                                <td class="mono text-muted">@(_features.Rsi14 / 100m).ToString("F4")</td></tr>
+                            <tr><td class="mono">macd_signal</td><td class="mono text-bright">@_features.MacdSignal.ToString("F6")</td>
+                                <td class="mono text-muted">tanh(@_features.MacdSignal.ToString("F4"))</td></tr>
+                            <tr><td class="mono">bb_position</td><td class="mono text-bright">@_features.BbPosition.ToString("F4")</td>
+                                <td class="mono text-muted">as-is [0,1]</td></tr>
+                            <tr><td class="mono">volume_delta</td><td class="mono text-bright">@_features.VolumeDelta.ToString("F2")%</td>
+                                <td class="mono text-muted">clip(-3,3) / 3</td></tr>
+                            <tr><td class="mono">momentum_20</td><td class="mono text-bright">@_features.Momentum20.ToString("F6")</td>
+                                <td class="mono text-muted">clip(-1,1)</td></tr>
+                            <tr><td class="mono">atr_norm</td><td class="mono text-bright">@_features.AtrNorm.ToString("F6")</td>
+                                <td class="mono text-muted">log1p(x)</td></tr>
+                            <tr><td class="mono">spread_bps</td><td class="mono text-bright">@_features.SpreadBps.ToString("F4")</td>
+                                <td class="mono text-muted">/ 50.0</td></tr>
+                            <tr><td class="mono">vwap_distance</td><td class="mono text-bright">@_features.VwapDistance.ToString("F6")</td>
+                                <td class="mono text-muted">clip(-0.1,0.1)</td></tr>
+                        </tbody>
+                    </table>
+
+                    <div class="wf-card-footer">
+                        <span class="badge badge--muted">model-t · ONNX Runtime · net9.0</span>
+                        <span class="badge badge--muted">Input shape: [1, 8]</span>
+                        <span class="badge badge--muted">Output: [BUY, HOLD, SELL] softmax</span>
+                    </div>
+                </section>
+            }
+        </div>
+        <div id="data-loaded"></div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<Candle> _candles = [];
+    private FeatureVector? _features;
+
+    private static readonly IReadOnlyList<PipelineStep> _steps =
+    [
+        new("OHLCV Collect",     "📡", "HyperliquidFeedCollector streams 1m candles via WS",             "#1a7f37"),
+        new("Feature Engineer",  "⚙",  "8-dim FeatureVector: RSI, MACD, BB, VolΔ, Mom, ATR, Spread, VWAP","#00d4ff"),
+        new("Python Train",      "🐍", "training_pipeline.py: FastForest/NN, torch.compile, AMP bf16",   "#d29922"),
+        new("ONNX Export",       "📦", "joblib + onnxmltools export → IPFS upload via CID",              "#8b949e"),
+        new("C# Inference",      "🧠", "OrtSession.Run, ArrayPool<float>, pre-alloc OrtValue hot path",  "#6e40c9"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+        _candles  = await Svc.GetCandlesAsync("ETH", cts.Token);
+        _features = _candles.Count >= 14
+            ? WorkflowDataService.EngineerFeatures("ETH", _candles)
+            : null;
+    }
+}

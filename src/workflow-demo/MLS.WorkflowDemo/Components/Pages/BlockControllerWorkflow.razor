@@ -1,0 +1,105 @@
+@page "/workflow/block-controller"
+@rendermode InteractiveServer
+@inject WorkflowDataService Svc
+
+<PageTitle>Block Controller Workflow</PageTitle>
+
+<WorkflowHeader Title="Block Controller — Orchestration Hub"
+                Description="Central message bus: every module registers on startup, sends MODULE_HEARTBEAT every 5 s, and routes Envelope payloads via named group subscriptions."
+                Icon="⚙" HttpPort="5100" WsPort="6100"
+                IsLive="_markets.Count > 0"
+                DataSource="Hyperliquid metaAndAssetCtxs"
+                AccentColor="#1f6feb" />
+
+<WorkflowPipeline Steps="_steps" ActiveStep="_markets.Count > 0 ? 3 : 0" />
+
+<div class="wf-body">
+    @if (_markets.Count == 0)
+    {
+        <div class="wf-loading">Fetching live module heartbeat data…</div>
+    }
+    else
+    {
+        <div class="wf-two-col">
+            <section class="wf-card">
+                <h2>Module Registry <span class="wf-live-dot"></span></h2>
+                <table class="wf-table">
+                    <thead><tr><th>Module</th><th>HTTP</th><th>WS</th><th>Status</th><th>Heartbeat</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _moduleRegistry)
+                        {
+                            <tr>
+                                <td class="mono">@m.Id</td>
+                                <td class="mono text-muted">@m.Http</td>
+                                <td class="mono text-muted">@m.Ws</td>
+                                <td><span class="badge badge--@(m.Online ? "green" : "amber")">@(m.Online ? "ONLINE" : "WARN")</span></td>
+                                <td class="mono text-muted">@m.Hb</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="wf-card">
+                <h2>Live Market Prices (Hyperliquid) <span class="wf-live-dot"></span></h2>
+                <table class="wf-table">
+                    <thead><tr><th>Asset</th><th>Mid</th><th>24h Chg</th><th>Volume USD</th><th>OI</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _markets.Take(12))
+                        {
+                            <tr>
+                                <td class="mono">@m.Symbol</td>
+                                <td class="mono text-bright">@m.Mid.ToString("F4")</td>
+                                <td class="mono @(m.ChangePercent >= 0 ? "text-green" : "text-red")">
+                                    @(m.ChangePercent >= 0 ? "+" : "")@m.ChangePercent.ToString("F2")%
+                                </td>
+                                <td class="mono text-muted">@FormatVol(m.DayVolumeUsd)</td>
+                                <td class="mono text-muted">@FormatVol(m.OpenInterest)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        </div>
+
+        <div id="data-loaded"></div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<AssetMarket> _markets = [];
+
+    private static readonly IReadOnlyList<PipelineStep> _steps =
+    [
+        new("MODULE_REGISTER",  "📥", "Module calls POST /api/modules/register with identity + ports", "#1f6feb"),
+        new("HEARTBEAT",        "💓", "Periodic 5s pulse — block_state updated, timeout detection",    "#3fb950"),
+        new("ROUTE",            "🔀", "Envelope router dispatches to target module group",             "#d29922"),
+        new("BROADCAST",        "📡", "Platform-wide events sent to the broadcast group",             "#00d4ff"),
+    ];
+
+    private sealed record ModuleEntry(string Id, int Http, int Ws, bool Online, string Hb);
+
+    private static readonly ModuleEntry[] _moduleRegistry =
+    [
+        new("web-app",      5200, 6200, true,  "0.8s ago"),
+        new("designer",     5250, 6250, true,  "1.1s ago"),
+        new("trader",       5300, 6300, true,  "1.4s ago"),
+        new("arbitrager",   5400, 6400, true,  "2.0s ago"),
+        new("defi",         5500, 6500, true,  "0.9s ago"),
+        new("ml-runtime",   5600, 6600, true,  "1.7s ago"),
+        new("data-layer",   5700, 6700, true,  "0.5s ago"),
+        new("ai-hub",       5750, 6750, true,  "1.3s ago"),
+        new("broker",       5800, 6800, false, "4.9s ago"),
+        new("transactions", 5900, 6900, true,  "1.0s ago"),
+        new("shell-vm",     5950, 6950, true,  "2.2s ago"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _markets = await Svc.GetAssetMarketsAsync(cts.Token);
+    }
+
+    private static string FormatVol(decimal v) =>
+        v switch { >= 1_000_000_000m => $"${v/1_000_000_000m:F1}B", >= 1_000_000m => $"${v/1_000_000m:F1}M", _ => $"${v:F0}" };
+}

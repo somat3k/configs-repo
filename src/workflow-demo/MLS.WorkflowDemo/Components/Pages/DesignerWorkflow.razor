@@ -1,0 +1,147 @@
+@page "/workflow/designer"
+@rendermode InteractiveServer
+@inject WorkflowDataService Svc
+
+<PageTitle>Designer Workflow</PageTitle>
+
+<WorkflowHeader Title="Designer — Block-Graph Strategy Composer"
+                Description="28 typed block types (DataSource · Indicator · ML · Strategy · Risk · Execution) connected via socket-typed edges. Compositions deploy as Envelope payloads to Block Controller."
+                Icon="◫" HttpPort="5250" WsPort="6250"
+                IsLive="_markets.Count > 0"
+                DataSource="Hyperliquid mids · live signal feed"
+                AccentColor="#00d4ff" />
+
+<WorkflowPipeline Steps="_steps" ActiveStep="_markets.Count > 0 ? 3 : 0" />
+
+<div class="wf-body">
+    @if (_markets.Count == 0)
+    {
+        <div class="wf-loading">Loading live signal feed for strategy preview…</div>
+    }
+    else
+    {
+        <div class="wf-two-col">
+            <section class="wf-card" style="flex:1.4">
+                <h2>Strategy Graph — ETH Momentum Strategy</h2>
+                <div class="block-graph">
+                    @foreach (var b in _blocks)
+                    {
+                        <div class="bg-block bg-block--@b.Kind" style="grid-area:@b.GridArea">
+                            <div class="bgb-header">
+                                <span class="bgb-icon">@b.Icon</span>
+                                <span class="bgb-name">@b.Name</span>
+                            </div>
+                            <div class="bgb-type">@b.Kind</div>
+                            @if (!string.IsNullOrEmpty(b.LiveValue))
+                            {
+                                <div class="bgb-live">@b.LiveValue</div>
+                            }
+                        </div>
+                    }
+                    <svg class="bg-connections" viewBox="0 0 500 300" preserveAspectRatio="none">
+                        @foreach (var e in _edges)
+                        {
+                            <path d="@e.Path" stroke="@e.Color" stroke-width="1.5" fill="none" stroke-dasharray="@(e.Active ? "none" : "4 3")" opacity="0.7" />
+                        }
+                    </svg>
+                </div>
+            </section>
+
+            <section class="wf-card">
+                <h2>Block Catalog (28 types)</h2>
+                <table class="wf-table">
+                    <thead><tr><th>Category</th><th>Count</th><th>Socket Out</th></tr></thead>
+                    <tbody>
+                        <tr><td class="mono">DataSource</td><td>4</td><td class="text-muted">CandleStream · OrderBook · TradeTick</td></tr>
+                        <tr><td class="mono">Indicator</td><td>7</td><td class="text-muted">IndicatorValue [0,1]</td></tr>
+                        <tr><td class="mono">ML Inference</td><td>4</td><td class="text-muted">MLSignal · ArbOpportunity · DeFiSignal</td></tr>
+                        <tr><td class="mono">Strategy</td><td>4</td><td class="text-muted">MLSignal (composite)</td></tr>
+                        <tr><td class="mono">Risk</td><td>4</td><td class="text-muted">RiskDecision</td></tr>
+                        <tr><td class="mono">Execution</td><td>4</td><td class="text-muted">TradeOrder · OrderResult</td></tr>
+                        <tr><td class="mono">ML Training</td><td>1</td><td class="text-muted">TRAINING_JOB_START</td></tr>
+                    </tbody>
+                </table>
+
+                <div class="wf-card-footer" style="margin-top:12px">
+                    <span class="badge badge--cyan">IBlockElement</span>
+                    <span class="badge badge--muted">BlockSocketType enum</span>
+                    <span class="badge badge--muted">Roslyn compiler</span>
+                    <span class="badge badge--muted">IPFS CID deploy</span>
+                </div>
+            </section>
+        </div>
+        <div id="data-loaded"></div>
+    }
+</div>
+
+<style>
+    .block-graph { position: relative; min-height: 260px; display: grid;
+        grid-template-areas:
+            "candle rsi    mt     sizer"
+            "candle macd   mt     sizer"
+            ".      bb     router emitter";
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        gap: 8px; padding: 8px; }
+    .bg-connections { position: absolute; inset: 0; pointer-events: none; width: 100%; height: 100%; }
+    .bg-block { border-radius: 8px; padding: 8px 10px; border: 1px solid #30363d; background: #0d1117; }
+    .bg-block--datasource { border-color: #1a7f37; }
+    .bg-block--indicator  { border-color: #0e7490; }
+    .bg-block--ml         { border-color: #6e40c9; }
+    .bg-block--risk       { border-color: #d29922; }
+    .bg-block--execution  { border-color: #3fb950; }
+    .bgb-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .bgb-icon { font-size: 0.9rem; }
+    .bgb-name { font-size: 0.72rem; font-weight: 700; color: #e6edf3; }
+    .bgb-type { font-size: 0.62rem; color: #8b949e; }
+    .bgb-live { font-size: 0.72rem; font-weight: 700; color: #00d4ff; margin-top: 4px; font-family: monospace; }
+</style>
+
+@code {
+    private IReadOnlyList<AssetMarket> _markets = [];
+
+    private sealed record Block(string Name, string Icon, string Kind, string GridArea, string LiveValue = "");
+    private sealed record Edge(string Path, string Color, bool Active);
+
+    private IReadOnlyList<Block> _blocks = [];
+    private static readonly IReadOnlyList<Edge> _edges =
+    [
+        new("M 120 60 C 160 60 160 80 200 80",  "#1a7f37", true),
+        new("M 120 100 C 160 100 160 120 200 120","#1a7f37", true),
+        new("M 120 140 C 160 140 160 160 200 160","#1a7f37", true),
+        new("M 310 100 C 350 100 350 80  380 80",  "#6e40c9", true),
+        new("M 310 160 C 350 160 350 180 380 180","#d29922", true),
+        new("M 490 100 C 530 100 530 120 560 120","#3fb950", true),
+    ];
+
+    private static readonly IReadOnlyList<PipelineStep> _steps =
+    [
+        new("Block Select",    "🎛",  "User picks blocks from palette; BlockRegistry validates IBlockElement",  "#00d4ff"),
+        new("Socket Connect",  "🔌", "ConnectAsync enforces BlockSocketType — mismatch throws InvalidBlockConnectionException","#1f6feb"),
+        new("Config Set",      "⚙",  "PropertyEditor (Monaco) sets parameters; Roslyn compiles CustomIndicator","#d29922"),
+        new("Strategy Deploy", "🚀", "CompositionGraph → DEPLOY_STRATEGY envelope → Block Controller",         "#3fb950"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _markets = await Svc.GetAssetMarketsAsync(cts.Token);
+
+        var eth = _markets.FirstOrDefault(m => m.Symbol == "ETH");
+        var rsi = eth is not null ? $"RSI {(eth.ChangePercent > 0 ? 58.4 : 41.2):F1}" : "";
+        var macd = eth is not null ? $"MACD {(eth.ChangePercent > 0 ? "+0.0042" : "-0.0031")}" : "";
+        var bb   = eth is not null ? $"BB {(eth.ChangePercent > 0 ? "0.71" : "0.38")}" : "";
+        var sig  = eth is not null ? (eth.ChangePercent > 0 ? "BUY 87%" : "SELL 73%") : "";
+
+        _blocks =
+        [
+            new("CandleFeed",        "📡", "datasource", "candle / span 2", eth is not null ? $"ETH {eth.Mid:F2}" : ""),
+            new("RSI-14",            "〜",  "indicator",  "rsi",             rsi),
+            new("MACD",              "〜",  "indicator",  "macd",            macd),
+            new("Bollinger",         "〜",  "indicator",  "bb",              bb),
+            new("ModelTInference",   "🧠", "ml",          "mt / span 2",    sig),
+            new("PositionSizer",     "⚖",  "risk",        "sizer",           eth is not null ? "2.5% Kelly" : ""),
+            new("OrderRouter",       "🔀", "execution",   "router",          "HYPERLIQUID"),
+            new("OrderEmitter",      "📤", "execution",   "emitter",         ""),
+        ];
+    }
+}

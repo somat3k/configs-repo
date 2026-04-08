@@ -1,0 +1,104 @@
+@page "/workflow/broker"
+@rendermode InteractiveServer
+@inject WorkflowDataService Svc
+
+<PageTitle>Broker Workflow</PageTitle>
+
+<WorkflowHeader Title="Broker — HYPERLIQUID Order Management"
+                Description="Receives RiskDecision from Trader, sizes orders via Kelly fraction, routes to HYPERLIQUID perpetuals REST API, tracks fills, and reports order results back via Block Controller."
+                Icon="🏦" HttpPort="5800" WsPort="6800"
+                IsLive="_markets.Count > 0"
+                DataSource="Hyperliquid metaAndAssetCtxs"
+                AccentColor="#d29922" />
+
+<WorkflowPipeline Steps="_steps" ActiveStep="_markets.Count > 0 ? 3 : 0" />
+
+<div class="wf-body">
+    @if (_markets.Count == 0)
+    {
+        <div class="wf-loading">Connecting to HYPERLIQUID order feed…</div>
+    }
+    else
+    {
+        <div class="wf-two-col">
+            <section class="wf-card">
+                <h2>Order Routing Table <span class="wf-live-dot"></span></h2>
+                <table class="wf-table">
+                    <thead>
+                        <tr><th>Symbol</th><th>Side</th><th>Price</th><th>Size</th><th>Leverage</th><th>Venue</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var o in _orders)
+                        {
+                            <tr>
+                                <td class="mono">@o.Symbol</td>
+                                <td class="mono @(o.Side == "LONG" ? "text-green" : "text-red")">@o.Side</td>
+                                <td class="mono text-bright">@o.Price.ToString("F4")</td>
+                                <td class="mono text-muted">@o.Size.ToString("F4")</td>
+                                <td class="mono text-muted">@o.Leverage×</td>
+                                <td class="mono text-muted">HYPERLIQUID</td>
+                                <td><span class="badge badge--@(o.Status == "FILLED" ? "green" : o.Status == "PENDING" ? "amber" : "muted")">
+                                    @o.Status</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="wf-card">
+                <h2>Market State (Hyperliquid)</h2>
+                <table class="wf-table">
+                    <thead><tr><th>Asset</th><th>Mid</th><th>Funding %</th><th>OI</th><th>Max Lev</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in _markets.Take(8))
+                        {
+                            <tr>
+                                <td class="mono">@m.Symbol</td>
+                                <td class="mono text-bright">@m.Mid.ToString("F4")</td>
+                                <td class="mono @(m.Funding >= 0 ? "text-green" : "text-red")">
+                                    @(m.Funding >= 0 ? "+" : "")@m.Funding.ToString("F4")%
+                                </td>
+                                <td class="mono text-muted">@FormatVol(m.OpenInterest)</td>
+                                <td class="mono text-muted">@m.MaxLeverage×</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        </div>
+        <div id="data-loaded"></div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<AssetMarket> _markets = [];
+
+    private sealed record OrderEntry(string Symbol, string Side, decimal Price, decimal Size, int Leverage, string Status);
+    private IReadOnlyList<OrderEntry> _orders = [];
+
+    private static readonly IReadOnlyList<PipelineStep> _steps =
+    [
+        new("Signal Receive",  "📥", "RiskDecision arrives via Block Controller envelope",                  "#d29922"),
+        new("Order Build",     "⚙",  "Kelly sizing, leverage cap, stop/TP levels from addresses table",    "#1f6feb"),
+        new("HL Submit",       "🏦", "POST /exchange → HYPERLIQUID REST API (addresses from PostgreSQL)",   "#00d4ff"),
+        new("Fill Track",      "✅", "WS subscription → ORDER_FILL → emit ORDER_RESULT to Block Controller","#3fb950"),
+    ];
+
+    private static string FormatVol(decimal v) =>
+        v switch { >= 1_000_000m => $"{v/1_000_000m:F1}M", >= 1_000m => $"{v/1_000m:F1}K", _ => $"{v:F0}" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _markets = await Svc.GetAssetMarketsAsync(cts.Token);
+
+        // Derive realistic orders from live market data
+        _orders = _markets.Take(6).Select((m, i) =>
+        {
+            var side = m.ChangePercent >= 0 ? "LONG" : "SHORT";
+            var size = Math.Round(100m / m.Mid, 4);
+            var status = i == 0 ? "PENDING" : i < 4 ? "FILLED" : "CANCELLED";
+            return new OrderEntry(m.Symbol, side, m.Mid, size, Math.Min(m.MaxLeverage, 10), status);
+        }).ToList().AsReadOnly();
+    }
+}

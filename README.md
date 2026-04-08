@@ -6,6 +6,41 @@
 [![Pages](https://github.com/somat3k/configs-repo/actions/workflows/pages.yml/badge.svg)](https://somat3k.github.io/configs-repo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+---
+
+## ⚡ Live Workflow Examples
+
+Each module ships a **standalone, user-loadable workflow page** (`src/workflow-demo/`) built on ASP.NET Core + Blazor Server.  
+Run it with a single command and open any `/workflow/{module}` URL to see the functional data pipeline in action:
+
+```bash
+dotnet run --project src/workflow-demo/MLS.WorkflowDemo
+# → http://localhost:5099/workflow
+```
+
+> The pages connect to Hyperliquid and DeFi Llama for live data. A built-in market snapshot is used automatically when external APIs are unreachable (e.g. CI).
+
+### 📸 Workflow Screenshots
+
+| | |
+|:---:|:---:|
+| **Workflow Index** — module gallery with ports & descriptions | **Block Controller** — module registry + live Hyperliquid prices |
+| [![Index](docs/screenshots/index.png)](docs/screenshots/index.png) | [![Block Controller](docs/screenshots/block-controller.png)](docs/screenshots/block-controller.png) |
+| **Data Layer** — 1m OHLCV feed + 8-dim FeatureVector (RSI, MACD, BB…) | **Trader** — model-t signal pipeline: Features → ONNX → BUY/HOLD/SELL |
+| [![Data Layer](docs/screenshots/data-layer.png)](docs/screenshots/data-layer.png) | [![Trader](docs/screenshots/trader.png)](docs/screenshots/trader.png) |
+| **Arbitrager** — Camelot · DFYN · nHOP · Hyperliquid spread scan | **DeFi** — DeFi Llama TVL + yield opportunities (Balancer, Morpho) |
+| [![Arbitrager](docs/screenshots/arbitrager.png)](docs/screenshots/arbitrager.png) | [![DeFi](docs/screenshots/defi.png)](docs/screenshots/defi.png) |
+| **ML Runtime** — OHLCV → FeatureEngineer → Python train → ONNX export | **Designer** — 28-type block graph: sockets, strategy deploy, Roslyn |
+| [![ML Runtime](docs/screenshots/ml-runtime.png)](docs/screenshots/ml-runtime.png) | [![Designer](docs/screenshots/designer.png)](docs/screenshots/designer.png) |
+| **AI Hub** — 7 LLM providers, Semantic Kernel, live market context | **Broker** — HYPERLIQUID order routing + fill tracking |
+| [![AI Hub](docs/screenshots/ai-hub.png)](docs/screenshots/ai-hub.png) | [![Broker](docs/screenshots/broker.png)](docs/screenshots/broker.png) |
+| **Transactions** — EIP-1559 build → sign → Arbitrum L2 submit | **Shell VM** — secure sandboxed CLI with output streaming |
+| [![Transactions](docs/screenshots/transactions.png)](docs/screenshots/transactions.png) | [![Shell VM](docs/screenshots/shell-vm.png)](docs/screenshots/shell-vm.png) |
+
+Each workflow page is **self-contained**: it fetches live data, runs the same functional pipeline used in production, and renders the result — no other services required.
+
+---
+
 ## 🏗️ Architecture Overview
 
 ```
@@ -46,6 +81,7 @@
 | [broker](src/modules/broker/README.md) | 5800/6800 | Broker integration (HYPERLIQUID) | 🔧 Scaffold |
 | [transactions](src/modules/transactions/README.md) | 5900/6900 | Transaction manager | 🔧 Scaffold |
 | [network-modules](src/network-modules/README.md) | — | ID gen, registry, runtime, VM | 🔧 Scaffold |
+| **[workflow-demo](src/workflow-demo/MLS.WorkflowDemo/)** | **5099** | **Standalone workflow examples** | ✅ **New** |
 
 ## 🚀 Quick Start
 
@@ -72,7 +108,13 @@ docker compose -f docker-compose.infra.yml up -d
 ### 3. Open Web App
 Navigate to `https://localhost:7200`
 
-### 4. Documentation Site (NuxtJS)
+### 4. Workflow Demo (Standalone)
+```bash
+dotnet run --project src/workflow-demo/MLS.WorkflowDemo
+# Open http://localhost:5099/workflow
+```
+
+### 5. Documentation Site (NuxtJS)
 ```bash
 cd nuxt-pages && npm install && npm run dev
 # Open http://localhost:3000
@@ -130,12 +172,16 @@ configs-repo/
 │   │   ├── data-layer/             # Data-driven access layer
 │   │   ├── broker/                 # Broker integration
 │   │   └── transactions/           # Transaction management
-│   └── network-modules/            # Network infrastructure modules
+│   ├── network-modules/            # Network infrastructure modules
+│   └── workflow-demo/              # ✅ Standalone workflow example pages (NEW)
+│       └── MLS.WorkflowDemo/       #    dotnet run → http://localhost:5099/workflow
 ├── nuxt-pages/                     # GitHub Pages documentation (NuxtJS)
 ├── infra/                          # Infrastructure configs
 │   ├── postgres/init/              # PostgreSQL init scripts
 │   └── redis/                      # Redis config
-├── docs/                           # Architecture documentation
+├── docs/
+│   ├── architecture/               # Architecture documentation
+│   └── screenshots/                # ✅ Workflow screenshots (NEW)
 ├── artifacts/                      # ML model artifacts (gitignored)
 ├── docker-compose.yml              # Full platform
 ├── docker-compose.infra.yml        # Infrastructure only
