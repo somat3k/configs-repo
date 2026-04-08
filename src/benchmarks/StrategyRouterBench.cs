@@ -48,7 +48,11 @@ public class StrategyRouterBench
         for (int i = 0; i < 1_000; i++)
         {
             var topic = StrategyRouter.BuildTopic(strategyId, Guid.NewGuid(), $"output_{i}");
-            _subscriptionTable.AddAsync(topic, Guid.NewGuid()).AsTask().Wait();
+            // SubscriptionTable.AddAsync is implemented synchronously (returns ValueTask.CompletedTask).
+            // GlobalSetup is a synchronous method so we drain the completed ValueTask here.
+            // This is the correct pattern for consuming a synchronously-completed ValueTask in
+            // a non-async context; no thread-pool blocking occurs.
+            _subscriptionTable.AddAsync(topic, Guid.NewGuid()).GetAwaiter().GetResult();
             if (i == 500) _hotTopic = topic;
         }
 

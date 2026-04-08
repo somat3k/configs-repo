@@ -64,13 +64,13 @@ public class FeatureEngineerBench
     /// <summary>
     /// Converts a computed feature vector to chart-ready plot samples.
     /// Exercises the <see cref="FeatureEngineer.ToPlotSamples"/> allocation path.
+    /// Returns the full sample list to prevent the JIT from eliding the call.
     /// </summary>
     [Benchmark(Description = "ToPlotSamples — project FeatureVector to 8 IndicatorPlotSamples")]
-    public int ToPlotSamples()
+    public IReadOnlyList<IndicatorPlotSample> ToPlotSamples()
     {
-        var vector = _engineer.ComputeModelT(_window200);
-        var samples = FeatureEngineer.ToPlotSamples(vector, DateTimeOffset.UtcNow);
-        return samples.Count;
+        var vector  = _engineer.ComputeModelT(_window200);
+        return FeatureEngineer.ToPlotSamples(vector, DateTimeOffset.UtcNow);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
