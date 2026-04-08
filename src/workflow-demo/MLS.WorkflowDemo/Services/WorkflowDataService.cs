@@ -112,7 +112,7 @@ public sealed class WorkflowDataService(
         // Generate 60 realistic 1m OHLCV bars by walking from a seed price.
         var markets = BuiltInMarkets();
         var seed    = markets.FirstOrDefault(m => m.Symbol == coin)?.Mid ?? 3_441m;
-        var rng     = new Random(coin.GetHashCode(StringComparison.Ordinal) & 0x7FFFFFFF);
+        var rng     = new Random(Math.Abs(coin.GetHashCode(StringComparison.Ordinal)));
         var candles = new List<Candle>(60);
         var price   = seed * 0.98m;
         var baseMs  = DateTimeOffset.UtcNow.AddMinutes(-60).ToUnixTimeMilliseconds();
@@ -339,9 +339,10 @@ public sealed class WorkflowDataService(
             .Take(15)
             .SelectMany(m => venues.Select(v =>
             {
-                var offset   = VenueOffset(m.Symbol, v.Item1);
+                var (venueName, _) = v;
+                var offset   = VenueOffset(m.Symbol, venueName);
                 var venuePrice = m.Mid * (1m + offset);
-                return (m, v.Item1, v.Item2, venuePrice);
+                return (m, venueName, v.Item2, venuePrice);
             }))
             .GroupBy(x => x.m.Symbol)
             .Select(g =>

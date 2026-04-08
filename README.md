@@ -172,9 +172,9 @@ configs-repo/
 │   │   ├── data-layer/             # Data-driven access layer
 │   │   ├── broker/                 # Broker integration
 │   │   └── transactions/           # Transaction management
-│   └── network-modules/            # Network infrastructure modules
-├── workflow-demo/                  # ✅ Standalone workflow example pages (NEW)
-│   └── MLS.WorkflowDemo/           #    dotnet run → http://localhost:5099/workflow
+│   ├── network-modules/            # Network infrastructure modules
+│   └── workflow-demo/              # ✅ Standalone workflow example pages (NEW)
+│       └── MLS.WorkflowDemo/       #    dotnet run → http://localhost:5099/workflow
 ├── nuxt-pages/                     # GitHub Pages documentation (NuxtJS)
 ├── infra/                          # Infrastructure configs
 │   ├── postgres/init/              # PostgreSQL init scripts
