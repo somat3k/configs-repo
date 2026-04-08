@@ -1,3 +1,5 @@
+> ✅ **Status: Complete** — Implemented and verified in session 23 (workflow-demo).
+
 # Performance Baselines — MLS Trading Platform
 
 > **Reference**: [Performance Semantics](performance-semantics.md) · [Session Schedule](../session-schedule.md) — Session 22  

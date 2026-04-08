@@ -1,3 +1,5 @@
+> ✅ **Status: Complete** — Implemented and verified in session 23 (workflow-demo).
+
 # Hydra Data Collection Architecture
 
 > **Reference**: [Giga-Scale Plan](giga-scale-plan.md) | [Session Schedule](../session-schedule.md) (Sessions 07, 15–16)

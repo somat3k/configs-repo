@@ -1,0 +1,89 @@
+@page "/workflow/arbitrager"
+@rendermode InteractiveServer
+@inject WorkflowDataService Svc
+
+<PageTitle>Arbitrager Workflow</PageTitle>
+
+<WorkflowHeader Title="Arbitrager — Cross-Venue Spread Detection (model-a)"
+                Description="Scans Hyperliquid, Camelot, DFYN, and nHOP for price discrepancies, estimates Arbitrum gas costs, filters profitable arb paths, and emits transaction arrays."
+                Icon="⚡" HttpPort="5400" WsPort="6400"
+                IsLive="_opportunities.Count > 0"
+                DataSource="Hyperliquid metaAndAssetCtxs · multi-venue"
+                AccentColor="#b45309" />
+
+<WorkflowPipeline Steps="_steps" ActiveStep="_opportunities.Count > 0 ? 3 : 0" />
+
+<div class="wf-body">
+    @if (_opportunities.Count == 0)
+    {
+        <div class="wf-loading">Scanning venues for arbitrage opportunities…</div>
+    }
+    else
+    {
+        <div class="wf-card" style="margin-bottom:16px">
+            <h2>Live Opportunities — Camelot · DFYN · nHOP · Hyperliquid <span class="wf-live-dot"></span></h2>
+            <table class="wf-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th><th>Buy Venue</th><th>Buy Price</th>
+                        <th>Sell Venue</th><th>Sell Price</th>
+                        <th>Spread bps</th><th>Est. Gas $</th><th>Net Profit $</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in _opportunities)
+                    {
+                        var profitable = o.NetProfitUsd > 0;
+                        <tr class="@(profitable ? "row-up" : "row-dn")">
+                            <td class="mono">@o.Symbol</td>
+                            <td class="mono text-muted">@o.BuyVenue</td>
+                            <td class="mono text-green">@o.BuyPrice.ToString("F4")</td>
+                            <td class="mono text-muted">@o.SellVenue</td>
+                            <td class="mono text-red">@o.SellPrice.ToString("F4")</td>
+                            <td class="mono text-bright">@o.SpreadBps.ToString("F2")</td>
+                            <td class="mono text-muted">@o.EstGasUsd.ToString("F2")</td>
+                            <td class="mono @(profitable ? "text-green" : "text-red")">
+                                @(profitable ? "+" : "")@o.NetProfitUsd.ToString("F6")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="wf-metrics-row">
+            <div class="wf-metric"><div class="wfm-val">@_opportunities.Count</div><div class="wfm-lbl">Paths scanned</div></div>
+            <div class="wf-metric"><div class="wfm-val text-green">@_profitable</div><div class="wfm-lbl">Net profitable</div></div>
+            <div class="wf-metric"><div class="wfm-val">@_bestSpread.ToString("F2")</div><div class="wfm-lbl">Best spread (bps)</div></div>
+            <div class="wf-metric"><div class="wfm-val">@_avgGas.ToString("F2")</div><div class="wfm-lbl">Avg gas (USD)</div></div>
+            <div class="wf-metric"><div class="wfm-val">@_markets.Count</div><div class="wfm-lbl">Assets surveyed</div></div>
+            <div class="wf-metric"><div class="wfm-val">4</div><div class="wfm-lbl">Venues monitored</div></div>
+        </div>
+        <div id="data-loaded"></div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<AssetMarket>    _markets      = [];
+    private IReadOnlyList<ArbOpportunity> _opportunities = [];
+    private int    _profitable;
+    private decimal _bestSpread, _avgGas;
+
+    private static readonly IReadOnlyList<PipelineStep> _steps =
+    [
+        new("Price Scan",    "🔍", "Poll all venue feeds: Hyperliquid WS + Camelot/DFYN/nHOP subgraphs", "#b45309"),
+        new("Spread Detect", "⚡", "model-a scores each (buy_venue, sell_venue, asset) triple",           "#d29922"),
+        new("Gas Estimate",  "⛽", "Arbitrum L2 gas price × estimated call gas → USD cost",               "#8b949e"),
+        new("Execute",       "🚀", "Net-positive paths → multi-hop transaction array → Transactions module","#3fb950"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _markets       = await Svc.GetAssetMarketsAsync(cts.Token);
+        _opportunities = WorkflowDataService.ComputeArbOpportunities(_markets);
+        _profitable    = _opportunities.Count(o => o.NetProfitUsd > 0);
+        _bestSpread    = _opportunities.Any() ? _opportunities.Max(o => o.SpreadBps) : 0m;
+        _avgGas        = _opportunities.Any() ? _opportunities.Average(o => o.EstGasUsd) : 0m;
+    }
+}

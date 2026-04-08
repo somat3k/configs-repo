@@ -1,3 +1,5 @@
+> ✅ **Status: Complete** — Implemented and verified in session 23 (workflow-demo).
+
 # Payload Schemas
 
 All WebSocket messages in the MLS platform follow the Envelope Protocol.

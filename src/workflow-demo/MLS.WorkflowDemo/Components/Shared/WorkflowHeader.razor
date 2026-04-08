@@ -1,0 +1,33 @@
+@* Renders the module header banner with title, ports, description, live badge. *@
+
+<div class="wf-header" style="--accent: @AccentColor">
+    <div class="wfh-icon">@Icon</div>
+    <div class="wfh-body">
+        <div class="wfh-title-row">
+            <h1 class="wfh-title">@Title</h1>
+            <span class="wfh-badge @(IsLive ? "wfh-badge--live" : "wfh-badge--idle")">
+                @(IsLive ? "● LIVE" : "○ LOADING")
+            </span>
+        </div>
+        <p class="wfh-desc">@Description</p>
+        <div class="wfh-meta">
+            <span class="wfh-port">HTTP @HttpPort</span>
+            <span class="wfh-port">WS @WsPort</span>
+            @if (!string.IsNullOrWhiteSpace(DataSource))
+            {
+                <span class="wfh-source">⚡ @DataSource</span>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title       { get; set; } = "";
+    [Parameter, EditorRequired] public string Description { get; set; } = "";
+    [Parameter] public string Icon        { get; set; } = "⬡";
+    [Parameter] public int    HttpPort    { get; set; }
+    [Parameter] public int    WsPort      { get; set; }
+    [Parameter] public bool   IsLive      { get; set; }
+    [Parameter] public string DataSource  { get; set; } = "";
+    [Parameter] public string AccentColor { get; set; } = "#00d4ff";
+}
