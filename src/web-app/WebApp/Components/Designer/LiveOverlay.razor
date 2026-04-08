@@ -1,0 +1,174 @@
+@using MLS.Core.Constants
+@inject IBlockControllerHub Hub
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* ── Live overlay: inferences/s · fill rate · P&L delta ─────────────────── *@
+<div class="live-overlay" aria-live="polite" aria-label="Live canvas metrics">
+    <span class="lo-label">inf/s</span>
+    <span id="lo-inf-sec" class="lo-val">—</span>
+
+    <span class="lo-sep" aria-hidden="true">·</span>
+
+    <span class="lo-label">fill</span>
+    <span id="lo-fill-rate" class="lo-val">—</span>
+
+    <span class="lo-sep" aria-hidden="true">·</span>
+
+    <span class="lo-label">P&amp;L Δ</span>
+    <span id="lo-pl-delta" class="lo-val">—</span>
+</div>
+
+<style>
+    @* Wrap all animation rules in prefers-reduced-motion to satisfy spec *@
+    @@media (prefers-reduced-motion: no-preference) {
+        .lo-val {
+            transition: color 0.2s;
+        }
+    }
+
+    .live-overlay {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: rgba(13, 16, 24, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 6px;
+        backdrop-filter: blur(6px);
+        font-size: 0.68rem;
+        font-family: var(--font-mono, monospace);
+        z-index: 10;
+        pointer-events: none;
+        user-select: none;
+    }
+
+    .lo-label {
+        color: var(--mls-text-muted, #64748b);
+        font-size: 0.62rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+
+    .lo-val {
+        color: var(--mls-text, #e2e8f0);
+        min-width: 38px;
+        text-align: right;
+    }
+
+    .lo-val.lo-positive { color: #22c55e; }
+    .lo-val.lo-negative { color: #f87171; }
+
+    .lo-sep {
+        color: rgba(255, 255, 255, 0.2);
+    }
+</style>
+
+@code {
+    // ── State ─────────────────────────────────────────────────────────────────
+
+    private CancellationTokenSource _cts = new();
+
+    // Interlocked second-window accumulators — safe for concurrent read/write
+    private int _signalCount;       // total BLOCK_SIGNAL in current second
+    private int _orderCount;        // TradeOrder sockets
+    private int _fillCount;         // OrderResult sockets
+
+    // _plDelta accumulates P&L signals in the current second window (sum)
+    // and is reset to null on flush. Protected by _plLock.
+    private double? _plDeltaAccum;
+    private readonly object _plLock = new();
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Hub.IsConnected)
+            await Hub.ConnectAsync(_cts.Token).ConfigureAwait(false);
+
+        // Start envelope consumer and 1Hz flush loop as fire-and-forget tasks
+        _ = ConsumeEnvelopesAsync(_cts.Token);
+        _ = RunFlushLoopAsync(_cts.Token);
+    }
+
+    // ── Envelope consumer ─────────────────────────────────────────────────────
+
+    private async Task ConsumeEnvelopesAsync(CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var env in Hub
+                .GetEnvelopeStreamAsync([MessageTypes.BlockSignal], ct)
+                .ConfigureAwait(false))
+            {
+                Interlocked.Increment(ref _signalCount);
+
+                if (env.Payload.TryGetProperty("socket_type", out var stProp))
+                {
+                    var st = stProp.GetString() ?? "";
+                    if (st.Contains("TradeOrder", StringComparison.OrdinalIgnoreCase))
+                        Interlocked.Increment(ref _orderCount);
+                    else if (st.Contains("OrderResult", StringComparison.OrdinalIgnoreCase))
+                        Interlocked.Increment(ref _fillCount);
+                }
+
+                // Accumulate P&L delta — sum over the current second window
+                if (env.Payload.TryGetProperty("value", out var valProp) &&
+                    valProp.TryGetProperty("pnl", out var pnlProp) &&
+                    pnlProp.TryGetDouble(out var pnlVal))
+                {
+                    lock (_plLock)
+                        _plDeltaAccum = (_plDeltaAccum ?? 0) + pnlVal;
+                }
+            }
+        }
+        catch (OperationCanceledException) { /* clean shutdown */ }
+    }
+
+    // ── 1 Hz flush loop — updates DOM via JS, avoids Blazor re-render ─────────
+
+    private async Task RunFlushLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+            {
+                // Atomically swap accumulators
+                var signals   = Interlocked.Exchange(ref _signalCount, 0);
+                var orders    = Interlocked.Exchange(ref _orderCount,  0);
+                var fills     = Interlocked.Exchange(ref _fillCount,   0);
+
+                double? plDelta;
+                lock (_plLock)
+                {
+                    plDelta     = _plDeltaAccum;
+                    _plDeltaAccum = null;
+                }
+
+                var infPerSec  = (double)signals;
+                var fillRatePct = orders > 0 ? (double)fills / orders * 100.0 : 0;
+
+                // Direct DOM update — no Blazor StateHasChanged
+                await JS.InvokeVoidAsync(
+                    "mlsPulse.updateOverlay",
+                    infPerSec,
+                    fillRatePct,
+                    (object?)plDelta,
+                    ct).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) { /* clean shutdown */ }
+    }
+
+    // ── Dispose ───────────────────────────────────────────────────────────────
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}
