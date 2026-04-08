@@ -184,23 +184,28 @@ public sealed class BalancerAdapter : IExchangeAdapter
         {
             if (!TokenAddressMap.TryGetValue(baseToken, out var baseKey) ||
                 !TokenAddressMap.TryGetValue(quoteToken, out var quoteKey))
-                return GetFallbackPrice(baseToken, quoteToken);
+            {
+                _logger.LogWarning("BalancerAdapter: unsupported token pair {Base}/{Quote} — no live price available.", baseToken, quoteToken);
+                throw new ExchangeUnavailableException("balancer", baseToken, quoteToken);
+            }
 
             baseAddr  = (await _addressBook.GetAddressAsync(baseKey,  ct).ConfigureAwait(false)).ToLowerInvariant();
             quoteAddr = (await _addressBook.GetAddressAsync(quoteKey, ct).ConfigureAwait(false)).ToLowerInvariant();
         }
-        catch (KeyNotFoundException)
+        catch (KeyNotFoundException ex)
         {
-            _logger.LogDebug("BalancerAdapter: token address not in address book for {Base}/{Quote}, using fallback.",
-                baseToken, quoteToken);
-            return GetFallbackPrice(baseToken, quoteToken);
+            _logger.LogWarning(ex, "BalancerAdapter: token address not in address book for {Base}/{Quote} — no live price available.", baseToken, quoteToken);
+            throw new ExchangeUnavailableException("balancer", baseToken, quoteToken);
         }
 
         // Sanitize addresses (defensive)
         var safeBase  = SanitizeAddress(baseAddr);
         var safeQuote = SanitizeAddress(quoteAddr);
         if (safeBase is null || safeQuote is null)
-            return GetFallbackPrice(baseToken, quoteToken);
+        {
+            _logger.LogWarning("BalancerAdapter: invalid EVM address for {Base}/{Quote} — no live price available.", baseToken, quoteToken);
+            throw new ExchangeUnavailableException("balancer", baseToken, quoteToken);
+        }
 
         // Balancer subgraph on Arbitrum — tokensList contains lowercase EVM addresses
         var query = $$"""
@@ -214,7 +219,7 @@ public sealed class BalancerAdapter : IExchangeAdapter
                 "https://api.thegraph.com/subgraphs/name/balancer-labs/balancer-arbitrum-v2",
                 content, ct).ConfigureAwait(false);
 
-            if (!response.IsSuccessStatusCode) return GetFallbackPrice(baseToken, quoteToken);
+            if (!response.IsSuccessStatusCode) throw new ExchangeUnavailableException("balancer", baseToken, quoteToken);
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
@@ -249,22 +254,17 @@ public sealed class BalancerAdapter : IExchangeAdapter
                     return (quoteBalance / quoteWeight) / (baseBalance / baseWeight);
             }
         }
+        catch (ExchangeUnavailableException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "BalancerAdapter: subgraph query failed, using fallback price.");
+            _logger.LogDebug(ex, "BalancerAdapter: subgraph query failed for {Base}/{Quote}.", baseToken, quoteToken);
         }
 
-        return GetFallbackPrice(baseToken, quoteToken);
+        throw new ExchangeUnavailableException("balancer", baseToken, quoteToken);
     }
-
-    private static decimal GetFallbackPrice(string baseToken, string quoteToken) =>
-        (baseToken.ToUpperInvariant(), quoteToken.ToUpperInvariant()) switch
-        {
-            ("WETH", "USDC") => 2002m,
-            ("ARB",  "WETH") => 0.00049m,
-            ("WBTC", "USDC") => 60050m,
-            _                => 1m
-        };
 
     /// <summary>
     /// Sanitizes an EVM address for safe inclusion in a GraphQL query string.

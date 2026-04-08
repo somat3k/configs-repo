@@ -201,8 +201,8 @@ public sealed class CamelotAdapter : IExchangeAdapter
         if (!TokenMap.TryGetValue(baseToken,  out var baseInfo) ||
             !TokenMap.TryGetValue(quoteToken, out var quoteInfo))
         {
-            _logger.LogDebug("CamelotAdapter: unsupported token pair {Base}/{Quote}.", baseToken, quoteToken);
-            return GetFallbackPrice(baseToken, quoteToken);
+            _logger.LogWarning("CamelotAdapter: unsupported token pair {Base}/{Quote} — no live price available.", baseToken, quoteToken);
+            throw new ExchangeUnavailableException("camelot", baseToken, quoteToken);
         }
 
         string routerAddr, baseAddr, quoteAddr;
@@ -215,8 +215,8 @@ public sealed class CamelotAdapter : IExchangeAdapter
         }
         catch (KeyNotFoundException ex)
         {
-            _logger.LogDebug(ex, "CamelotAdapter: address book missing entry, using fallback.");
-            return GetFallbackPrice(baseToken, quoteToken);
+            _logger.LogWarning(ex, "CamelotAdapter: address book missing entry for {Base}/{Quote} — no live price available.", baseToken, quoteToken);
+            throw new ExchangeUnavailableException("camelot", baseToken, quoteToken);
         }
 
         // ABI-encode getAmountsOut(uint256 amountIn, address[] path)
@@ -236,7 +236,10 @@ public sealed class CamelotAdapter : IExchangeAdapter
             using var response = await _http.PostAsync(rpcUrl, content, ct).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
-                return GetFallbackPrice(baseToken, quoteToken);
+            {
+                _logger.LogWarning("CamelotAdapter: eth_call returned {StatusCode} for {Base}/{Quote} — no live price available.", response.StatusCode, baseToken, quoteToken);
+                throw new ExchangeUnavailableException("camelot", baseToken, quoteToken);
+            }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
@@ -261,7 +264,7 @@ public sealed class CamelotAdapter : IExchangeAdapter
             _logger.LogDebug(ex, "CamelotAdapter: eth_call failed for {Base}/{Quote}.", baseToken, quoteToken);
         }
 
-        return GetFallbackPrice(baseToken, quoteToken);
+        throw new ExchangeUnavailableException("camelot", baseToken, quoteToken);
     }
 
     /// <summary>
@@ -313,15 +316,6 @@ public sealed class CamelotAdapter : IExchangeAdapter
     private static string StripAndPad(string addr) =>
         (addr.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? addr[2..] : addr)
         .ToLowerInvariant().PadLeft(64, '0');
-
-    private static decimal GetFallbackPrice(string baseToken, string quoteToken) =>
-        (baseToken.ToUpperInvariant(), quoteToken.ToUpperInvariant()) switch
-        {
-            ("WETH", "USDC") => 2000m,
-            ("WBTC", "USDC") => 60000m,
-            ("ARB",  "USDC") => 1m,
-            _                => 1m
-        };
 
     private static TimeSpan GetBackoff(int attempt)
     {

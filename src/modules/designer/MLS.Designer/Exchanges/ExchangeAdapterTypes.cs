@@ -90,6 +90,26 @@ public sealed record OrderBookSnapshot(
 }
 
 /// <summary>
+/// Thrown when a live online price source is unreachable or returns no data.
+/// Callers must <b>not</b> substitute synthetic or cached fallback prices;
+/// the strategy engine will handle the unavailability through its backoff/retry policy.
+/// </summary>
+public sealed class ExchangeUnavailableException(string exchangeId, string baseToken, string quoteToken)
+    : Exception(
+        $"Exchange '{exchangeId}' could not provide a live price for {baseToken}/{quoteToken}. " +
+        $"No fallback data is permitted — live online source required.")
+{
+    /// <summary>Exchange identifier that failed.</summary>
+    public string ExchangeId { get; } = exchangeId;
+
+    /// <summary>Base token of the requested pair.</summary>
+    public string BaseToken { get; } = baseToken;
+
+    /// <summary>Quote token of the requested pair.</summary>
+    public string QuoteToken { get; } = quoteToken;
+}
+
+/// <summary>
 /// Thrown when the market has moved beyond the configured slippage tolerance.
 /// </summary>
 public sealed class SlippageExceededException(
