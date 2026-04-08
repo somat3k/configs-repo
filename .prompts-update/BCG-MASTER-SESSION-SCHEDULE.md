@@ -97,7 +97,7 @@ These standards apply program-wide unless a stricter per-session target override
 
 ### Quality Assurance
 
-- all releaseable services require unit, integration, contract, and health verification
+- all releasable services require unit, integration, contract, and health verification
 - no module is promoted without observability, rollback notes, and operational docs
 - all transport schemas require versioning policy and backward-compatibility notes
 
