@@ -178,7 +178,10 @@ public sealed class MorphoAdapter : IExchangeAdapter
         var safeBase  = new string(baseToken.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
         var safeQuote = new string(quoteToken.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
         if (string.IsNullOrEmpty(safeBase) || string.IsNullOrEmpty(safeQuote))
-            return GetFallbackPrice(baseToken, quoteToken);
+        {
+            _logger.LogWarning("MorphoAdapter: invalid token symbols {Base}/{Quote} — no live price available.", baseToken, quoteToken);
+            throw new ExchangeUnavailableException("morpho", baseToken, quoteToken);
+        }
 
         // Query Morpho Blue API for oracle/market price data
         var query = $$"""
@@ -193,7 +196,10 @@ public sealed class MorphoAdapter : IExchangeAdapter
                 content, ct).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
-                return GetFallbackPrice(baseToken, quoteToken);
+            {
+                _logger.LogWarning("MorphoAdapter: API returned {StatusCode} for {Base}/{Quote} — no live price available.", response.StatusCode, baseToken, quoteToken);
+                throw new ExchangeUnavailableException("morpho", baseToken, quoteToken);
+            }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
@@ -222,21 +228,17 @@ public sealed class MorphoAdapter : IExchangeAdapter
                 }
             }
         }
+        catch (ExchangeUnavailableException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "MorphoAdapter: API query failed for {Base}/{Quote}, using fallback.", baseToken, quoteToken);
+            _logger.LogDebug(ex, "MorphoAdapter: API query failed for {Base}/{Quote}.", baseToken, quoteToken);
         }
 
-        return GetFallbackPrice(baseToken, quoteToken);
+        throw new ExchangeUnavailableException("morpho", baseToken, quoteToken);
     }
-
-    private static decimal GetFallbackPrice(string baseToken, string quoteToken) =>
-        (baseToken.ToUpperInvariant(), quoteToken.ToUpperInvariant()) switch
-        {
-            ("WETH", "USDC") => 2000m,
-            ("WBTC", "USDC") => 60000m,
-            _                => 1m
-        };
 
     private static TimeSpan GetBackoff(int attempt)
     {
