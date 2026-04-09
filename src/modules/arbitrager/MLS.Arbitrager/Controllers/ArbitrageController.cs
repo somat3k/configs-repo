@@ -30,7 +30,8 @@ public sealed class ArbitrageController(
     {
         _scanner.PublishPrice(snapshot);
         _logger.LogInformation("ArbitrageController: injected price for {Exchange}/{Symbol}",
-            snapshot.Exchange, snapshot.Symbol);
+            ArbitrageUtils.SanitiseId(snapshot.Exchange),
+            ArbitrageUtils.SanitiseId(snapshot.Symbol));
         return Accepted(new { message = "Price injected", snapshot });
     }
 

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using MLS.Arbitrager.Configuration;
 using MLS.Core.Constants;
 using Npgsql;
@@ -73,7 +74,8 @@ public sealed class AddressBook : IArbitragerAddressBook
             }
             else
             {
-                _logger.LogWarning("AddressBook: unknown key '{Key}' — skipping.", keyStr);
+                _logger.LogWarning("AddressBook: unknown key '{Key}' — skipping.",
+                    Regex.Replace(keyStr.Length > 64 ? keyStr[..64] : keyStr, @"[^A-Za-z0-9_]", "_"));
             }
         }
 
