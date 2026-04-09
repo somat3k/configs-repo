@@ -1,0 +1,97 @@
+using System.Threading.Channels;
+using Microsoft.AspNetCore.SignalR;
+using MLS.Broker.Configuration;
+using MLS.Broker.Hubs;
+using MLS.Broker.Interfaces;
+using MLS.Broker.Models;
+using MLS.Core.Constants;
+using MLS.Core.Contracts;
+
+namespace MLS.Broker.Services;
+
+/// <summary>
+/// Background service that subscribes to HYPERLIQUID fill and position notifications
+/// via WebSocket and broadcasts them as <c>FILL_NOTIFICATION</c> and
+/// <c>POSITION_UPDATE</c> envelopes to all connected SignalR clients.
+/// </summary>
+public sealed class FillNotificationService(
+    IHyperliquidClient _hyperliquid,
+    IOrderTracker _orderTracker,
+    IHubContext<BrokerHub> _hub,
+    IOptions<BrokerOptions> _options,
+    ILogger<FillNotificationService> _logger) : BackgroundService
+{
+    private const string ModuleId = "broker";
+
+    /// <inheritdoc/>
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        var opts    = _options.Value;
+        var channel = Channel.CreateBounded<FillNotification>(
+            new BoundedChannelOptions(opts.FillChannelCapacity)
+            {
+                FullMode     = BoundedChannelFullMode.DropOldest,
+                SingleWriter = true,
+                SingleReader = true,
+            });
+
+        // Producer: subscribe to HYPERLIQUID fill stream
+        var producer = ProduceFillsAsync(channel.Writer, ct);
+
+        // Consumer: dispatch fills as envelopes
+        await foreach (var fill in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            await ProcessFillAsync(fill, ct).ConfigureAwait(false);
+        }
+
+        await producer.ConfigureAwait(false);
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────────
+
+    private async Task ProduceFillsAsync(ChannelWriter<FillNotification> writer, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var fill in _hyperliquid.SubscribeFillsAsync(ct).ConfigureAwait(false))
+            {
+                if (!writer.TryWrite(fill))
+                    _logger.LogWarning("Fill channel full — dropping fill for {ClientOrderId}", fill.ClientOrderId);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected on shutdown
+        }
+        finally
+        {
+            writer.TryComplete();
+        }
+    }
+
+    private async Task ProcessFillAsync(FillNotification fill, CancellationToken ct)
+    {
+        // Determine if fully filled
+        var newState = fill.RemainingQuantity <= 0m ? OrderState.Filled : OrderState.PartiallyFilled;
+
+        // Update order tracker
+        await _orderTracker.UpdateAsync(
+            fill.ClientOrderId, newState, fill.TotalFilledQuantity, fill.FillPrice, ct)
+            .ConfigureAwait(false);
+
+        // Build FILL_NOTIFICATION envelope
+        var envelope = EnvelopePayload.Create(
+            MessageTypes.FillNotification,
+            ModuleId,
+            fill);
+
+        // Broadcast to all connected clients
+        await _hub.Clients.Group("broadcast")
+                  .SendAsync("ReceiveEnvelope", envelope, ct)
+                  .ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Fill: {ClientOrderId} qty={FillQty} @ {FillPrice} state={State}",
+            fill.ClientOrderId, fill.FillQuantity, fill.FillPrice, newState);
+    }
+}
