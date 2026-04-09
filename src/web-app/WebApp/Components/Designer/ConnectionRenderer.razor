@@ -35,8 +35,9 @@
                   stroke-width="4"
                   stroke-opacity="0.15"
                   stroke-linecap="round" />
-            @* Main wire *@
-            <path d="@path"
+            @* Main wire — stable id used by canvas-pulse.js for animateMotion *@
+            <path id="conn-path-@conn.ConnectionId"
+                  d="@path"
                   fill="none"
                   stroke="@color"
                   stroke-width="1.8"

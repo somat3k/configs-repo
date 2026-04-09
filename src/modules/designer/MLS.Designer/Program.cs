@@ -10,6 +10,7 @@ using MLS.Designer.Blocks.Trading.IndicatorBlocks;
 using MLS.Designer.Blocks.Trading.MLBlocks;
 using MLS.Designer.Blocks.Trading.RiskBlocks;
 using MLS.Designer.Blocks.Trading.StrategyBlocks;
+using MLS.Designer.Compilation;
 using MLS.Designer.Configuration;
 using MLS.Designer.Exchanges;
 using MLS.Designer.Hubs;
@@ -49,6 +50,23 @@ builder.Services.AddHttpClient<BalancerAdapter>()
 
 builder.Services.AddHttpClient<MorphoAdapter>()
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
+
+// ── IPFS HTTP client (for Roslyn compiler + DynamicBlockLoader) ───────────────
+var ipfsApiUrl = designerOpts.IpfsApiUrl?.Trim();
+builder.Services.AddHttpClient("ipfs", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+
+    if (string.IsNullOrWhiteSpace(ipfsApiUrl))
+        return; // IPFS disabled — base address intentionally omitted
+
+    var normalised = ipfsApiUrl.TrimEnd('/') + "/";
+    if (!Uri.TryCreate(normalised, UriKind.Absolute, out var baseUri))
+        throw new InvalidOperationException(
+            $"Designer:IpfsApiUrl '{ipfsApiUrl}' must be a valid absolute URI or empty to disable IPFS operations.");
+
+    client.BaseAddress = baseUri;
+});
 
 // ── PostgreSQL data source (owned by DI — adapters/registry must NOT dispose it) ──
 var pgConnStr = designerOpts.PostgresConnectionString;
@@ -93,6 +111,10 @@ builder.Services.AddSignalR(hub =>
 
 // ── Training dispatcher ───────────────────────────────────────────────────────
 builder.Services.AddSingleton<ITrainingDispatcher, TrainingDispatcher>();
+
+// ── Roslyn compilation + dynamic block loading ────────────────────────────────
+builder.Services.AddSingleton<IStrategyCompiler, RoslynStrategyCompiler>();
+builder.Services.AddSingleton<DynamicBlockLoader>();
 
 builder.Services.AddSingleton<IBlockRegistry>(sp =>
 {

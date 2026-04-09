@@ -1,4 +1,8 @@
 @using MLS.Core.Designer
+@inject IJSRuntime JS
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
+@implements IAsyncDisposable
 
 @* Property editor — slides in from the right when a block is selected *@
 
@@ -83,6 +87,31 @@
                     }
                 </div>
             }
+        }
+
+        @* Monaco code editor — shown only for CustomIndicatorBlock *@
+        @if (Block.BlockType == "CustomIndicatorBlock")
+        {
+            <div class="pe-section-label">C# Code</div>
+            <div class="pe-code-editor" @ref="_editorContainer" id="@_editorId"></div>
+            <div class="pe-code-actions">
+                <FluentButton Appearance="Appearance.Accent"
+                              @onclick="CompileCodeAsync"
+                              Disabled="@_isCompiling"
+                              title="Compile and save">
+                    @(_isCompiling ? "Compiling…" : "Compile")
+                </FluentButton>
+                @if (!string.IsNullOrEmpty(_compilationStatus))
+                {
+                    <span class="pe-compile-status @(_compileSuccess ? "success" : "error")">
+                        @_compilationStatus
+                    </span>
+                }
+                @if (!string.IsNullOrEmpty(_compiledCid))
+                {
+                    <span class="pe-cid" title="IPFS CID">CID: @_compiledCid[..12]…</span>
+                }
+            </div>
         }
     </div>
 </div>
@@ -201,18 +230,198 @@
         font-size: 0.62rem;
         color: #484f58;
     }
+
+    .pe-code-editor {
+        width: 100%;
+        height: 240px;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 4px;
+        overflow: hidden;
+        background: #0d1117;
+    }
+
+    .pe-code-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+    }
+
+    .pe-compile-status {
+        font-size: 0.68rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+
+    .pe-compile-status.success {
+        color: #2ea043;
+        background: rgba(46, 160, 67, 0.12);
+    }
+
+    .pe-compile-status.error {
+        color: #f85149;
+        background: rgba(248, 81, 73, 0.12);
+    }
+
+    .pe-cid {
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        font-size: 0.6rem;
+        color: #8b949e;
+        background: rgba(255,255,255,0.04);
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-left: auto;
+    }
 </style>
 
 @code {
     [Parameter, EditorRequired] public BlockViewModel Block { get; set; } = default!;
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<string> OnCidChanged { get; set; }
+
+    // ── Monaco editor state ───────────────────────────────────────────────────────
+
+    private ElementReference _editorContainer;
+    private readonly string _editorId = $"monaco-{Guid.NewGuid():N}";
+    private string _currentCode  = DefaultIndicatorCode;
+    private string _compilationStatus = string.Empty;
+    private string _compiledCid  = string.Empty;
+    private bool   _isCompiling;
+    private bool   _compileSuccess;
+    private DotNetObjectReference<PropertyEditor>? _dotNetRef;
+
+    private string? _lastBlockType;
+    private bool    _blockTypeChanged = true;
+    private bool    _editorInitialized;
 
     private List<ParameterViewModel> _parameters = [];
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
     protected override void OnParametersSet()
     {
         _parameters = GetDefaultParameters(Block.BlockType);
+
+        if (!string.Equals(_lastBlockType, Block.BlockType, StringComparison.Ordinal))
+        {
+            _lastBlockType   = Block.BlockType;
+            _blockTypeChanged = true;
+        }
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender || _blockTypeChanged)
+        {
+            await EnsureMonacoEditorStateAsync();
+            _blockTypeChanged = false;
+        }
+    }
+
+    private async Task EnsureMonacoEditorStateAsync()
+    {
+        var isCustomIndicator = string.Equals(Block.BlockType, "CustomIndicatorBlock", StringComparison.Ordinal);
+
+        if (isCustomIndicator)
+        {
+            if (!_editorInitialized)
+                await InitializeMonacoEditorAsync();
+            return;
+        }
+
+        if (_editorInitialized)
+            await DisposeMonacoEditorAsync();
+    }
+
+    private async Task InitializeMonacoEditorAsync()
+    {
+        // _dotNetRef must be null here: this method is only reached when !_editorInitialized.
+        // The disposal guard below is a safety net for any future refactor.
+        _dotNetRef?.Dispose();
+        _dotNetRef = DotNetObjectReference.Create(this);
+
+        await JS.InvokeVoidAsync("mlsMonaco.initEditor", _editorId, _currentCode, _dotNetRef);
+        _editorInitialized = true;
+    }
+
+    private async Task DisposeMonacoEditorAsync()
+    {
+        try { await JS.InvokeVoidAsync("mlsMonaco.disposeEditor", _editorId); }
+        catch { /* ignore JS dispose errors on teardown */ }
+
+        _dotNetRef?.Dispose();
+        _dotNetRef       = null;
+        _editorInitialized = false;
+    }
+
+    /// <summary>Callback invoked by Monaco JS interop when code changes (debounced 500ms).</summary>
+    [JSInvokable]
+    public void OnCodeChanged(string newCode)
+    {
+        _currentCode = newCode;
+    }
+
+    private async Task CompileCodeAsync()
+    {
+        if (_isCompiling) return;
+        _isCompiling = true;
+        _compilationStatus = string.Empty;
+        _compileSuccess    = false;
+        StateHasChanged();
+
+        try
+        {
+            // Get the latest code from the editor
+            _currentCode = await JS.InvokeAsync<string>("mlsMonaco.getCode", _editorId);
+
+            // POST to the compile/upload endpoint — returns CID when IPFS is configured
+            var request = new { Source = _currentCode, StrategyId = (Guid?)null };
+            using var http = HttpClientFactory.CreateClient("designer");
+            var response   = await http.PostAsJsonAsync("/api/compile/upload", request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CompileApiResponse>();
+                if (result?.Success == true)
+                {
+                    _compileSuccess    = true;
+                    _compiledCid       = result.IpfsCid ?? string.Empty;
+                    _compilationStatus = $"✓ Compiled in {result.ElapsedMs:F0} ms";
+                    if (!string.IsNullOrEmpty(_compiledCid))
+                        await OnCidChanged.InvokeAsync(_compiledCid);
+                }
+                else
+                {
+                    _compileSuccess    = false;
+                    _compilationStatus = result?.Diagnostics.FirstOrDefault() ?? "Compilation failed";
+                }
+            }
+            else
+            {
+                _compileSuccess    = false;
+                _compilationStatus = $"HTTP {(int)response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _compileSuccess    = false;
+            _compilationStatus = ex.Message;
+        }
+        finally
+        {
+            _isCompiling = false;
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_editorInitialized)
+            await DisposeMonacoEditorAsync();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────────
 
     private static List<ParameterViewModel> GetDefaultParameters(string blockType) => blockType switch
     {
@@ -239,6 +448,50 @@
         _ => "#6b7280",
     };
 
+    // ── Constants ─────────────────────────────────────────────────────────────────
+
+    private const string DefaultIndicatorCode =
+        """
+        using System;
+        using System.Collections.Generic;
+        using System.Text.Json;
+        using System.Threading;
+        using System.Threading.Tasks;
+        using MLS.Core.Designer;
+        using MLS.Designer.Blocks;
+
+        namespace MLS.UserBlock;
+
+        /// <summary>Custom indicator block — edit the computation logic below.</summary>
+        public sealed class MyIndicatorBlock : BlockBase
+        {
+            public override string BlockType   => "MyIndicatorBlock";
+            public override string DisplayName => "My Indicator";
+            public override IReadOnlyList<BlockParameter> Parameters => [];
+
+            public MyIndicatorBlock() : base(
+                [BlockSocket.Input("input", BlockSocketType.IndicatorValue)],
+                [BlockSocket.Output("output", BlockSocketType.IndicatorValue)]) { }
+
+            public override void Reset() { }
+
+            protected override ValueTask<BlockSignal?> ProcessCoreAsync(BlockSignal signal, CancellationToken ct)
+            {
+                if (signal.SocketType != BlockSocketType.IndicatorValue)
+                    return new ValueTask<BlockSignal?>(result: null);
+
+                // ── Your computation logic here ────────────────────────────────
+                var value = signal.Value.GetSingle();
+                var result = value; // passthrough — replace with your formula
+
+                return new ValueTask<BlockSignal?>(
+                    EmitFloat(BlockId, "output", BlockSocketType.IndicatorValue, result));
+            }
+        }
+        """;
+
+    // ── Inner types ───────────────────────────────────────────────────────────────
+
     private enum ParameterType { Int, Float, String, Bool, Enum }
 
     private sealed class ParameterViewModel(string name, string defaultValue, ParameterType type, string description = "")
@@ -251,4 +504,11 @@
         public bool BoolValue { get; set; }
         public string[] Options { get; init; } = [];
     }
+
+    private sealed record CompileApiResponse(
+        bool Success,
+        string? AssemblyBase64,
+        IReadOnlyList<string> Diagnostics,
+        string? IpfsCid,
+        double ElapsedMs);
 }

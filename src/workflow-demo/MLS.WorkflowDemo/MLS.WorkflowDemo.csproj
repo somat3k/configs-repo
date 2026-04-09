@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>13</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MLS.WorkflowDemo</AssemblyName>
+    <RootNamespace>MLS.WorkflowDemo</RootNamespace>
+    <Description>MLS Workflow Demo — one standalone Blazor Server page per module, live data from public APIs.</Description>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+</Project>

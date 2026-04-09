@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#07080c"/>
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1280" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <text x="640" y="320" font-family="Inter,system-ui,sans-serif" font-size="80" font-weight="700"
+        text-anchor="middle" fill="url(#g1)" letter-spacing="6">MLS Trading Platform</text>
+  <text x="640" y="400" font-family="Inter,system-ui,sans-serif" font-size="28"
+        text-anchor="middle" fill="#64748b">Machine Learning Studio — Trading, Arbitrage &amp; DeFi</text>
+</svg>

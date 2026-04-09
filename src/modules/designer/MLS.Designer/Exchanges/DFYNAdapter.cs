@@ -176,7 +176,11 @@ public sealed class DFYNAdapter : IExchangeAdapter
                 "https://api.thegraph.com/subgraphs/name/ss-sonic/dfyn-v2-arbitrum",
                 content, ct).ConfigureAwait(false);
 
-            if (!response.IsSuccessStatusCode) return GetFallbackPrice(baseToken, quoteToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("DFYNAdapter: subgraph returned {StatusCode} for {Base}/{Quote} — no live price available.", response.StatusCode, baseToken, quoteToken);
+                throw new ExchangeUnavailableException("dfyn", baseToken, quoteToken);
+            }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
@@ -190,22 +194,17 @@ public sealed class DFYNAdapter : IExchangeAdapter
                 return price;
             }
         }
+        catch (ExchangeUnavailableException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "DFYNAdapter: subgraph query failed, using fallback price.");
+            _logger.LogDebug(ex, "DFYNAdapter: subgraph query failed for {Base}/{Quote}.", baseToken, quoteToken);
         }
 
-        return GetFallbackPrice(baseToken, quoteToken);
+        throw new ExchangeUnavailableException("dfyn", baseToken, quoteToken);
     }
-
-    private static decimal GetFallbackPrice(string baseToken, string quoteToken) =>
-        (baseToken.ToUpperInvariant(), quoteToken.ToUpperInvariant()) switch
-        {
-            ("WETH", "USDC") => 2001m,
-            ("USDC", "ARB")  => 1.01m,
-            ("ARB",  "WETH") => 0.00050m,
-            _                => 1m
-        };
 
     private static TimeSpan GetBackoff(int attempt)
     {

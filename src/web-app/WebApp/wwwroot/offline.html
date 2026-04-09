@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#07080c" />
+    <title>MLS — Offline</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg:     #07080c;
+            --surface:#0e1018;
+            --border: rgba(255,255,255,0.06);
+            --cyan:   #00d4ff;
+            --text:   #e2e8f0;
+            --muted:  #64748b;
+        }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 48px 40px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+        .icon {
+            font-size: 3rem;
+            line-height: 1;
+            margin-bottom: 24px;
+            color: var(--cyan);
+            filter: drop-shadow(0 0 16px rgba(0,212,255,0.4));
+        }
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        p {
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 28px;
+            background: rgba(0,212,255,0.08);
+            border: 1px solid rgba(0,212,255,0.2);
+            border-radius: 8px;
+            color: var(--cyan);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+        .btn:hover {
+            background: rgba(0,212,255,0.15);
+            border-color: rgba(0,212,255,0.4);
+        }
+        .status {
+            margin-top: 24px;
+            font-size: 0.75rem;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">◈</div>
+        <h1>You Are Offline</h1>
+        <p>
+            MLS Trading Platform is not reachable right now.<br>
+            Connect to the internet to resume live trading data,<br>
+            or wait for the app to reconnect automatically.
+        </p>
+        <button class="btn" onclick="window.location.reload()">Retry Connection</button>
+        <div class="status" id="status">Checking connection…</div>
+    </div>
+    <script>
+        // Auto-reload when the network comes back online
+        window.addEventListener('online', () => window.location.reload());
+        document.getElementById('status').textContent =
+            navigator.onLine ? 'Network available — reloading…' : 'No network connection detected.';
+        if (navigator.onLine) setTimeout(() => window.location.reload(), 500);
+    </script>
+</body>
+</html>

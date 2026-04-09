@@ -1,0 +1,119 @@
+@page "/workflow/data-layer"
+@rendermode InteractiveServer
+@inject WorkflowDataService Svc
+
+<PageTitle>Data Layer Workflow</PageTitle>
+
+<WorkflowHeader Title="Data Layer — Hydra Feed Collection & Feature Store"
+                Description="Ingests live OHLCV from Hyperliquid WebSocket and Camelot subgraph, detects gaps (5% tolerance), backfills via Channel&lt;GapRange&gt;, engineers 8 features per candle."
+                Icon="📡" HttpPort="5700" WsPort="6700"
+                IsLive="_candles.Count > 0"
+                DataSource="Hyperliquid candleSnapshot · ETH 1m"
+                AccentColor="#1a7f37" />
+
+<WorkflowPipeline Steps="_steps" ActiveStep="_features is not null ? 4 : (_candles.Count > 0 ? 2 : 0)" />
+
+<div class="wf-body">
+    @if (_candles.Count == 0)
+    {
+        <div class="wf-loading">Streaming live OHLCV candles from Hyperliquid…</div>
+    }
+    else
+    {
+        <div class="wf-two-col">
+            <section class="wf-card">
+                <h2>OHLCV Feed — ETH/USDC 1m <span class="wf-live-dot"></span></h2>
+                <table class="wf-table">
+                    <thead><tr><th>Time (UTC)</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th><th>Trades</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in _candles.TakeLast(12).Reverse())
+                        {
+                            var up = c.C >= c.O;
+                            <tr class="@(up ? "row-up" : "row-dn")">
+                                <td class="mono text-muted">@c.OpenDt.ToString("HH:mm")</td>
+                                <td class="mono">@c.O.ToString("F2")</td>
+                                <td class="mono text-green">@c.H.ToString("F2")</td>
+                                <td class="mono text-red">@c.L.ToString("F2")</td>
+                                <td class="mono @(up ? "text-green" : "text-red")">@c.C.ToString("F2")</td>
+                                <td class="mono text-muted">@c.V.ToString("F1")</td>
+                                <td class="mono text-muted">@c.Trades</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            @if (_features is not null)
+            {
+                <section class="wf-card">
+                    <h2>FeatureVector — model-t (ETH)</h2>
+                    <table class="wf-table">
+                        <thead><tr><th>Feature</th><th>Value</th><th>Range</th><th>Bar</th></tr></thead>
+                        <tbody>
+                            @foreach (var f in FeatureRows(_features))
+                            {
+                                <tr>
+                                    <td class="mono">@f.Name</td>
+                                    <td class="mono text-bright">@f.Display</td>
+                                    <td class="text-muted" style="font-size:0.7rem">@f.Range</td>
+                                    <td style="min-width:80px">
+                                        <div class="bar-track">
+                                            <div class="bar-fill" style="width:@(f.Pct)%;background:@f.Color"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        </div>
+
+        <div class="wf-metrics-row">
+            <div class="wf-metric"><div class="wfm-val">@_candles.Count</div><div class="wfm-lbl">Candles Collected</div></div>
+            <div class="wf-metric"><div class="wfm-val">0</div><div class="wfm-lbl">Gaps Detected</div></div>
+            <div class="wf-metric"><div class="wfm-val">@_candles.Count</div><div class="wfm-lbl">Feature Vectors</div></div>
+            <div class="wf-metric"><div class="wfm-val">v2</div><div class="wfm-lbl">Schema Version</div></div>
+            <div class="wf-metric"><div class="wfm-val">ETH</div><div class="wfm-lbl">Active Symbol</div></div>
+            <div class="wf-metric"><div class="wfm-val">1m</div><div class="wfm-lbl">Timeframe</div></div>
+        </div>
+        <div id="data-loaded"></div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<Candle> _candles = [];
+    private FeatureVector? _features;
+
+    private static readonly IReadOnlyList<PipelineStep> _steps =
+    [
+        new("Feed Collect",    "📡", "HyperliquidFeedCollector WS + CamelotFeedCollector subgraph poll", "#1a7f37"),
+        new("Gap Detect",      "🔍", "GapDetector (60s timer, 5% tolerance) → emits GapRange",          "#d29922"),
+        new("Backfill",        "🔁", "BackfillPipeline consumes Channel<GapRange>, REST backfill",       "#1f6feb"),
+        new("Feature Engineer","⚙",  "8 features: RSI14, MACD, BB, VolDelta, Mom20, ATR, Spread, VWAP", "#00d4ff"),
+        new("Feature Store",   "🗄",  "EF Core upsert → feature_store_vectors table (PostgreSQL)",       "#3fb950"),
+    ];
+
+    private sealed record FeatureRow(string Name, string Display, string Range, double Pct, string Color);
+
+    private static IEnumerable<FeatureRow> FeatureRows(FeatureVector v) =>
+    [
+        new("RSI-14",        $"{v.Rsi14:F2}",      "[0, 100]", (double)v.Rsi14,                              "#00d4ff"),
+        new("MACD Signal",   $"{v.MacdSignal:F4}",  "[-∞, +∞]", Math.Clamp((double)(v.MacdSignal+1)*50, 0, 100), "#a371f7"),
+        new("BB Position",   $"{v.BbPosition:F4}", "[0, 1]",   (double)(v.BbPosition*100),                   "#3fb950"),
+        new("Volume Delta",  $"{v.VolumeDelta:F2}%","[−100%,+∞]",Math.Clamp((double)(v.VolumeDelta+100)/2,0,100),"#d29922"),
+        new("Momentum-20",   $"{v.Momentum20:F4}",  "[-1, +1]", Math.Clamp((double)(v.Momentum20*100+50),0,100),"#f85149"),
+        new("ATR Norm",      $"{v.AtrNorm:F6}",    "[0, ∞]",   Math.Clamp((double)(v.AtrNorm*10000),0,100),  "#8b949e"),
+        new("Spread bps",    $"{v.SpreadBps:F2}",  "[0, ∞]",   Math.Clamp((double)v.SpreadBps*5, 0, 100),    "#d29922"),
+        new("VWAP Distance", $"{v.VwapDistance:F6}","[-1, +1]", Math.Clamp((double)(v.VwapDistance*100+50),0,100),"#00d4ff"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+        _candles  = await Svc.GetCandlesAsync("ETH", cts.Token);
+        _features = _candles.Count >= 14
+            ? WorkflowDataService.EngineerFeatures("ETH", _candles)
+            : null;
+    }
+}

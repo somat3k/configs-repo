@@ -8,10 +8,14 @@
     <div class="tp-header">
         <div class="tp-header-left">
             <span class="tp-icon" style="color:#7c3aed">⊞</span>
-            <span class="tp-title">Train Progress</span>
-            @if (_isTraining)
+            <span class="tp-title">@(_isHyperparamSearch ? "Hyperparam Search" : "Train Progress")</span>
+            @if (_isTraining || _isSearchRunning)
             {
                 <span class="tp-live-badge">LIVE</span>
+            }
+            @if (_isHyperparamSearch)
+            {
+                <span class="tp-optuna-badge">OPTUNA</span>
             }
         </div>
         <div class="tp-meta">
@@ -19,7 +23,11 @@
             {
                 <span class="tp-model-badge">@_modelType.ToUpperInvariant()</span>
             }
-            @if (_totalEpochs > 0)
+            @if (_isHyperparamSearch && _nTrials > 0)
+            {
+                <span class="tp-epoch-counter mono">trial @_currentTrial / @_nTrials</span>
+            }
+            else if (_totalEpochs > 0)
             {
                 <span class="tp-epoch-counter mono">@_currentEpoch / @_totalEpochs</span>
             }
@@ -28,63 +36,173 @@
 
     <div class="tp-accent-bar"></div>
 
-    @* ── KPI strip ───────────────────────────────────────────────────────── *@
-    @if (_currentEpoch > 0)
+    @* ── Hyperparameter search panel ─────────────────────────────────────── *@
+    @if (_isHyperparamSearch)
     {
+        @* ── Search KPI strip ───────────────────────────────────────────── *@
         <div class="tp-kpi-strip">
             <div class="tp-kpi">
-                <span class="tp-kpi-val mono">@_trainLoss.ToString("F4")</span>
-                <span class="tp-kpi-lbl">Train Loss</span>
+                <span class="tp-kpi-val mono">@_currentTrial</span>
+                <span class="tp-kpi-lbl">Trial</span>
             </div>
             <div class="tp-kpi">
-                <span class="tp-kpi-val mono">@_valLoss.ToString("F4")</span>
-                <span class="tp-kpi-lbl">Val Loss</span>
+                <span class="tp-kpi-val mono">@_nTrials</span>
+                <span class="tp-kpi-lbl">Total</span>
             </div>
             <div class="tp-kpi">
-                <span class="tp-kpi-val mono positive">@_accuracy.ToString("P2")</span>
-                <span class="tp-kpi-lbl">Accuracy</span>
+                <span class="tp-kpi-val mono @(double.IsNaN(_bestValue) ? "" : "positive")">
+                    @(double.IsNaN(_bestValue) ? "—" : _bestValue.ToString("F4"))
+                </span>
+                <span class="tp-kpi-lbl">Best (@_direction)</span>
             </div>
             <div class="tp-kpi">
-                <span class="tp-kpi-val mono">@_elapsed</span>
-                <span class="tp-kpi-lbl">Elapsed</span>
+                <span class="tp-kpi-val mono pruned">@_nPruned</span>
+                <span class="tp-kpi-lbl">Pruned</span>
             </div>
         </div>
+
+        @* ── Trial progress bar ──────────────────────────────────────────── *@
+        @if (_nTrials > 0)
+        {
+            var pct = (double)_currentTrial / _nTrials * 100;
+            <div class="tp-progress-bar-wrap">
+                <div class="tp-progress-bar tp-progress-bar--optuna" style="width:@(pct.ToString("F1"))%"></div>
+            </div>
+        }
+
+        @* ── Per-trial epoch metrics (shown while a trial is training) ──── *@
+        @if (_currentEpoch > 0)
+        {
+            <div class="tp-section-label">Trial @_currentTrial — Epoch @_currentEpoch / @_totalEpochs</div>
+            <div class="tp-trial-epoch-strip">
+                <div class="tp-trial-kpi">
+                    <span class="tp-kpi-val mono">@_trainLoss.ToString("F4")</span>
+                    <span class="tp-kpi-lbl">Train Loss</span>
+                </div>
+                <div class="tp-trial-kpi">
+                    <span class="tp-kpi-val mono">@_valLoss.ToString("F4")</span>
+                    <span class="tp-kpi-lbl">Val Loss</span>
+                </div>
+                <div class="tp-trial-kpi">
+                    <span class="tp-kpi-val mono positive">@_accuracy.ToString("P2")</span>
+                    <span class="tp-kpi-lbl">Accuracy</span>
+                </div>
+            </div>
+        }
+
+        @* ── Trial history table ─────────────────────────────────────────── *@
+        @if (_trialHistory.Count > 0)
+        {
+            <div class="tp-section-label">Trial History</div>
+            <div class="tp-trial-table-wrap">
+                <table class="tp-trial-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Value</th>
+                            <th>State</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in _trialHistory.TakeLast(10))
+                        {
+                            <tr class="@(t.IsPruned ? "pruned-row" : "")">
+                                <td class="mono">@t.Index</td>
+                                <td class="mono">@t.Value.ToString("F4")</td>
+                                <td><span class="tp-trial-state @(t.IsPruned ? "state-pruned" : "state-complete")">
+                                    @(t.IsPruned ? "pruned" : "done")
+                                </span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @* ── Best hyperparams (shown on complete) ────────────────────────── *@
+        @if (_isSearchComplete && _bestHyperparams is not null)
+        {
+            <div class="tp-section-label">Best Hyperparameters</div>
+            <div class="tp-best-params">
+                @foreach (var prop in _bestHyperparams.Value.EnumerateObject())
+                {
+                    <div class="tp-best-param-row">
+                        <span class="tp-best-param-key">@prop.Name</span>
+                        <span class="tp-best-param-val mono">@prop.Value</span>
+                    </div>
+                }
+            </div>
+        }
+
+        @* ── Search idle / waiting ───────────────────────────────────────── *@
+        @if (_currentTrial == 0 && !_isSearchRunning)
+        {
+            <div class="tp-idle">
+                <span class="tp-idle-icon">◎</span>
+                <span class="tp-idle-text">Waiting for hyperparameter search…</span>
+            </div>
+        }
     }
-
-    @* ── Epoch progress bar ──────────────────────────────────────────────── *@
-    @if (_totalEpochs > 0)
+    else
     {
-        var pct = (double)_currentEpoch / _totalEpochs * 100;
-        <div class="tp-progress-bar-wrap">
-            <div class="tp-progress-bar" style="width:@(pct.ToString("F1"))%"></div>
-        </div>
-    }
+        @* ── Standard training KPI strip ─────────────────────────────────── *@
+        @if (_currentEpoch > 0)
+        {
+            <div class="tp-kpi-strip">
+                <div class="tp-kpi">
+                    <span class="tp-kpi-val mono">@_trainLoss.ToString("F4")</span>
+                    <span class="tp-kpi-lbl">Train Loss</span>
+                </div>
+                <div class="tp-kpi">
+                    <span class="tp-kpi-val mono">@_valLoss.ToString("F4")</span>
+                    <span class="tp-kpi-lbl">Val Loss</span>
+                </div>
+                <div class="tp-kpi">
+                    <span class="tp-kpi-val mono positive">@_accuracy.ToString("P2")</span>
+                    <span class="tp-kpi-lbl">Accuracy</span>
+                </div>
+                <div class="tp-kpi">
+                    <span class="tp-kpi-val mono">@_elapsed</span>
+                    <span class="tp-kpi-lbl">Elapsed</span>
+                </div>
+            </div>
+        }
 
-    @* ── Loss chart (ApexCharts via JS interop) ───────────────────────────── *@
-    <div class="tp-section-label">Loss Curves</div>
-    <div id="tp-loss-@_id" class="tp-chart"></div>
+        @* ── Epoch progress bar ──────────────────────────────────────────── *@
+        @if (_totalEpochs > 0)
+        {
+            var pct = (double)_currentEpoch / _totalEpochs * 100;
+            <div class="tp-progress-bar-wrap">
+                <div class="tp-progress-bar" style="width:@(pct.ToString("F1"))%"></div>
+            </div>
+        }
 
-    @* ── Accuracy chart ──────────────────────────────────────────────────── *@
-    <div class="tp-section-label">Accuracy</div>
-    <div id="tp-accuracy-@_id" class="tp-chart tp-chart--sm"></div>
+        @* ── Loss chart (ApexCharts via JS interop) ──────────────────────── *@
+        <div class="tp-section-label">Loss Curves</div>
+        <div id="tp-loss-@_id" class="tp-chart"></div>
 
-    @* ── Confusion matrix (shown on complete) ────────────────────────────── *@
-    @if (_isComplete)
-    {
-        <div class="tp-section-label">Confusion Matrix</div>
-        <div id="tp-confusion-@_id" class="tp-chart"></div>
+        @* ── Accuracy chart ──────────────────────────────────────────────── *@
+        <div class="tp-section-label">Accuracy</div>
+        <div id="tp-accuracy-@_id" class="tp-chart tp-chart--sm"></div>
 
-        <div class="tp-section-label">SHAP Feature Importance</div>
-        <div id="tp-shap-@_id" class="tp-chart tp-chart--sm"></div>
-    }
+        @* ── Confusion matrix (shown on complete) ────────────────────────── *@
+        @if (_isComplete)
+        {
+            <div class="tp-section-label">Confusion Matrix</div>
+            <div id="tp-confusion-@_id" class="tp-chart"></div>
 
-    @* ── Idle / waiting state ────────────────────────────────────────────── *@
-    @if (_currentEpoch == 0 && !_isTraining)
-    {
-        <div class="tp-idle">
-            <span class="tp-idle-icon">◎</span>
-            <span class="tp-idle-text">Waiting for training job…</span>
-        </div>
+            <div class="tp-section-label">SHAP Feature Importance</div>
+            <div id="tp-shap-@_id" class="tp-chart tp-chart--sm"></div>
+        }
+
+        @* ── Idle / waiting state ─────────────────────────────────────────── *@
+        @if (_currentEpoch == 0 && !_isTraining)
+        {
+            <div class="tp-idle">
+                <span class="tp-idle-icon">◎</span>
+                <span class="tp-idle-text">Waiting for training job…</span>
+            </div>
+        }
     }
 </div>
 
@@ -215,12 +333,130 @@
     .tp-idle-text { font-size: 0.75rem; font-style: italic; }
 
     .positive { color: #22c55e; }
+    .pruned   { color: #f97316; }
     .mono { font-family: var(--font-mono, monospace); font-variant-numeric: tabular-nums; }
     @@keyframes live-pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+    /* ── Optuna badge ─────────────────────────────────────────────────────── */
+    .tp-optuna-badge {
+        padding: 1px 7px;
+        border-radius: 10px;
+        background: rgba(249,115,22,0.12);
+        border: 1px solid rgba(249,115,22,0.3);
+        color: #f97316;
+        font-size: 0.58rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+    }
+
+    /* ── Optuna progress bar variant ──────────────────────────────────────── */
+    .tp-progress-bar--optuna {
+        background: linear-gradient(90deg, #f97316, #eab308);
+    }
+
+    /* ── Per-trial epoch strip ────────────────────────────────────────────── */
+    .tp-trial-epoch-strip {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        padding: 4px 12px 8px;
+        flex-shrink: 0;
+    }
+    .tp-trial-kpi {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        background: rgba(249,115,22,0.05);
+        border: 1px solid rgba(249,115,22,0.12);
+        border-radius: 6px;
+        padding: 5px 4px;
+    }
+
+    /* ── Trial history table ──────────────────────────────────────────────── */
+    .tp-trial-table-wrap {
+        margin: 0 12px 10px;
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.07);
+        flex-shrink: 0;
+    }
+    .tp-trial-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.72rem;
+    }
+    .tp-trial-table thead tr {
+        background: rgba(255,255,255,0.04);
+    }
+    .tp-trial-table th, .tp-trial-table td {
+        padding: 4px 10px;
+        text-align: left;
+        color: rgba(255,255,255,0.6);
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .tp-trial-table th {
+        font-size: 0.58rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: rgba(255,255,255,0.25);
+    }
+    .pruned-row td { opacity: 0.5; }
+    .tp-trial-state {
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 0.6rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .state-complete {
+        background: rgba(34,197,94,0.12);
+        color: #22c55e;
+    }
+    .state-pruned {
+        background: rgba(249,115,22,0.12);
+        color: #f97316;
+    }
+
+    /* ── Best params panel ────────────────────────────────────────────────── */
+    .tp-best-params {
+        margin: 0 12px 10px;
+        background: rgba(249,115,22,0.06);
+        border: 1px solid rgba(249,115,22,0.15);
+        border-radius: 6px;
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+    .tp-best-param-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.7rem;
+    }
+    .tp-best-param-key {
+        color: rgba(255,255,255,0.4);
+        text-transform: uppercase;
+        font-size: 0.6rem;
+        letter-spacing: 0.05em;
+    }
+    .tp-best-param-val {
+        color: #fbbf24;
+        font-size: 0.75rem;
+    }
 </style>
 
 @code {
+    // ── Trial entry used in history table ─────────────────────────────────────
+    private sealed record TrialEntry(int Index, double Value, bool IsPruned);
+
     private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+
+    // ── Standard training state ───────────────────────────────────────────────
     private bool _isTraining;
     private bool _isComplete;
     private string? _modelType;
@@ -231,8 +467,21 @@
     private double _accuracy;
     private string _elapsed = "00:00";
     private DateTimeOffset _trainStart;
-    private CancellationTokenSource _cts = new();
     private bool _chartsInitialised;
+
+    // ── Hyperparameter search state ───────────────────────────────────────────
+    private bool _isHyperparamSearch;
+    private bool _isSearchRunning;
+    private bool _isSearchComplete;
+    private int  _currentTrial;
+    private int  _nTrials;
+    private double _bestValue = double.NaN;
+    private int  _nPruned;
+    private string _direction = "maximize";
+    private System.Text.Json.JsonElement? _bestHyperparams;
+    private readonly List<TrialEntry> _trialHistory = [];
+
+    private CancellationTokenSource _cts = new();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -249,62 +498,157 @@
 
             if (envelope.Type == MLS.Core.Constants.MessageTypes.TrainingJobProgress)
             {
-                if (!_isTraining)
+                bool isSearchMsg = p.TryGetProperty("is_hyperparam_search", out var isHps) && isHps.GetBoolean();
+
+                if (isSearchMsg)
                 {
-                    _isTraining  = true;
-                    _trainStart  = DateTimeOffset.UtcNow;
-                    _modelType   = p.TryGetProperty("model_type",   out var modelTypeProp) ? modelTypeProp.GetString() : null;
-                    _totalEpochs = p.TryGetProperty("total_epochs", out var te) ? te.GetInt32() : 0;
+                    await HandleSearchProgressAsync(p).ConfigureAwait(false);
                 }
-
-                _currentEpoch = p.TryGetProperty("epoch",      out var ep) ? ep.GetInt32()    : _currentEpoch;
-                _trainLoss    = p.TryGetProperty("train_loss", out var tl) ? tl.GetDouble()   : _trainLoss;
-                _valLoss      = p.TryGetProperty("val_loss",   out var vl) ? vl.GetDouble()   : _valLoss;
-                _accuracy     = p.TryGetProperty("accuracy",   out var ac) ? ac.GetDouble()   : _accuracy;
-                _elapsed      = FormatElapsed(DateTimeOffset.UtcNow - _trainStart);
-
-                if (!_chartsInitialised)
+                else
                 {
-                    await JS.InvokeVoidAsync("initTrainCharts", $"tp-loss-{_id}", $"tp-accuracy-{_id}")
-                        .ConfigureAwait(false);
-                    _chartsInitialised = true;
+                    await HandleTrainingProgressAsync(p).ConfigureAwait(false);
                 }
-
-                await JS.InvokeVoidAsync("updateApexSeries", $"tp-loss-{_id}",
-                    "train_loss", _currentEpoch, _trainLoss).ConfigureAwait(false);
-                await JS.InvokeVoidAsync("updateApexSeries", $"tp-loss-{_id}",
-                    "val_loss", _currentEpoch, _valLoss).ConfigureAwait(false);
-                await JS.InvokeVoidAsync("updateApexSeries", $"tp-accuracy-{_id}",
-                    "accuracy", _currentEpoch, _accuracy).ConfigureAwait(false);
             }
             else if (envelope.Type == MLS.Core.Constants.MessageTypes.TrainingJobComplete)
             {
-                _isTraining = false;
-                _isComplete = true;
+                bool isSearchMsg = p.TryGetProperty("is_hyperparam_search", out var isHps) && isHps.GetBoolean();
 
-                var confusionMatrix = p.TryGetProperty("confusion_matrix", out var cm)
-                    ? cm.EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetInt32()).ToArray()).ToArray()
-                    : null;
-                var shapValues = p.TryGetProperty("shap_values", out var sv)
-                    ? sv.EnumerateArray().Select(v => v.GetDouble()).ToArray()
-                    : null;
-                var featureNames = p.TryGetProperty("feature_names", out var fn)
-                    ? fn.EnumerateArray().Select(v => v.GetString() ?? "").ToArray()
-                    : null;
-
-                await InvokeAsync(StateHasChanged).ConfigureAwait(false);
-
-                if (confusionMatrix is not null)
-                    await JS.InvokeVoidAsync("renderConfusionMatrix", $"tp-confusion-{_id}", confusionMatrix)
-                        .ConfigureAwait(false);
-
-                if (shapValues is not null && featureNames is not null)
-                    await JS.InvokeVoidAsync("renderShapChart", $"tp-shap-{_id}", featureNames, shapValues)
-                        .ConfigureAwait(false);
+                if (isSearchMsg)
+                {
+                    HandleSearchComplete(p);
+                }
+                else
+                {
+                    await HandleTrainingCompleteAsync(p).ConfigureAwait(false);
+                }
             }
 
             await InvokeAsync(StateHasChanged).ConfigureAwait(false);
         }
+    }
+
+    // ── Search progress handler ───────────────────────────────────────────────
+
+    private async Task HandleSearchProgressAsync(System.Text.Json.JsonElement p)
+    {
+        _isHyperparamSearch = true;
+        _isSearchRunning    = true;
+
+        if (!_isSearchComplete)
+        {
+            _modelType = p.TryGetProperty("model_type", out var mt) ? mt.GetString() : _modelType;
+            _nTrials   = p.TryGetProperty("n_trials",   out var nt) ? nt.GetInt32()  : _nTrials;
+
+            if (p.TryGetProperty("direction", out var dir) && dir.ValueKind == System.Text.Json.JsonValueKind.String)
+                _direction = dir.GetString() ?? _direction;
+
+            if (p.TryGetProperty("trial_index", out var ti))
+                _currentTrial = ti.GetInt32() + 1;  // 0-based in Python → 1-based display
+
+            if (p.TryGetProperty("best_value", out var bv) &&
+                bv.ValueKind == System.Text.Json.JsonValueKind.Number)
+            {
+                _bestValue = bv.GetDouble();
+            }
+
+            // Per-epoch fields within current trial
+            _currentEpoch = p.TryGetProperty("epoch",      out var ep) ? ep.GetInt32()    : _currentEpoch;
+            _totalEpochs  = p.TryGetProperty("total_epochs",out var te) ? te.GetInt32()    : _totalEpochs;
+            _trainLoss    = p.TryGetProperty("train_loss", out var tl) ? tl.GetDouble()   : _trainLoss;
+            _valLoss      = p.TryGetProperty("val_loss",   out var vl) ? vl.GetDouble()   : _valLoss;
+            _accuracy     = p.TryGetProperty("accuracy",   out var ac) ? ac.GetDouble()   : _accuracy;
+
+            // Trial summary (trial_state field present when a trial ends)
+            if (p.TryGetProperty("trial_state", out var ts))
+            {
+                bool pruned     = ts.GetString() == "pruned";
+                double trialVal = p.TryGetProperty("trial_value", out var tv) ? tv.GetDouble() : 0.0;
+                int idx         = p.TryGetProperty("trial_index", out var tIdx) ? tIdx.GetInt32() : _currentTrial - 1;
+
+                _trialHistory.Add(new TrialEntry(idx + 1, trialVal, pruned));
+                if (pruned) _nPruned++;
+
+                // Reset per-epoch fields at trial boundary
+                _currentEpoch = 0;
+            }
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    private void HandleSearchComplete(System.Text.Json.JsonElement p)
+    {
+        _isSearchRunning  = false;
+        _isSearchComplete = true;
+        _isHyperparamSearch = true;
+
+        if (p.TryGetProperty("best_value", out var bv)) _bestValue    = bv.GetDouble();
+        if (p.TryGetProperty("n_pruned",   out var np)) _nPruned      = np.GetInt32();
+        if (p.TryGetProperty("n_trials",   out var nt)) _nTrials      = nt.GetInt32();
+        if (p.TryGetProperty("model_type", out var mt)) _modelType    = mt.GetString();
+        _currentTrial = _nTrials;
+
+        if (p.TryGetProperty("best_params", out var bp) && bp.ValueKind == System.Text.Json.JsonValueKind.Object)
+            _bestHyperparams = bp;
+    }
+
+    // ── Standard training handlers ────────────────────────────────────────────
+
+    private async Task HandleTrainingProgressAsync(System.Text.Json.JsonElement p)
+    {
+        if (!_isTraining)
+        {
+            _isTraining  = true;
+            _trainStart  = DateTimeOffset.UtcNow;
+            _modelType   = p.TryGetProperty("model_type",   out var modelTypeProp) ? modelTypeProp.GetString() : null;
+            _totalEpochs = p.TryGetProperty("total_epochs", out var te) ? te.GetInt32() : 0;
+        }
+
+        _currentEpoch = p.TryGetProperty("epoch",      out var ep) ? ep.GetInt32()    : _currentEpoch;
+        _trainLoss    = p.TryGetProperty("train_loss", out var tl) ? tl.GetDouble()   : _trainLoss;
+        _valLoss      = p.TryGetProperty("val_loss",   out var vl) ? vl.GetDouble()   : _valLoss;
+        _accuracy     = p.TryGetProperty("accuracy",   out var ac) ? ac.GetDouble()   : _accuracy;
+        _elapsed      = FormatElapsed(DateTimeOffset.UtcNow - _trainStart);
+
+        if (!_chartsInitialised)
+        {
+            await JS.InvokeVoidAsync("initTrainCharts", $"tp-loss-{_id}", $"tp-accuracy-{_id}")
+                .ConfigureAwait(false);
+            _chartsInitialised = true;
+        }
+
+        await JS.InvokeVoidAsync("updateApexSeries", $"tp-loss-{_id}",
+            "train_loss", _currentEpoch, _trainLoss).ConfigureAwait(false);
+        await JS.InvokeVoidAsync("updateApexSeries", $"tp-loss-{_id}",
+            "val_loss", _currentEpoch, _valLoss).ConfigureAwait(false);
+        await JS.InvokeVoidAsync("updateApexSeries", $"tp-accuracy-{_id}",
+            "accuracy", _currentEpoch, _accuracy).ConfigureAwait(false);
+    }
+
+    private async Task HandleTrainingCompleteAsync(System.Text.Json.JsonElement p)
+    {
+        _isTraining = false;
+        _isComplete = true;
+
+        var confusionMatrix = p.TryGetProperty("confusion_matrix", out var cm)
+            ? cm.EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetInt32()).ToArray()).ToArray()
+            : null;
+        var shapValues = p.TryGetProperty("shap_values", out var sv)
+            ? sv.EnumerateArray().Select(v => v.GetDouble()).ToArray()
+            : null;
+        var featureNames = p.TryGetProperty("feature_names", out var fn)
+            ? fn.EnumerateArray().Select(v => v.GetString() ?? "").ToArray()
+            : null;
+
+        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+
+        if (confusionMatrix is not null)
+            await JS.InvokeVoidAsync("renderConfusionMatrix", $"tp-confusion-{_id}", confusionMatrix)
+                .ConfigureAwait(false);
+
+        if (shapValues is not null && featureNames is not null)
+            await JS.InvokeVoidAsync("renderShapChart", $"tp-shap-{_id}", featureNames, shapValues)
+                .ConfigureAwait(false);
     }
 
     private static string FormatElapsed(TimeSpan ts)

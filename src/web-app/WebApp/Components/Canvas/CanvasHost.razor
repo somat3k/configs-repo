@@ -17,36 +17,46 @@
     @* ── Dot-grid background ─────────────────────────────────────────────── *@
     <div class="canvas-bg-grid" aria-hidden="true"></div>
 
-    <div class="window-container">
-        @foreach (var win in WM.Windows.Where(w => !w.IsMinimized).OrderBy(w => w.ZIndex))
-        {
-            <DocumentWindow State="win"
-                            OnClose="() => WM.Close(win.WindowId)"
-                            OnMinimize="() => WM.Minimize(win.WindowId)"
-                            OnMaximize="() => WM.Maximize(win.WindowId)"
-                            OnFocus="() => WM.BringToFront(win.WindowId)"
-                            OnDragStart="(args) => WM.StartDrag(win.WindowId, args.ClientX, args.ClientY)"
-                            OnResizeStart="(t) => WM.StartResize(win.WindowId, t.Direction, t.Args.ClientX, t.Args.ClientY)">
-                @GetPanelContent(win)
-            </DocumentWindow>
-        }
-    </div>
-
-    @* ── Taskbar: minimised windows ───────────────────────────────────────── *@
-    @if (WM.Windows.Any(w => w.IsMinimized))
+    @if (_isMobile && _activeMobilePanel is not null)
     {
-        <div class="window-taskbar">
-            @foreach (var win in WM.Windows.Where(w => w.IsMinimized))
-            {
-                <button class="taskbar-item" @onclick="() => WM.Restore(win.WindowId)">
-                    <span class="taskbar-dot"></span>
-                    @win.Title
-                </button>
-            }
+        @* ── Mobile: single panel stack ─────────────────────────────────────── *@
+        <div class="canvas-mobile-stack">
+            @GetMobilePanelContent(_activeMobilePanel)
         </div>
     }
+    else if (!_isMobile)
+    {
+        <div class="window-container">
+            @foreach (var win in WM.Windows.Where(w => !w.IsMinimized).OrderBy(w => w.ZIndex))
+            {
+                <DocumentWindow State="win"
+                                OnClose="() => WM.Close(win.WindowId)"
+                                OnMinimize="() => WM.Minimize(win.WindowId)"
+                                OnMaximize="() => WM.Maximize(win.WindowId)"
+                                OnFocus="() => WM.BringToFront(win.WindowId)"
+                                OnDragStart="(args) => WM.StartDrag(win.WindowId, args.ClientX, args.ClientY)"
+                                OnResizeStart="(t) => WM.StartResize(win.WindowId, t.Direction, t.Args.ClientX, t.Args.ClientY)">
+                    @GetPanelContent(win)
+                </DocumentWindow>
+            }
+        </div>
 
-    @* ── Premium FAB ──────────────────────────────────────────────────────── *@
+        @* ── Taskbar: minimised windows ───────────────────────────────────────── *@
+        @if (WM.Windows.Any(w => w.IsMinimized))
+        {
+            <div class="window-taskbar">
+                @foreach (var win in WM.Windows.Where(w => w.IsMinimized))
+                {
+                    <button class="taskbar-item" @onclick="() => WM.Restore(win.WindowId)">
+                        <span class="taskbar-dot"></span>
+                        @win.Title
+                    </button>
+                }
+            </div>
+        }
+    }
+
+    @* ── Premium FAB (desktop + tablet: open panel; mobile: open bottom-sheet) *@
     <div class="canvas-fab">
         <button class="fab-btn @(_showPanelMenu ? "fab-btn--active" : "")"
                 @onclick="TogglePanelMenu"
@@ -82,6 +92,28 @@
                 }
             </div>
         }
+    </div>
+
+    @* ── Mobile bottom-sheet panel picker ─────────────────────────────────── *@
+    <div class="bottom-sheet @(_showBottomSheet ? "bottom-sheet--expanded" : "")"
+         role="navigation"
+         aria-label="Panel navigation">
+        @foreach (var panel in _bottomSheetPanels)
+        {
+            var p = panel;
+            <button class="bottom-sheet-item @(_activeMobilePanel == p.Key ? "bottom-sheet-item--active" : "")"
+                    @onclick="() => SelectMobilePanel(p.Key, p.Label)"
+                    aria-label="@p.Label">
+                <span class="bottom-sheet-icon">@p.Icon</span>
+                <span>@p.ShortLabel</span>
+            </button>
+        }
+        <button class="bottom-sheet-item @(_showBottomSheet ? "bottom-sheet-item--active" : "")"
+                @onclick="ToggleBottomSheet"
+                aria-label="More panels">
+            <span class="bottom-sheet-icon">⋯</span>
+            <span>More</span>
+        </button>
     </div>
 </div>
 
@@ -271,24 +303,54 @@
             top: 0 !important;
         }
     }
+
+    /* ── Mobile single-panel stack ────────────────────────────────────────── */
+    .canvas-mobile-stack {
+        position: absolute;
+        inset: 0;
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .canvas-mobile-stack > * {
+        flex: 1 1 auto;
+        min-height: 100%;
+    }
 </style>
 
 @code {
     private bool _showPanelMenu;
+    private bool _showBottomSheet;
+    private bool _isMobile;
+    private string? _activeMobilePanel;
+    private string _activeMobilePanelTitle = string.Empty;
     private CancellationTokenSource _cts = new();
+    private DotNetObjectReference<CanvasHost>? _dotNetRef;
 
-    private record PanelEntry(string Key, string Label, string Icon, string IconClass);
+    private record PanelEntry(string Key, string Label, string ShortLabel, string Icon, string IconClass);
 
     private static readonly PanelEntry[] _availablePanels =
     [
-        new("TradingTerminal",   "Trading Terminal",   "◈", "icon--trading"),
-        new("ArbitrageScanner",  "Arbitrage Scanner",  "◬", "icon--arb"),
-        new("DeFiPositions",     "DeFi Positions",     "◉", "icon--defi"),
-        new("HealthMonitor",     "Health Monitor",     "◎", "icon--defi"),
-        new("DesignerCanvas",    "Strategy Designer",  "◫", "icon--designer"),
-        new("AIChatPanel",       "AI Assistant",       "◈", "icon--ai"),
-        new("DataFeedManager",   "Data Feed Manager",  "◬", "icon--data"),
-        new("ProviderSettings",  "AI Provider Settings","⚙","icon--ai"),
+        new("TradingTerminal",   "Trading Terminal",    "Terminal", "◈", "icon--trading"),
+        new("ArbitrageScanner",  "Arbitrage Scanner",   "Scanner",  "◬", "icon--arb"),
+        new("DeFiPositions",     "DeFi Positions",      "DeFi",     "◉", "icon--defi"),
+        new("HealthMonitor",     "Health Monitor",      "Health",   "◎", "icon--defi"),
+        new("DesignerCanvas",    "Strategy Designer",   "Designer", "◫", "icon--designer"),
+        new("AIChatPanel",       "AI Assistant",        "AI",       "◈", "icon--ai"),
+        new("DataFeedManager",   "Data Feed Manager",   "Data",     "◬", "icon--data"),
+        new("ProviderSettings",  "AI Provider Settings","Settings", "⚙", "icon--ai"),
+    ];
+
+    // Bottom-sheet shows the top 4 most-used panels for quick access
+    private static readonly PanelEntry[] _bottomSheetPanels =
+    [
+        new("TradingTerminal",  "Trading Terminal",  "Trade",   "◈", "icon--trading"),
+        new("ArbitrageScanner", "Arbitrage Scanner", "Arb",     "◬", "icon--arb"),
+        new("AIChatPanel",      "AI Assistant",      "AI",      "◈", "icon--ai"),
+        new("DesignerCanvas",   "Strategy Designer", "Design",  "◫", "icon--designer"),
     ];
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -296,27 +358,94 @@
         if (!firstRender) return;
         WM.OnLayoutChanged += LayoutChanged;
         await WM.RestoreLayoutAsync(_cts.Token).ConfigureAwait(false);
+
+        // Detect initial viewport width for mobile/desktop mode and subscribe
+        // to breakpoint changes so _isMobile stays in sync on resize/rotation.
+        _dotNetRef = DotNetObjectReference.Create(this);
+        try
+        {
+            var width = await JS.InvokeAsync<double>("mlsViewport.getInnerWidth").ConfigureAwait(false);
+            await SetMobileMode(width).ConfigureAwait(false);
+            await JS.InvokeVoidAsync("mlsViewport.onBreakpointChange", _dotNetRef).ConfigureAwait(false);
+        }
+        catch { /* non-critical */ }
+    }
+
+    /// <summary>
+    /// Invoked from JS when the viewport crosses the 768px mobile breakpoint.
+    /// </summary>
+    [JSInvokable]
+    public Task OnBreakpointChange(bool isMobile) => SetMobileMode(isMobile);
+
+    private async Task SetMobileMode(double width) => await SetMobileMode(width < 768).ConfigureAwait(false);
+
+    private async Task SetMobileMode(bool isMobile)
+    {
+        var wasMobile = _isMobile;
+        _isMobile = isMobile;
+
+        // When switching to mobile with no panel selected, pick first available
+        if (_isMobile && _activeMobilePanel is null)
+        {
+            var firstPanel = WM.Windows.OrderByDescending(w => w.ZIndex).FirstOrDefault();
+            if (firstPanel is not null)
+            {
+                _activeMobilePanel = firstPanel.PanelType;
+                _activeMobilePanelTitle = firstPanel.Title;
+            }
+            else
+            {
+                _activeMobilePanel = "TradingTerminal";
+                _activeMobilePanelTitle = "Trading Terminal";
+            }
+        }
+
+        if (wasMobile != _isMobile)
+            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
     }
 
     private void LayoutChanged() => InvokeAsync(StateHasChanged);
 
     private void OpenPanel(string panelType)
     {
-        WM.OpenPanel(panelType);
-        _showPanelMenu = false;
-        _ = WM.SaveLayoutAsync(_cts.Token);
+        if (_isMobile)
+        {
+            var entry = _availablePanels.FirstOrDefault(p => p.Key == panelType);
+            _activeMobilePanel = panelType;
+            _activeMobilePanelTitle = entry?.Label ?? panelType;
+            _showPanelMenu = false;
+            _showBottomSheet = false;
+        }
+        else
+        {
+            WM.OpenPanel(panelType);
+            _showPanelMenu = false;
+            _ = WM.SaveLayoutAsync(_cts.Token);
+        }
+    }
+
+    private void SelectMobilePanel(string panelType, string label)
+    {
+        _activeMobilePanel = panelType;
+        _activeMobilePanelTitle = label;
+        _showBottomSheet = false;
+        StateHasChanged();
     }
 
     private void TogglePanelMenu() => _showPanelMenu = !_showPanelMenu;
 
+    private void ToggleBottomSheet() => _showBottomSheet = !_showBottomSheet;
+
     private void OnMouseMove(MouseEventArgs args)
     {
+        if (_isMobile) return;
         WM.ContinueDrag(args.ClientX, args.ClientY);
         WM.ContinueResize(args.ClientX, args.ClientY);
     }
 
     private void OnMouseUp(MouseEventArgs args)
     {
+        if (_isMobile) return;
         WM.EndDrag();
         WM.EndResize();
         _ = WM.SaveLayoutAsync(_cts.Token);
@@ -337,10 +466,27 @@
         _                   => @<div class="panel-placeholder">@win.PanelType</div>,
     };
 
+    /// <summary>Returns a panel component directly (no DocumentWindow wrapper) for mobile stack mode.</summary>
+    private RenderFragment GetMobilePanelContent(string panelType) => panelType switch
+    {
+        "TradingTerminal"   => @<TradingTerminal />,
+        "TradingChart"      => @<TradingChart Symbol="BTC-USD" />,
+        "ArbitrageScanner"  => @<ArbitrageScanner />,
+        "DeFiPositions"     => @<DeFiPositions />,
+        "HealthMonitor"     => @<HealthMonitor />,
+        "DesignerCanvas"    => @<DesignerCanvas />,
+        "PathVisualization" => @<PathVisualization />,
+        "AIChatPanel"       => @<AIChatPanel />,
+        "DataFeedManager"   => @<DataFeedManager />,
+        "ProviderSettings"  => @<ProviderSettings />,
+        _                   => @<div class="panel-placeholder">@panelType</div>,
+    };
+
     public void Dispose()
     {
         WM.OnLayoutChanged -= LayoutChanged;
         _cts.Cancel();
         _cts.Dispose();
+        _dotNetRef?.Dispose();
     }
 }

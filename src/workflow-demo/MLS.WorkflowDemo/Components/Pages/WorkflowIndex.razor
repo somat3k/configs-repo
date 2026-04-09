@@ -1,0 +1,59 @@
+@page "/workflow"
+@page "/"
+@rendermode InteractiveServer
+
+<PageTitle>MLS — Workflow Examples</PageTitle>
+
+<div class="wf-index">
+    <div class="wfi-hero">
+        <div class="wfi-logo">⬡</div>
+        <h1>MLS Workflow Examples</h1>
+        <p>Standalone, runnable workflow demonstrations for every module.<br/>Each page fetches live market data through a typed functional pipeline.</p>
+    </div>
+    <div class="wfi-grid">
+        @foreach (var m in _modules)
+        {
+            <a class="wfi-card" href="@m.Route" style="--card-accent: @m.Color">
+                <div class="wfi-card-icon">@m.Icon</div>
+                <div class="wfi-card-body">
+                    <div class="wfi-card-name">@m.Name</div>
+                    <div class="wfi-card-ports">HTTP @m.Http · WS @m.Ws</div>
+                    <div class="wfi-card-desc">@m.Desc</div>
+                </div>
+                <div class="wfi-card-arrow">→</div>
+            </a>
+        }
+    </div>
+</div>
+
+@code {
+    private sealed record ModuleEntry(
+        string Name, string Route, string Icon,
+        int Http, int Ws, string Desc, string Color);
+
+    private static readonly ModuleEntry[] _modules =
+    [
+        new("Block Controller", "/workflow/block-controller", "⚙",
+            5100, 6100, "Orchestration hub — module registry, envelope routing, heartbeat mesh", "#1f6feb"),
+        new("Data Layer",       "/workflow/data-layer",       "📡",
+            5700, 6700, "Hydra OHLCV feed collection, gap detection, feature store pipeline",  "#1a7f37"),
+        new("Trader",           "/workflow/trader",           "📈",
+            5300, 6300, "model-t signal generation: Market Data → Features → ONNX → Order",   "#6e40c9"),
+        new("Arbitrager",       "/workflow/arbitrager",       "⚡",
+            5400, 6400, "model-a: cross-venue spread detection on Camelot / DFYN / nHOP",      "#b45309"),
+        new("DeFi",             "/workflow/defi",             "🔷",
+            5500, 6500, "model-d: DeFi Llama TVL monitoring, yield analysis, on-chain execute","#7c3aed"),
+        new("ML Runtime",       "/workflow/ml-runtime",       "🧠",
+            5600, 6600, "OHLCV → FeatureEngineer → Python train → ONNX export → inference",   "#0e7490"),
+        new("Designer",         "/workflow/designer",         "◫",
+            5250, 6250, "Block-graph composer: 28 block types, socket typing, strategy deploy","#00d4ff"),
+        new("AI Hub",           "/workflow/ai-hub",           "✦",
+            5750, 6750, "Multi-provider LLM orchestration, Semantic Kernel, canvas dispatch",  "#a371f7"),
+        new("Broker",           "/workflow/broker",           "🏦",
+            5800, 6800, "HYPERLIQUID order placement, fill tracking, position management",     "#d29922"),
+        new("Transactions",     "/workflow/transactions",     "🔗",
+            5900, 6900, "Transaction queue: intent → build tx → sign → submit → confirm",     "#22c55e"),
+        new("Shell VM",         "/workflow/shell-vm",         "⌨",
+            5950, 6950, "Secure sandboxed command execution, streaming output, session mgmt",  "#8b949e"),
+    ];
+}
