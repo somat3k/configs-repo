@@ -10,11 +10,11 @@ namespace MLS.Broker.Interfaces;
 public interface IOrderTracker
 {
     /// <summary>
-    /// Persists a newly created <paramref name="order"/> to the backing store.
+    /// Persists a newly created order to the backing store.
     /// No-ops if an order with the same <see cref="OrderResult.ClientOrderId"/> already exists
     /// (idempotency guarantee).
     /// </summary>
-    Task TrackAsync(OrderResult order, CancellationToken ct);
+    Task TrackAsync(PlaceOrderRequest request, OrderResult result, CancellationToken ct);
 
     /// <summary>
     /// Applies a state transition to an existing order identified by <paramref name="clientOrderId"/>.

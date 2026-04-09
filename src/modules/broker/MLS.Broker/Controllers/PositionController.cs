@@ -37,7 +37,7 @@ public sealed class PositionController(
             return NotFound(new { symbol, message = "No open position found" });
 
         _logger.LogInformation("Position query: {Symbol} qty={Qty} pnl={Pnl}",
-            symbol, position.Quantity, position.UnrealisedPnl);
+            BrokerUtils.SafeLog(symbol), position.Quantity, position.UnrealisedPnl);
 
         return Ok(position);
     }
@@ -63,7 +63,7 @@ public sealed class PositionController(
                   .SendAsync("ReceiveEnvelope", envelope, ct)
                   .ConfigureAwait(false);
 
-        _logger.LogInformation("POSITION_UPDATE broadcast: {Symbol} qty={Qty}", symbol, position.Quantity);
+        _logger.LogInformation("POSITION_UPDATE broadcast: {Symbol} qty={Qty}", BrokerUtils.SafeLog(symbol), position.Quantity);
 
         return Ok(position);
     }

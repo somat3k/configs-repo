@@ -20,16 +20,16 @@ public sealed class OrderTracker(
     private static readonly TimeSpan RedisTtl = TimeSpan.FromHours(48);
 
     /// <inheritdoc/>
-    public async Task TrackAsync(OrderResult order, CancellationToken ct)
+    public async Task TrackAsync(PlaceOrderRequest request, OrderResult result, CancellationToken ct)
     {
         // Write to Redis cache first (fast path)
-        await CacheOrderAsync(order, ct).ConfigureAwait(false);
+        await CacheOrderAsync(result, ct).ConfigureAwait(false);
 
-        // Persist to PostgreSQL
+        // Persist to PostgreSQL with full order details from the original request
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var repo = new OrderRepository(db);
 
-        await repo.InsertAsync(MapToEntity(order), ct).ConfigureAwait(false);
+        await repo.InsertAsync(MapToEntity(request, result), ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -62,7 +62,7 @@ public sealed class OrderTracker(
             .ConfigureAwait(false);
 
         if (!updated_pg)
-            _logger.LogWarning("OrderTracker: no row found to update for {ClientOrderId}", clientOrderId);
+            _logger.LogWarning("OrderTracker: no row found to update for {ClientOrderId}", BrokerUtils.SafeLog(clientOrderId));
     }
 
     /// <inheritdoc/>
@@ -108,7 +108,7 @@ public sealed class OrderTracker(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Redis cache write failed for {ClientOrderId}", order.ClientOrderId);
+            _logger.LogWarning(ex, "Redis cache write failed for {ClientOrderId}", BrokerUtils.SafeLog(order.ClientOrderId));
         }
     }
 
@@ -126,26 +126,28 @@ public sealed class OrderTracker(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Redis cache read failed for {ClientOrderId}", clientOrderId);
+            _logger.LogWarning(ex, "Redis cache read failed for {ClientOrderId}", BrokerUtils.SafeLog(clientOrderId));
             return null;
         }
     }
 
-    private static OrderEntity MapToEntity(OrderResult o) => new()
+    private static OrderEntity MapToEntity(PlaceOrderRequest req, OrderResult result) => new()
     {
-        ClientOrderId      = o.ClientOrderId,
-        VenueOrderId       = o.VenueOrderId,
-        Symbol             = o.Symbol,
-        Side               = o.Side.ToString(),
-        OrderType          = Models.OrderType.Market.ToString(), // resolved during placement
-        Quantity           = 0m,                                  // stored separately on placement
-        State              = o.State.ToString(),
-        FilledQuantity     = o.FilledQuantity,
-        AveragePrice       = o.AveragePrice,
-        Venue              = o.Venue,
-        RequestingModuleId = string.Empty,
-        CreatedAt          = o.CreatedAt,
-        UpdatedAt          = o.UpdatedAt,
+        ClientOrderId      = result.ClientOrderId,
+        VenueOrderId       = result.VenueOrderId,
+        Symbol             = req.Symbol,
+        Side               = req.Side.ToString(),
+        OrderType          = req.Type.ToString(),
+        Quantity           = req.Quantity,
+        LimitPrice         = req.LimitPrice,
+        StopPrice          = req.StopPrice,
+        State              = result.State.ToString(),
+        FilledQuantity     = result.FilledQuantity,
+        AveragePrice       = result.AveragePrice,
+        Venue              = result.Venue,
+        RequestingModuleId = req.RequestingModuleId,
+        CreatedAt          = result.CreatedAt,
+        UpdatedAt          = result.UpdatedAt,
     };
 
     private static OrderResult MapFromEntity(OrderEntity e) => new(

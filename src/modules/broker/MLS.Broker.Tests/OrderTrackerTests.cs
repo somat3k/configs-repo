@@ -58,19 +58,22 @@ public sealed class OrderTrackerTests
     [Fact]
     public async Task TrackAsync_PersistsOrderToDatabase()
     {
-        var order = SampleOrder("cloid-t1");
-        await _tracker.TrackAsync(order, CancellationToken.None);
+        var (req, result) = SamplePair("cloid-t1");
+        await _tracker.TrackAsync(req, result, CancellationToken.None);
 
         await using var db = new BrokerDbContext(_dbOpts);
         var entity = await db.Orders.FirstOrDefaultAsync(o => o.ClientOrderId == "cloid-t1");
         entity.Should().NotBeNull();
+        entity!.OrderType.Should().Be("Limit");
+        entity.Quantity.Should().Be(0.5m);
+        entity.RequestingModuleId.Should().Be("trader");
     }
 
     [Fact]
     public async Task TrackAsync_WritesToRedisCache()
     {
-        var order = SampleOrder("cloid-t2");
-        await _tracker.TrackAsync(order, CancellationToken.None);
+        var (req, result) = SamplePair("cloid-t2");
+        await _tracker.TrackAsync(req, result, CancellationToken.None);
 
         _dbMock.Verify(d => d.StringSetAsync(
             It.Is<RedisKey>(k => ((string)k!).Contains("cloid-t2")),
@@ -86,8 +89,8 @@ public sealed class OrderTrackerTests
     [Fact]
     public async Task UpdateAsync_UpdatesDatabaseState()
     {
-        var order = SampleOrder("cloid-t3");
-        await _tracker.TrackAsync(order, CancellationToken.None);
+        var (req, result) = SamplePair("cloid-t3");
+        await _tracker.TrackAsync(req, result, CancellationToken.None);
 
         await _tracker.UpdateAsync("cloid-t3", OrderState.Filled, 0.5m, 65_000m, CancellationToken.None);
 
@@ -103,9 +106,12 @@ public sealed class OrderTrackerTests
     [Fact]
     public async Task GetOpenOrdersAsync_YieldsOpenAndPartialOrders()
     {
-        await _tracker.TrackAsync(SampleOrder("cloid-t4", OrderState.Open), CancellationToken.None);
-        await _tracker.TrackAsync(SampleOrder("cloid-t5", OrderState.PartiallyFilled), CancellationToken.None);
-        await _tracker.TrackAsync(SampleOrder("cloid-t6", OrderState.Filled), CancellationToken.None);
+        var (req4, res4) = SamplePair("cloid-t4", OrderState.Open);
+        var (req5, res5) = SamplePair("cloid-t5", OrderState.PartiallyFilled);
+        var (req6, res6) = SamplePair("cloid-t6", OrderState.Filled);
+        await _tracker.TrackAsync(req4, res4, CancellationToken.None);
+        await _tracker.TrackAsync(req5, res5, CancellationToken.None);
+        await _tracker.TrackAsync(req6, res6, CancellationToken.None);
 
         var open = new List<OrderResult>();
         await foreach (var o in _tracker.GetOpenOrdersAsync(CancellationToken.None))
@@ -117,8 +123,14 @@ public sealed class OrderTrackerTests
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static OrderResult SampleOrder(string clientOrderId, OrderState state = OrderState.Open)
-        => new(clientOrderId, "v-" + clientOrderId, state, 0m, null,
-               "hyperliquid", "BTC-USDT", OrderSide.Buy,
-               DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+    private static (PlaceOrderRequest Request, OrderResult Result) SamplePair(
+        string clientOrderId, OrderState state = OrderState.Open)
+    {
+        var req = new PlaceOrderRequest("BTC-USDT", OrderSide.Buy, OrderType.Limit,
+            0.5m, 65_000m, null, clientOrderId, "trader");
+        var result = new OrderResult(clientOrderId, "v-" + clientOrderId, state, 0m, null,
+            "hyperliquid", "BTC-USDT", OrderSide.Buy,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        return (req, result);
+    }
 }

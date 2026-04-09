@@ -30,7 +30,7 @@ public sealed class BrokerFallbackChain(
         for (int i = 1; i < chain.Length; i++)
         {
             _logger.LogWarning("Primary venue rejected order {ClientOrderId} — trying fallback {Venue}",
-                request.ClientOrderId, chain[i]);
+                BrokerUtils.SafeLog(request.ClientOrderId), BrokerUtils.SafeLog(chain[i]));
 
             // Future venues are registered dynamically; for now log the attempt
             _logger.LogInformation("Fallback venue {Venue} not yet implemented — skipping", chain[i]);
@@ -79,12 +79,12 @@ public sealed class BrokerFallbackChain(
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            _logger.LogWarning("Venue {Venue} timed out placing order {ClientOrderId}", venueName, request.ClientOrderId);
+            _logger.LogWarning("Venue {Venue} timed out placing order {ClientOrderId}", BrokerUtils.SafeLog(venueName), BrokerUtils.SafeLog(request.ClientOrderId));
             return null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Venue {Venue} threw placing order {ClientOrderId}", venueName, request.ClientOrderId);
+            _logger.LogWarning(ex, "Venue {Venue} threw placing order {ClientOrderId}", BrokerUtils.SafeLog(venueName), BrokerUtils.SafeLog(request.ClientOrderId));
             return null;
         }
     }

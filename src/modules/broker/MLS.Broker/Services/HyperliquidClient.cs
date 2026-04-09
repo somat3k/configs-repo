@@ -78,7 +78,7 @@ public sealed class HyperliquidClient(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "HYPERLIQUID PlaceOrder failed for {ClientOrderId}", request.ClientOrderId);
+            _logger.LogWarning(ex, "HYPERLIQUID PlaceOrder failed for {ClientOrderId}", BrokerUtils.SafeLog(request.ClientOrderId));
             return CreateOrderResult(request, null, OrderState.Rejected);
         }
     }
@@ -191,7 +191,7 @@ public sealed class HyperliquidClient(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "HYPERLIQUID GetPosition failed for symbol={Symbol}", symbol);
+            _logger.LogWarning(ex, "HYPERLIQUID GetPosition failed for symbol={Symbol}", BrokerUtils.SafeLog(symbol));
             return null;
         }
     }

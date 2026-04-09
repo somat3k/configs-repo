@@ -39,7 +39,7 @@ public sealed class OrderController(
         if (existing is not null)
         {
             _logger.LogInformation("Idempotent ORDER_CREATE — returning existing order {ClientOrderId}",
-                request.ClientOrderId);
+                BrokerUtils.SafeLog(request.ClientOrderId));
             return Ok(existing);
         }
 
@@ -50,12 +50,12 @@ public sealed class OrderController(
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "All venues failed for order {ClientOrderId}", request.ClientOrderId);
+            _logger.LogError(ex, "All venues failed for order {ClientOrderId}", BrokerUtils.SafeLog(request.ClientOrderId));
             return StatusCode(503, new { error = ex.Message });
         }
 
         // Track the order
-        await _orderTracker.TrackAsync(result, ct).ConfigureAwait(false);
+        await _orderTracker.TrackAsync(request, result, ct).ConfigureAwait(false);
 
         // Broadcast ORDER_CONFIRMATION envelope
         var envelope = EnvelopePayload.Create(MessageTypes.OrderConfirmation, ModuleId, result);
@@ -98,7 +98,7 @@ public sealed class OrderController(
                   .SendAsync("ReceiveEnvelope", envelope, ct)
                   .ConfigureAwait(false);
 
-        _logger.LogInformation("ORDER_CANCEL accepted: {ClientOrderId}", clientOrderId);
+        _logger.LogInformation("ORDER_CANCEL accepted: {ClientOrderId}", BrokerUtils.SafeLog(clientOrderId));
 
         return Ok(new { clientOrderId, state = OrderState.Cancelled });
     }
