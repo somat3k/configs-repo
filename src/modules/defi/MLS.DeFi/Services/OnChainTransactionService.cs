@@ -132,11 +132,18 @@ public sealed class OnChainTransactionService(
                 return new OnChainTransactionResult(txHash, OnChainTxStatus.Pending, 0, 0, DateTimeOffset.UtcNow);
             }
 
-            var statusHex  = result.TryGetProperty("status",      out var s)  ? s.GetString() : "0x1";
+            var statusHex  = result.TryGetProperty("status",      out var s)  ? s.GetString() : null;
             var gasUsedHex = result.TryGetProperty("gasUsed",     out var g)  ? g.GetString() : "0x0";
             var blockHex   = result.TryGetProperty("blockNumber", out var bn) ? bn.GetString() : "0x0";
 
-            var status    = statusHex == "0x1" ? OnChainTxStatus.Confirmed : OnChainTxStatus.Reverted;
+            // status "0x1" = success (confirmed); "0x0" or missing = reverted
+            var status = statusHex switch
+            {
+                "0x1"            => OnChainTxStatus.Confirmed,
+                "0x0"            => OnChainTxStatus.Reverted,
+                null or ""       => OnChainTxStatus.Failed,
+                _                => OnChainTxStatus.Reverted,
+            };
             var gasUsed   = ParseHexUlong(gasUsedHex);
             var blockNum  = ParseHexUlong(blockHex);
 

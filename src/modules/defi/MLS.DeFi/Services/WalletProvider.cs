@@ -45,8 +45,13 @@ public sealed class WalletProvider(
             return Task.FromResult("0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
         }
 
-        // Stub: in production wire Nethereum's EthECKey.SignAndCalculateV to produce a real sig.
-        _logger.LogDebug("SignHashAsync called for hash length={Len}", messageHash.Length);
+        // Stub: returning a deterministic stub signature. In production, wire Nethereum's
+        // EthECKey.SignAndCalculateV or delegate to the configured vault/HSM backend.
+        // A critical-level log is emitted so this cannot be missed in production environments.
+        _logger.LogCritical(
+            "WalletProvider is using a STUB signature — {EnvVar} is not set. " +
+            "This must be replaced with a real signing implementation before production use.",
+            PrivKeyEnvVar);
         return Task.FromResult("0x" + messageHash.PadRight(130, '0')[..130]);
     }
 

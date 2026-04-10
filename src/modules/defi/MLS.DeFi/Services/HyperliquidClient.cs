@@ -406,9 +406,10 @@ public sealed class HyperliquidClient(
                 return null;
 
             if (!root.TryGetProperty("data", out var data)) return null;
+            if (!data.TryGetProperty("levels", out var levels)) return null;
 
-            var bids = ParseLevels(data.TryGetProperty("levels", out var lv)  ? lv[0] : default);
-            var asks = ParseLevels(data.TryGetProperty("levels", out var lv2) ? lv2[1] : default);
+            var bids = ParseLevels(levels.GetArrayLength() > 0 ? levels[0] : default);
+            var asks = ParseLevels(levels.GetArrayLength() > 1 ? levels[1] : default);
 
             return new DeFiOrderBookUpdate(symbol, bids, asks, DateTimeOffset.UtcNow);
         }

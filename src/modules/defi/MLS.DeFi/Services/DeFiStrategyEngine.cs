@@ -33,14 +33,20 @@ public sealed class DeFiStrategyEngine(
 
         _logger.LogInformation(
             "Strategy evaluation: symbol={Symbol} side={Side} qty={Qty} strategy={Strategy} venue={Venue} feesBps={Fees}",
-            request.Symbol, request.Side, request.Quantity, strategy.StrategyType, strategy.Venue, feesBps);
+            DeFiUtils.SafeLog(request.Symbol), request.Side, request.Quantity, strategy.StrategyType, strategy.Venue, feesBps);
 
         // Check HYPERLIQUID availability for perpetual strategy
         if (strategy.StrategyType == DeFiStrategyType.HyperliquidPerpetual)
         {
-            var openOrders = await _hyperliquid.GetOpenOrdersAsync(string.Empty, ct)
-                                               .ConfigureAwait(false);
-            _ = openOrders; // connectivity check only
+            try
+            {
+                // Connectivity check — result is unused; exception signals unavailability
+                await _hyperliquid.GetOpenOrdersAsync(string.Empty, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "HYPERLIQUID connectivity check failed during strategy evaluation");
+            }
         }
 
         return strategy with

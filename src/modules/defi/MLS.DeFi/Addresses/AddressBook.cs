@@ -11,7 +11,7 @@ namespace MLS.DeFi.Addresses;
 /// </summary>
 public sealed class AddressBook(
     IOptions<DeFiOptions> _options,
-    ILogger<AddressBook> _logger) : IDeFiAddressBook
+    ILogger<AddressBook> _logger) : IDeFiAddressBook, IDisposable
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
     private IReadOnlyDictionary<string, string>? _cache;
@@ -94,4 +94,7 @@ public sealed class AddressBook(
 
         return result;
     }
+
+    /// <inheritdoc/>
+    public void Dispose() => _lock.Dispose();
 }

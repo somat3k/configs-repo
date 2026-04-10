@@ -39,7 +39,9 @@ public sealed class BlockControllerClient(
     {
         await base.StopAsync(ct).ConfigureAwait(false);
 
-        using var deregistrationCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var deregistrationCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deregistrationCts.CancelAfter(TimeSpan.FromSeconds(5));
+
         await DeregisterAsync(deregistrationCts.Token).ConfigureAwait(false);
     }
 
