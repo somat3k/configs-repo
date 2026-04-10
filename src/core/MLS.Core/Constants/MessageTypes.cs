@@ -43,4 +43,26 @@ public static partial class MessageTypes
     public const string ShellSessionCreated = "SHELL_SESSION_CREATED";
     /// <summary>Shell session terminated notification.</summary>
     public const string ShellSessionTerminated = "SHELL_SESSION_TERMINATED";
+
+    // ── DeFi domain ─────────────────────────────────────────────────────────────
+    /// <summary>defi → all subscribers: DeFi strategy selected and executed.</summary>
+    public const string DeFiStrategyExecuted = "DEFI_STRATEGY_EXECUTED";
+    /// <summary>defi → all subscribers: on-chain transaction submitted.</summary>
+    public const string DeFiTxSubmitted = "DEFI_TX_SUBMITTED";
+    /// <summary>defi → all subscribers: on-chain transaction confirmed or reverted.</summary>
+    public const string DeFiTxStatus = "DEFI_TX_STATUS";
+
+    // ── Broker / Order management ────────────────────────────────────────────────
+    /// <summary>Trader or DeFi → broker: place a new order on a venue.</summary>
+    public const string OrderCreate       = "ORDER_CREATE";
+    /// <summary>Trader or DeFi → broker: cancel an open order by clientOrderId.</summary>
+    public const string OrderCancel       = "ORDER_CANCEL";
+    /// <summary>broker → requester: order accepted by the venue.</summary>
+    public const string OrderConfirmation = "ORDER_CONFIRMATION";
+    /// <summary>broker → requester: order rejected by the venue.</summary>
+    public const string OrderRejection    = "ORDER_REJECTION";
+    /// <summary>broker → all subscribers: order partially or fully filled.</summary>
+    public const string FillNotification  = "FILL_NOTIFICATION";
+    /// <summary>broker → all subscribers: current open position for a symbol.</summary>
+    public const string PositionUpdate    = "POSITION_UPDATE";
 }

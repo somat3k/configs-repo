@@ -204,6 +204,42 @@ services:
       com.mls.module: "data-layer"
       com.mls.role: "data-access"
 
+  broker:
+    image: ghcr.io/somat3k/mls-broker:latest
+    build:
+      context: src/modules/broker
+      dockerfile: Dockerfile
+    container_name: mls-broker
+    restart: unless-stopped
+    ports:
+      - "5800:5800"
+      - "6800:6800"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5800
+      - MLS_MODULE=broker
+      - MLS_WS_PORT=6800
+      - MLS_BC_URL=http://block-controller:5100
+      - ConnectionStrings__Redis=redis:6379
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=mls_db;Username=mls_user;Password=${POSTGRES_PASSWORD}
+      - Broker__RedisConnectionString=redis:6379
+      - Broker__PostgresConnectionString=Host=postgres;Port=5432;Database=mls_db;Username=mls_user;Password=${POSTGRES_PASSWORD}
+      - Broker__BlockControllerUrl=http://block-controller:5100
+      # HYPERLIQUID_WALLET_ADDRESS loaded from .env or Docker secrets — never hardcoded
+    networks:
+      - mls-network
+    # Requires infra services: postgres, redis (start docker-compose.infra.yml first)
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5800/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "broker"
+      com.mls.role: "order-execution"
+
   shell-vm:
     image: ghcr.io/somat3k/mls-shell-vm:latest
     # build:
