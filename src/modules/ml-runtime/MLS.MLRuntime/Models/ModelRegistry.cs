@@ -17,7 +17,7 @@ public sealed class ModelRegistry : IModelRegistry
     /// <summary>
     /// Initialises a new <see cref="ModelRegistry"/>.
     /// The constructor is <see langword="internal"/> because <see cref="IInferenceSessionFactory"/>
-    /// is an internal test-seam type; production code resolves this via the DI container.
+    /// is an internal test-seam type; production code resolves this via a factory lambda in Program.cs.
     /// </summary>
     internal ModelRegistry(IInferenceSessionFactory sessionFactory, ILogger<ModelRegistry> logger)
     {
@@ -43,8 +43,13 @@ public sealed class ModelRegistry : IModelRegistry
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model file not found: {modelPath}", modelPath);
 
-        var sessionOptions = BuildSessionOptions();
-        var session = _sessionFactory.Create(modelPath, sessionOptions);
+        // Dispose SessionOptions immediately after session creation — the session
+        // copies everything it needs during construction and options are no longer required.
+        InferenceSession session;
+        using (var sessionOptions = BuildSessionOptions())
+        {
+            session = _sessionFactory.Create(modelPath, sessionOptions);
+        }
 
         var record = new ModelRecord(
             ModelKey:  modelKey,
@@ -53,13 +58,24 @@ public sealed class ModelRegistry : IModelRegistry
             LoadedAt:  DateTimeOffset.UtcNow,
             ModelId:   modelId);
 
-        // Replace and dispose any existing session (hot-reload)
-        if (_models.TryGetValue(modelKey, out var existing))
+        // Hot-reload: swap the dictionary entry FIRST so new requests immediately see the
+        // new session, then dispose the old session after a delay that exceeds the inference
+        // timeout (default 50 ms) to allow any in-flight calls to complete safely.
+        // We intentionally swallow all exceptions in the fire-and-forget continuation — the
+        // logger and other DI services may already be in teardown during shutdown.
+        ModelRecord? evicted = null;
+        _models.AddOrUpdate(modelKey, record, (_, old) => { evicted = old; return record; });
+
+        if (evicted is not null)
         {
             _logger.LogInformation(
-                "Hot-reloading model key={Key} from {Path} (replacing {OldId})",
-                S(modelKey), S(modelPath), S(existing.ModelId));
-            existing.Session.Dispose();
+                "Hot-reloaded model key={Key} from {Path} (old={OldId} → new={NewId})",
+                S(modelKey), S(modelPath), S(evicted.ModelId), S(modelId));
+
+            var oldSession = evicted.Session;
+            _ = Task.Delay(TimeSpan.FromMilliseconds(500)).ContinueWith(
+                _ => { try { oldSession.Dispose(); } catch { /* intentionally swallowed */ } },
+                TaskScheduler.Default);
         }
         else
         {
@@ -67,8 +83,6 @@ public sealed class ModelRegistry : IModelRegistry
                 "Loading model key={Key} modelId={ModelId} from {Path}",
                 S(modelKey), S(modelId), S(modelPath));
         }
-
-        _models[modelKey] = record;
         return Task.CompletedTask;
     }
 

@@ -38,8 +38,14 @@ builder.Services.AddHttpClient<IEnvelopeSender, EnvelopeSender>(client =>
 });
 
 // ── Core services ─────────────────────────────────────────────────────────────
+builder.Services.AddSingleton<ModuleIdentity>();
 builder.Services.AddSingleton<IInferenceSessionFactory, DefaultInferenceSessionFactory>();
-builder.Services.AddSingleton<IModelRegistry, ModelRegistry>();
+// Use explicit factory: ModelRegistry constructor is internal (IInferenceSessionFactory is an
+// internal test-seam type) so the default DI activator cannot resolve it via reflection.
+builder.Services.AddSingleton<IModelRegistry>(sp =>
+    new ModelRegistry(
+        sp.GetRequiredService<IInferenceSessionFactory>(),
+        sp.GetRequiredService<ILogger<ModelRegistry>>()));
 builder.Services.AddSingleton<IInferenceEngine>(sp =>
 {
     var registry  = sp.GetRequiredService<IModelRegistry>();

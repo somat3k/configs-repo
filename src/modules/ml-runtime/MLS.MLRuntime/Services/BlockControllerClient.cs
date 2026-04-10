@@ -8,9 +8,12 @@ namespace MLS.MLRuntime.Services;
 /// Hosted background service that registers the ML Runtime module with Block Controller
 /// (MODULE_REGISTER) on startup and sends MODULE_HEARTBEAT every 5 seconds.
 /// Automatically retries registration if the first attempt fails.
+/// Updates <see cref="ModuleIdentity"/> with the server-assigned GUID upon success so that
+/// other services (e.g. <see cref="InferenceWorker"/>) emit envelopes with a consistent identity.
 /// </summary>
 public sealed class BlockControllerClient(
     HttpClient _http,
+    ModuleIdentity _identity,
     IOptions<MLRuntimeOptions> _options,
     ILogger<BlockControllerClient> _logger) : BackgroundService
 {
@@ -67,7 +70,8 @@ public sealed class BlockControllerClient(
                                              .ConfigureAwait(false);
             if (reg is not null)
             {
-                _registeredId = reg.ModuleId;
+                _registeredId  = reg.ModuleId;
+                _identity.Id   = reg.ModuleId;   // share identity with InferenceWorker/envelope authoring
                 _logger.LogInformation("MLRuntime registered with Block Controller as {Id}", _registeredId);
             }
         }

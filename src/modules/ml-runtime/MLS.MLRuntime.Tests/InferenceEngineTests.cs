@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.ML.OnnxRuntime;
 using Moq;
 using MLS.MLRuntime.Configuration;
 using MLS.MLRuntime.Inference;
@@ -82,9 +83,17 @@ public sealed class InferenceEngineTests
         var cached    = new InferenceResultPayload(requestId, "model-t", [0.9f], 5.0, false, "v1");
         var json      = System.Text.Json.JsonSerializer.Serialize(cached);
 
+        // The engine now resolves the model FIRST (to build a versioned cache key),
+        // so we must provide a non-null ModelRecord even for a cache-hit test.
+        var fakeSession  = CreateFakeSession();
+        var fakeRecord   = new ModelRecord("model-t", "/fake.onnx", fakeSession, DateTimeOffset.UtcNow, "v1");
+
         var registryMock = new Mock<IModelRegistry>();
-        var redisMock    = new Mock<IConnectionMultiplexer>();
-        var dbMock       = new Mock<IDatabase>();
+        registryMock.Setup(r => r.GetAsync("model-t", It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(fakeRecord);
+
+        var redisMock = new Mock<IConnectionMultiplexer>();
+        var dbMock    = new Mock<IDatabase>();
 
         redisMock.Setup(r => r.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))
                  .Returns(dbMock.Object);
@@ -97,6 +106,8 @@ public sealed class InferenceEngineTests
 
         var request = MakeRequest();
         var result  = await engine.RunAsync(request);
+
+        fakeSession.Dispose();
 
         result.Cached.Should().BeTrue();
         result.RequestId.Should().Be(request.RequestId);   // request ID is stamped on cached result
@@ -186,5 +197,27 @@ public sealed class InferenceEngineTests
 
         var act = () => engine.RunAsync(MakeRequest(), cts.Token).AsTask();
         await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a real <see cref="InferenceSession"/> backed by a minimal valid ONNX model
+    /// (Identity op, float32 input/output [1,1]) for use in tests that need a live session.
+    /// </summary>
+    private static InferenceSession CreateFakeSession()
+    {
+        byte[] minimalOnnx =
+        [
+            0x08, 0x07, 0x3a, 0x52, 0x0a, 0x19, 0x0a, 0x05, 0x69, 0x6e, 0x70, 0x75, 0x74,
+            0x12, 0x06, 0x6f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x22, 0x08, 0x49, 0x64, 0x65,
+            0x6e, 0x74, 0x69, 0x74, 0x79, 0x5a, 0x19, 0x0a, 0x05, 0x69, 0x6e, 0x70, 0x75,
+            0x74, 0x12, 0x10, 0x0a, 0x0e, 0x08, 0x01, 0x12, 0x0a, 0x0a, 0x08, 0x0a, 0x02,
+            0x08, 0x01, 0x0a, 0x02, 0x08, 0x01, 0x62, 0x1a, 0x0a, 0x06, 0x6f, 0x75, 0x74,
+            0x70, 0x75, 0x74, 0x12, 0x10, 0x0a, 0x0e, 0x08, 0x01, 0x12, 0x0a, 0x0a, 0x08,
+            0x0a, 0x02, 0x08, 0x01, 0x0a, 0x02, 0x08, 0x01, 0x42, 0x04, 0x0a, 0x00, 0x10, 0x0b,
+        ];
+
+        return new InferenceSession(minimalOnnx);
     }
 }

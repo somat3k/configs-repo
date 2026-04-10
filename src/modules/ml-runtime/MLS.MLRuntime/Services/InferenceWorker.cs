@@ -18,6 +18,7 @@ public sealed class InferenceWorker(
     IModelRegistry _registry,
     IInferenceEngine _engine,
     IEnvelopeSender _sender,
+    ModuleIdentity _identity,
     IOptions<MLRuntimeOptions> _options,
     ILogger<InferenceWorker> _logger) : BackgroundService
 {
@@ -29,13 +30,11 @@ public sealed class InferenceWorker(
         TimeSpan.FromSeconds(15),
     ];
 
-    private readonly Guid _moduleId = Guid.NewGuid();
-
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         var opts   = _options.Value;
-        var hubUrl = $"{opts.BlockControllerUrl}/hubs/block-controller?moduleId={_moduleId}";
+        var hubUrl = $"{opts.BlockControllerUrl}/hubs/block-controller?moduleId={_identity.Id}";
 
         while (!ct.IsCancellationRequested)
         {
@@ -66,8 +65,17 @@ public sealed class InferenceWorker(
             try
             {
                 await hub.StartAsync(ct).ConfigureAwait(false);
+
+                // Subscribe to message types this worker handles.
+                // The Block Controller routes envelopes by subscription table, so without
+                // an explicit subscription these messages would never be delivered here.
+                await hub.InvokeAsync("SubscribeToTopicAsync", MessageTypes.InferenceRequest, ct)
+                         .ConfigureAwait(false);
+                await hub.InvokeAsync("SubscribeToTopicAsync", MessageTypes.TrainingJobComplete, ct)
+                         .ConfigureAwait(false);
+
                 _logger.LogInformation(
-                    "InferenceWorker connected to Block Controller hub as moduleId={Id}", _moduleId);
+                    "InferenceWorker connected and subscribed to topics as moduleId={Id}", _identity.Id);
 
                 await WaitUntilCancelledAsync(hub, ct).ConfigureAwait(false);
             }
@@ -113,7 +121,7 @@ public sealed class InferenceWorker(
             var result   = await _engine.RunAsync(request, ct).ConfigureAwait(false);
             var response = EnvelopePayload.Create(
                 MessageTypes.InferenceResult,
-                _moduleId.ToString(),
+                _identity.Id.ToString(),
                 result);
 
             await _sender.SendEnvelopeAsync(response, ct).ConfigureAwait(false);
