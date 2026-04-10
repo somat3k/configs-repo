@@ -18,6 +18,7 @@ namespace MLS.Broker.Controllers;
 public sealed class OrderController(
     IBrokerFallbackChain _fallbackChain,
     IOrderTracker _orderTracker,
+    IHyperliquidClient _hyperliquid,
     IHubContext<BrokerHub> _hub,
     ILogger<OrderController> _logger) : ControllerBase
 {
@@ -57,14 +58,17 @@ public sealed class OrderController(
         // Track the order
         await _orderTracker.TrackAsync(request, result, ct).ConfigureAwait(false);
 
-        // Broadcast ORDER_CONFIRMATION envelope
-        var envelope = EnvelopePayload.Create(MessageTypes.OrderConfirmation, ModuleId, result);
+        // Broadcast ORDER_CONFIRMATION for accepted orders; ORDER_REJECTION for rejected.
+        var messageType = result.State == OrderState.Rejected
+            ? MessageTypes.OrderRejection
+            : MessageTypes.OrderConfirmation;
+        var envelope = EnvelopePayload.Create(messageType, ModuleId, result);
         await _hub.Clients.Group("broadcast")
                   .SendAsync("ReceiveEnvelope", envelope, ct)
                   .ConfigureAwait(false);
 
-        _logger.LogInformation("ORDER_CREATE accepted: {ClientOrderId} state={State} venue={Venue}",
-            result.ClientOrderId, result.State, result.Venue);
+        _logger.LogInformation("ORDER_CREATE: {ClientOrderId} state={State} venue={Venue}",
+            BrokerUtils.SafeLog(result.ClientOrderId), result.State, result.Venue);
 
         return result.State == OrderState.Rejected
             ? UnprocessableEntity(result)
@@ -87,11 +91,18 @@ public sealed class OrderController(
         if (order.State is OrderState.Filled or OrderState.Cancelled or OrderState.Rejected)
             return Conflict(new { error = $"Cannot cancel order in state '{order.State}'" });
 
-        // Cancel via HYPERLIQUID (primary venue; fallback cancel not yet implemented)
+        // Call HYPERLIQUID cancel API first — only update local state after venue confirms.
+        var cancelResult = await _hyperliquid.CancelOrderAsync(clientOrderId, ct).ConfigureAwait(false);
+        if (cancelResult.State == OrderState.Rejected)
+        {
+            _logger.LogWarning("Venue rejected cancel for {ClientOrderId}", BrokerUtils.SafeLog(clientOrderId));
+            return StatusCode(503, new { error = "Venue could not cancel the order — it may have already been filled" });
+        }
+
         await _orderTracker.UpdateAsync(clientOrderId, OrderState.Cancelled, order.FilledQuantity, order.AveragePrice, ct)
                            .ConfigureAwait(false);
 
-        var envelope = EnvelopePayload.Create(MessageTypes.OrderConfirmation, ModuleId,
+        var envelope = EnvelopePayload.Create(MessageTypes.OrderCancel, ModuleId,
             order with { State = OrderState.Cancelled, UpdatedAt = DateTimeOffset.UtcNow });
 
         await _hub.Clients.Group("broadcast")

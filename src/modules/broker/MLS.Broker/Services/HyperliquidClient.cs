@@ -108,7 +108,7 @@ public sealed class HyperliquidClient(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "HYPERLIQUID CancelOrder failed for {ClientOrderId}", clientOrderId);
+            _logger.LogWarning(ex, "HYPERLIQUID CancelOrder failed for {ClientOrderId}", BrokerUtils.SafeLog(clientOrderId));
             return new OrderResult(clientOrderId, null, OrderState.Rejected,
                 0m, null, VenueId, string.Empty, OrderSide.Buy,
                 DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
@@ -394,7 +394,10 @@ public sealed class HyperliquidClient(
                 var cloid  = fill.TryGetProperty("cloid", out var cl) ? cl.GetString() ?? string.Empty : string.Empty;
                 var oid    = fill.TryGetProperty("oid",   out var o)  ? o.GetInt64().ToString() : string.Empty;
 
-                return new FillNotification(cloid, oid, coin, side, sz, px, sz, 0m, VenueId, DateTimeOffset.UtcNow);
+                // HYPERLIQUID fill events carry the fill quantity (sz) but not the cumulative total.
+                // Downstream (ProcessFillAsync / OrderTracker) computes the running cumulative fill
+                // from the current order state.  Use -1m as a sentinel meaning "remaining unknown".
+                return new FillNotification(cloid, oid, coin, side, sz, px, sz, -1m, VenueId, DateTimeOffset.UtcNow);
             }
         }
         catch (Exception ex)
@@ -457,7 +460,15 @@ public sealed class HyperliquidClient(
     /// <summary>
     /// Returns the wallet address for the module account.
     /// Loaded from the <c>HYPERLIQUID_WALLET_ADDRESS</c> environment variable.
+    /// Logs an error if the variable is not set so misconfiguration is detected early.
     /// </summary>
-    private static string GetWalletAddress()
-        => Environment.GetEnvironmentVariable("HYPERLIQUID_WALLET_ADDRESS") ?? string.Empty;
+    private string GetWalletAddress()
+    {
+        var addr = Environment.GetEnvironmentVariable("HYPERLIQUID_WALLET_ADDRESS");
+        if (string.IsNullOrWhiteSpace(addr))
+            _logger.LogError(
+                "HYPERLIQUID_WALLET_ADDRESS environment variable is not set. " +
+                "API calls requiring a wallet address will fail.");
+        return addr ?? string.Empty;
+    }
 }

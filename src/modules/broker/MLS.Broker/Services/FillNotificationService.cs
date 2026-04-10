@@ -56,7 +56,7 @@ public sealed class FillNotificationService(
             await foreach (var fill in _hyperliquid.SubscribeFillsAsync(ct).ConfigureAwait(false))
             {
                 if (!writer.TryWrite(fill))
-                    _logger.LogWarning("Fill channel full — dropping fill for {ClientOrderId}", fill.ClientOrderId);
+                    _logger.LogWarning("Fill channel full — dropping fill for {ClientOrderId}", BrokerUtils.SafeLog(fill.ClientOrderId));
             }
         }
         catch (OperationCanceledException)
@@ -71,12 +71,27 @@ public sealed class FillNotificationService(
 
     private async Task ProcessFillAsync(FillNotification fill, CancellationToken ct)
     {
-        // Determine if fully filled
-        var newState = fill.RemainingQuantity <= 0m ? OrderState.Filled : OrderState.PartiallyFilled;
+        // Fetch current order state to compute running cumulative fill + VWAP.
+        var current = await _orderTracker.GetAsync(fill.ClientOrderId, ct).ConfigureAwait(false);
 
-        // Update order tracker
+        var priorFilled = current?.FilledQuantity ?? 0m;
+        var cumulativeFilled = priorFilled + fill.FillQuantity;
+
+        // Running VWAP: weight prior fills + this fill by quantity.
+        decimal? runningVwap;
+        if (current?.AveragePrice is { } priorVwap && priorFilled > 0m)
+            runningVwap = ((priorFilled * priorVwap) + (fill.FillQuantity * fill.FillPrice)) / cumulativeFilled;
+        else
+            runningVwap = fill.FillPrice;
+
+        // State: Filled only when RemainingQuantity == 0 (explicit venue signal).
+        // When RemainingQuantity is -1 (sentinel = unknown), treat as PartiallyFilled
+        // until the venue sends a definitive 0.
+        var newState = fill.RemainingQuantity == 0m ? OrderState.Filled : OrderState.PartiallyFilled;
+
+        // Update order tracker with cumulative values
         await _orderTracker.UpdateAsync(
-            fill.ClientOrderId, newState, fill.TotalFilledQuantity, fill.FillPrice, ct)
+            fill.ClientOrderId, newState, cumulativeFilled, runningVwap, ct)
             .ConfigureAwait(false);
 
         // Build FILL_NOTIFICATION envelope
@@ -91,7 +106,7 @@ public sealed class FillNotificationService(
                   .ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Fill: {ClientOrderId} qty={FillQty} @ {FillPrice} state={State}",
-            fill.ClientOrderId, fill.FillQuantity, fill.FillPrice, newState);
+            "Fill: {ClientOrderId} qty={FillQty} @ {FillPrice} cumulative={Cumulative} state={State}",
+            fill.ClientOrderId, fill.FillQuantity, fill.FillPrice, cumulativeFilled, newState);
     }
 }

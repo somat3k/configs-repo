@@ -12,6 +12,8 @@ public sealed class OrderRepository(BrokerDbContext _db)
     /// <summary>
     /// Inserts a new order row.  Silently no-ops when the
     /// <see cref="OrderEntity.ClientOrderId"/> already exists (idempotency).
+    /// Uses a catch on <see cref="DbUpdateException"/> to handle concurrent-insert
+    /// races that slip through the pre-check.
     /// </summary>
     public async Task InsertAsync(OrderEntity entity, CancellationToken ct = default)
     {
@@ -22,7 +24,28 @@ public sealed class OrderRepository(BrokerDbContext _db)
         if (exists) return;
 
         _db.Orders.Add(entity);
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // Concurrent insert already committed the same clientOrderId — treat as success.
+            _db.Entry(entity).State = EntityState.Detached;
+        }
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the exception wraps a PostgreSQL unique-constraint violation
+    /// (SQLSTATE 23505) or the in-memory provider equivalent.
+    /// </summary>
+    private static bool IsUniqueViolation(DbUpdateException ex)
+    {
+        // Npgsql surfaces unique violations as PostgresException with SqlState "23505".
+        var inner = ex.InnerException;
+        if (inner is null) return false;
+        return inner.GetType().Name == "PostgresException"
+               && (string?)inner.GetType().GetProperty("SqlState")?.GetValue(inner) == "23505";
     }
 
     /// <summary>

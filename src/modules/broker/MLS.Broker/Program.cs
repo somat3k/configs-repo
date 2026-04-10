@@ -15,13 +15,18 @@ var opts = builder.Configuration.GetSection("Broker").Get<BrokerOptions>()
            ?? new BrokerOptions();
 
 // ── HTTP clients ──────────────────────────────────────────────────────────────
+// BlockControllerClient is registered as a typed HTTP client; the hosted-service
+// registration resolves the same instance so it gets the configured HttpClient.
 builder.Services.AddHttpClient<BlockControllerClient>(client =>
 {
     client.BaseAddress = new Uri(opts.BlockControllerUrl);
     client.Timeout     = TimeSpan.FromSeconds(10);
 });
 
-builder.Services.AddHttpClient<HyperliquidClient>(client =>
+// HyperliquidClient: registered as typed client against IHyperliquidClient so the
+// DI-provided HttpClient (with BaseAddress/Timeout) is always used — no conflicting
+// singleton registration.
+builder.Services.AddHttpClient<IHyperliquidClient, HyperliquidClient>(client =>
 {
     client.BaseAddress = new Uri(opts.HyperliquidRestUrl);
     client.Timeout     = TimeSpan.FromSeconds(15);
@@ -41,12 +46,13 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(opts.RedisConnectionString));
 
 // ── Broker services ───────────────────────────────────────────────────────────
-builder.Services.AddSingleton<IHyperliquidClient, HyperliquidClient>();
 builder.Services.AddSingleton<IBrokerFallbackChain, BrokerFallbackChain>();
 builder.Services.AddSingleton<IOrderTracker, OrderTracker>();
 
 // ── Hosted services ───────────────────────────────────────────────────────────
-builder.Services.AddHostedService<BlockControllerClient>();
+// Resolve BlockControllerClient from the typed-client registration so it gets
+// the configured HttpClient (BaseAddress + Timeout set above).
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockControllerClient>());
 builder.Services.AddHostedService<FillNotificationService>();
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────

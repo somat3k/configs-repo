@@ -22,14 +22,13 @@ public sealed class OrderTracker(
     /// <inheritdoc/>
     public async Task TrackAsync(PlaceOrderRequest request, OrderResult result, CancellationToken ct)
     {
-        // Write to Redis cache first (fast path)
-        await CacheOrderAsync(result, ct).ConfigureAwait(false);
-
-        // Persist to PostgreSQL with full order details from the original request
+        // Persist to PostgreSQL first — source of truth
         await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
         var repo = new OrderRepository(db);
-
         await repo.InsertAsync(MapToEntity(request, result), ct).ConfigureAwait(false);
+
+        // Warm Redis cache after a successful DB write
+        await CacheOrderAsync(result, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

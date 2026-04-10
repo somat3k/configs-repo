@@ -51,6 +51,8 @@ public static partial class MessageTypes
     public const string OrderCancel       = "ORDER_CANCEL";
     /// <summary>broker → requester: order accepted by the venue.</summary>
     public const string OrderConfirmation = "ORDER_CONFIRMATION";
+    /// <summary>broker → requester: order rejected by the venue.</summary>
+    public const string OrderRejection    = "ORDER_REJECTION";
     /// <summary>broker → all subscribers: order partially or fully filled.</summary>
     public const string FillNotification  = "FILL_NOTIFICATION";
     /// <summary>broker → all subscribers: current open position for a symbol.</summary>
