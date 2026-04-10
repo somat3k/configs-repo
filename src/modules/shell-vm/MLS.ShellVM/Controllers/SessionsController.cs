@@ -19,8 +19,10 @@ public sealed class SessionsController(
     ISessionManager _sessions,
     IExecutionEngine _engine,
     IAuditLogger _audit,
+    IPtyProvider _pty,
     IHubContext<ShellVMHub> _hub,
     IConnectionMultiplexer? _redis,
+    IOptions<ShellVMConfig> _config,
     ILogger<SessionsController> _logger) : ControllerBase
 {
     /// <summary>POST /api/sessions — creates a new shell session.</summary>
@@ -46,9 +48,10 @@ public sealed class SessionsController(
         }
 
         var payload = new ShellSessionCreatedPayload(
-            Label:             session.Block.Label,
+            SessionId:          session.Block.Id.ToString(),
+            Label:              session.Block.Label,
             RequestingModuleId: session.Block.RequestingModuleId ?? ShellVMNetworkConstants.ModuleName,
-            Timestamp:         DateTimeOffset.UtcNow.ToString("O"));
+            Timestamp:          DateTimeOffset.UtcNow.ToString("O"));
 
         var envelope = EnvelopePayload.Create(
             MessageTypes.ShellSessionCreated, ShellVMNetworkConstants.ModuleName, payload);
@@ -77,6 +80,7 @@ public sealed class SessionsController(
 
         var durationMs = (long)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds;
         var payload = new ShellSessionTerminatedPayload(
+            SessionId:    id.ToString(),
             Label:        session.Block.Label,
             ExitCode:     session.Block.ExitCode,
             DurationMs:   durationMs,
@@ -163,7 +167,13 @@ public sealed class SessionsController(
         if (session is null)
             return NotFound(new { error = $"Session {id} not found" });
 
-        _logger.LogInformation("Resize session {Id} → {Cols}×{Rows}", id, request.Cols, request.Rows);
+        if (session.PtyHandle is not null)
+        {
+            await _pty.ResizeAsync(session.PtyHandle, request.Cols, request.Rows, ct)
+                      .ConfigureAwait(false);
+            _logger.LogInformation("Resize session {Id} → {Cols}×{Rows}", id, request.Cols, request.Rows);
+        }
+
         return Accepted(new { cols = request.Cols, rows = request.Rows });
     }
 
@@ -174,6 +184,13 @@ public sealed class SessionsController(
     {
         if (_redis is null)
             return StatusCode(503, new { error = "Redis not available — output buffer unavailable" });
+
+        if (lines <= 0)
+            return BadRequest(new { error = "lines must be greater than 0" });
+
+        // Clamp to the configured ring-buffer size to prevent oversized reads
+        var maxLines = Math.Max(1, _config.Value.OutputRingBufferLines);
+        lines = Math.Min(lines, maxLines);
 
         var key = $"{ShellVMLimits.RedisOutputPrefix}{id}";
         var db  = _redis.GetDatabase();

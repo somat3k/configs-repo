@@ -25,7 +25,10 @@ public sealed class SessionManager(
     /// <inheritdoc/>
     public int ActiveSessionCount =>
         _sessions.Values.Count(s =>
-            s.Block.State is ExecutionBlockState.Running or ExecutionBlockState.Starting or ExecutionBlockState.Paused);
+            s.Block.State is ExecutionBlockState.Created
+                          or ExecutionBlockState.Running
+                          or ExecutionBlockState.Starting
+                          or ExecutionBlockState.Paused);
 
     /// <inheritdoc/>
     public async Task<ShellSession> CreateSessionAsync(CreateSessionRequest request, CancellationToken ct)
@@ -186,6 +189,13 @@ public sealed class SessionManager(
         if (!_sessions.TryGetValue(sessionId, out var session))
             return;
         _sessions[sessionId] = session with { PtyHandle = handle };
+    }
+
+    /// <inheritdoc/>
+    public void UpdateLastActivity(Guid sessionId)
+    {
+        if (_sessions.TryGetValue(sessionId, out var session))
+            session.Block.LastActivityAt = DateTimeOffset.UtcNow;
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

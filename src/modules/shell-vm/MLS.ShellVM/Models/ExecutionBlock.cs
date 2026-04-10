@@ -35,6 +35,13 @@ public class ExecutionBlock
     /// <summary>Process exit code; <see langword="null"/> while still running.</summary>
     public int? ExitCode { get; set; }
 
+    /// <summary>
+    /// UTC timestamp of the last recorded stdin/stdout/stderr activity.
+    /// Updated on every input write and every output chunk broadcast.
+    /// Used by <c>SessionWatchdog</c> to detect truly idle sessions.
+    /// </summary>
+    public DateTimeOffset LastActivityAt { get; set; } = DateTimeOffset.UtcNow;
+
     /// <summary>Registered module ID of the entity that requested this session.</summary>
     public string? RequestingModuleId { get; set; }
 }

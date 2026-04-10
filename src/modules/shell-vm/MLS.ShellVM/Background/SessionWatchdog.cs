@@ -50,7 +50,7 @@ public sealed class SessionWatchdog(
                                          or ExecutionBlockState.Starting))
                 continue;
 
-            var lastActivity = session.Block.StartedAt ?? session.Block.CreatedAt;
+            var lastActivity = session.Block.LastActivityAt;
             if (now - lastActivity > idleLimit)
                 toTerminate.Add((session.Block.Id, session));
         }
@@ -70,6 +70,7 @@ public sealed class SessionWatchdog(
                                 .ConfigureAwait(false);
 
                 var payload  = new ShellSessionTerminatedPayload(
+                    SessionId:    id.ToString(),
                     Label:        session.Block.Label,
                     ExitCode:     null,
                     DurationMs:   durationMs,

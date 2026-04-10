@@ -1,12 +1,12 @@
 namespace MLS.ShellVM.Background;
 
 /// <summary>
-/// Sends <c>MODULE_HEARTBEAT</c> to Block Controller every 5 seconds.
-/// The heartbeat payload includes active session count and process metrics.
+/// Collects per-tick session metrics and logs them every 5 seconds.
 /// </summary>
 /// <remarks>
-/// Metric collection is best-effort; failures are logged as warnings and do not
-/// interrupt the heartbeat loop.
+/// The actual <c>MODULE_HEARTBEAT</c> envelope is sent by <c>BlockControllerClient</c>.
+/// This service is responsible for collecting lightweight telemetry (active session count, etc.)
+/// on each tick without coupling metric collection to the registration / heartbeat logic.
 /// </remarks>
 public sealed class HeartbeatService(
     ISessionManager _sessions,

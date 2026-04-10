@@ -108,7 +108,7 @@ public sealed class ShellVMModelsTests
     [Fact]
     public void ShellOutputPayload_RoundtripsViaEnvelope()
     {
-        var outputPayload = new ShellOutputPayload("stdout", "hello", 1, DateTimeOffset.UtcNow.ToString("O"));
+        var outputPayload = new ShellOutputPayload(Guid.NewGuid().ToString(), "stdout", "hello", 1, DateTimeOffset.UtcNow.ToString("O"));
         var envelope      = EnvelopePayload.Create(
             MessageTypes.ShellOutput, "shell-vm", outputPayload);
 

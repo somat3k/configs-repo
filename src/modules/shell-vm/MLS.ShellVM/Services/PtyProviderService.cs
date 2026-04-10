@@ -87,9 +87,14 @@ public sealed class PtyProviderService(
             return;
         }
 
-        var text = Encoding.UTF8.GetString(data.Span);
-        await process.StandardInput.WriteAsync(text.AsMemory(), ct).ConfigureAwait(false);
-        await process.StandardInput.FlushAsync(ct).ConfigureAwait(false);
+        // Write raw bytes directly to the underlying stdin stream to avoid
+        // encoding ambiguity; the caller is responsible for encoding.
+        await process.StandardInput.BaseStream
+                     .WriteAsync(data, ct)
+                     .ConfigureAwait(false);
+        await process.StandardInput.BaseStream
+                     .FlushAsync(ct)
+                     .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -102,7 +107,6 @@ public sealed class PtyProviderService(
             yield break;
 
         long sequence = 0;
-        var  buffer   = new char[4096];
 
         // Read stdout and stderr concurrently using two Tasks feeding into a shared channel
         var outputChannel = System.Threading.Channels.Channel.CreateBounded<OutputChunk>(
@@ -170,9 +174,17 @@ public sealed class PtyProviderService(
         if (!_processes.TryGetValue(handle.ProcessId, out var process))
             return -1;
 
-        await process.WaitForExitAsync(ct).ConfigureAwait(false);
-        _processes.TryRemove(handle.ProcessId, out _);
-        return process.ExitCode;
+        try
+        {
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
+            return process.ExitCode;
+        }
+        finally
+        {
+            // Always remove and dispose the process to release OS handles
+            _processes.TryRemove(handle.ProcessId, out _);
+            try { process.Dispose(); } catch { /* best-effort */ }
+        }
     }
 
     /// <inheritdoc/>

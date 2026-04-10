@@ -2,11 +2,13 @@ using System.Threading.Channels;
 using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using MLS.ShellVM.Hubs;
 using MLS.ShellVM.Models;
 using MLS.ShellVM.Services;
 using MLS.Core.Contracts;
+using MLS.ShellVM.Constants;
 using Xunit;
 
 namespace MLS.ShellVM.Tests;
@@ -53,6 +55,7 @@ public sealed class OutputBroadcasterTests
         _broadcaster = new OutputBroadcaster(
             _hubContextMock.Object,
             null,
+            Microsoft.Extensions.Options.Options.Create(new ShellVMConfig()),
             NullLogger<OutputBroadcaster>.Instance);
     }
 

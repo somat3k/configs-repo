@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using MLS.ShellVM.Background;
+using MLS.ShellVM.Controllers;
 using MLS.ShellVM.Hubs;
 using MLS.ShellVM.Interfaces;
 using MLS.ShellVM.Models;
@@ -23,15 +25,15 @@ builder.Services.AddDbContext<ShellVMDbContext>(o =>
     o.UseNpgsql(cfg.PostgresConnectionString));
 
 // ── Redis (optional — session persistence degrades gracefully when unavailable) ─
-IConnectionMultiplexer? redis = null;
 try
 {
-    redis = ConnectionMultiplexer.Connect(cfg.RedisConnectionString);
+    var redis = ConnectionMultiplexer.Connect(cfg.RedisConnectionString);
     builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
 }
 catch (Exception ex)
 {
     Console.WriteLine($"[ShellVM] Redis connection failed: {ex.Message} — session persistence disabled.");
+    // IConnectionMultiplexer is NOT registered; sp.GetService<IConnectionMultiplexer>() returns null.
 }
 
 // ── HTTP clients ──────────────────────────────────────────────────────────────
@@ -43,7 +45,14 @@ builder.Services.AddHttpClient<BlockControllerClient>(client =>
 
 // ── Core services ──────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<IPtyProvider, PtyProviderService>();
-builder.Services.AddSingleton<ISessionManager, SessionManager>();
+
+builder.Services.AddSingleton<ISessionManager>(sp => new SessionManager(
+    sp.GetRequiredService<IDbContextFactory<ShellVMDbContext>>(),
+    sp.GetService<IConnectionMultiplexer>(),                // nullable — Redis is optional
+    sp.GetRequiredService<IPtyProvider>(),
+    sp.GetRequiredService<IOptions<ShellVMConfig>>(),
+    sp.GetRequiredService<ILogger<SessionManager>>()));
+
 builder.Services.AddSingleton<IAuditLogger, AuditLogger>();
 
 // OutputBroadcaster depends on IHubContext which requires the hub to be registered first
@@ -58,7 +67,19 @@ builder.Services.AddHostedService<SessionWatchdog>();
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
 builder.Services.AddControllers()
+    .AddControllersAsServices()        // enables factory-based registration for controllers
     .AddJsonOptions(o => o.JsonSerializerOptions.WriteIndented = false);
+
+// Register SessionsController with factory so IConnectionMultiplexer? resolves optionally
+builder.Services.AddTransient<SessionsController>(sp => new SessionsController(
+    sp.GetRequiredService<ISessionManager>(),
+    sp.GetRequiredService<IExecutionEngine>(),
+    sp.GetRequiredService<IAuditLogger>(),
+    sp.GetRequiredService<IPtyProvider>(),
+    sp.GetRequiredService<IHubContext<ShellVMHub>>(),
+    sp.GetService<IConnectionMultiplexer>(),
+    sp.GetRequiredService<IOptions<ShellVMConfig>>(),
+    sp.GetRequiredService<ILogger<SessionsController>>()));
 
 builder.Services.AddSignalR(hub =>
 {
@@ -67,7 +88,11 @@ builder.Services.AddSignalR(hub =>
 });
 
 // OutputBroadcaster registered after SignalR so IHubContext<ShellVMHub> is resolvable
-builder.Services.AddSingleton<IOutputBroadcaster, OutputBroadcaster>();
+builder.Services.AddSingleton<IOutputBroadcaster>(sp => new OutputBroadcaster(
+    sp.GetRequiredService<IHubContext<ShellVMHub>>(),
+    sp.GetService<IConnectionMultiplexer>(),                // nullable — Redis is optional
+    sp.GetRequiredService<IOptions<ShellVMConfig>>(),
+    sp.GetRequiredService<ILogger<OutputBroadcaster>>()));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

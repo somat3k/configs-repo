@@ -31,6 +31,12 @@ public interface ISessionManager
     /// </summary>
     void AttachPtyHandle(Guid sessionId, PtyHandle handle);
 
+    /// <summary>
+    /// Updates <see cref="ExecutionBlock.LastActivityAt"/> to the current UTC time.
+    /// Called on every stdin write and every output broadcast to enable accurate idle detection.
+    /// </summary>
+    void UpdateLastActivity(Guid sessionId);
+
     /// <summary>Returns the current number of active (non-terminal) sessions.</summary>
     int ActiveSessionCount { get; }
 }
@@ -72,7 +78,9 @@ public interface IExecutionEngine
     Task<CommandExecution> RunScriptAsync(Guid sessionId, ScriptRunRequest request, CancellationToken ct);
 
     /// <summary>
-    /// Cancels a running command by sending SIGTERM followed by SIGKILL after the grace period.
+    /// Cancels a running command by killing the underlying PTY process.
+    /// Sends SIGTERM via <see cref="IPtyProvider.KillAsync"/> and then cancels
+    /// the command's <see cref="CancellationTokenSource"/> so streaming stops cleanly.
     /// </summary>
     Task CancelAsync(Guid commandId, CancellationToken ct);
 }
@@ -101,4 +109,7 @@ public interface IOutputBroadcaster
 
     /// <summary>Removes all subscriptions held by a SignalR connection.</summary>
     Task UnsubscribeAsync(string connectionId, CancellationToken ct);
+
+    /// <summary>Removes the subscription of a specific session from a SignalR connection.</summary>
+    Task UnsubscribeAsync(string connectionId, Guid sessionId, CancellationToken ct);
 }

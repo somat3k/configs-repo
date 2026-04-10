@@ -33,13 +33,19 @@ public sealed record ShellResizePayload(int Cols, int Rows);
 
 /// <summary>
 /// A chunk of PTY output streamed to subscribers.
-/// The originating session is identified by <c>Envelope.SessionId</c>.
+/// <para>
+/// <see cref="SessionId"/> explicitly identifies the shell session so downstream consumers
+/// can correlate chunks without relying on the envelope-level <c>session_id</c> (which is
+/// always a newly generated value from <see cref="MLS.Core.Contracts.EnvelopePayload.Create"/>).
+/// </para>
 /// </summary>
+/// <param name="SessionId">Shell session that produced this output.</param>
 /// <param name="Stream">The output stream: <c>"stdout"</c> or <c>"stderr"</c>.</param>
 /// <param name="Chunk">UTF-8 decoded output content.</param>
 /// <param name="Sequence">Monotonically increasing sequence number per session.</param>
 /// <param name="Timestamp">ISO 8601 UTC production timestamp.</param>
 public sealed record ShellOutputPayload(
+    string SessionId,
     string Stream,
     string Chunk,
     long Sequence,
@@ -60,21 +66,25 @@ public sealed record ShellSessionStatePayload(
     long DurationMs);
 
 /// <summary>Broadcast when a new shell session is created.</summary>
+/// <param name="SessionId">The unique shell session identifier for downstream correlation.</param>
 /// <param name="Label">Human-readable session label.</param>
 /// <param name="RequestingModuleId">Module ID of the entity that created the session.</param>
 /// <param name="Timestamp">ISO 8601 UTC creation timestamp.</param>
 public sealed record ShellSessionCreatedPayload(
+    string SessionId,
     string Label,
     string RequestingModuleId,
     string Timestamp);
 
 /// <summary>Broadcast when a shell session terminates.</summary>
+/// <param name="SessionId">The unique shell session identifier for downstream correlation.</param>
 /// <param name="Label">Human-readable session label.</param>
 /// <param name="ExitCode">Final process exit code; <see langword="null"/> on forced termination.</param>
 /// <param name="DurationMs">Total session duration in milliseconds.</param>
 /// <param name="TerminatedBy">Termination actor: <c>"client"</c>, <c>"watchdog"</c>, <c>"timeout"</c>, or <c>"error"</c>.</param>
 /// <param name="Timestamp">ISO 8601 UTC termination timestamp.</param>
 public sealed record ShellSessionTerminatedPayload(
+    string SessionId,
     string Label,
     int? ExitCode,
     long DurationMs,

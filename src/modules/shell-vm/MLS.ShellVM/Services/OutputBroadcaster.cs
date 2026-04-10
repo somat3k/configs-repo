@@ -15,15 +15,18 @@ namespace MLS.ShellVM.Services;
 public sealed class OutputBroadcaster(
     IHubContext<ShellVMHub> _hub,
     IConnectionMultiplexer? _redis,
+    IOptions<ShellVMConfig> _config,
     ILogger<OutputBroadcaster> _logger) : IOutputBroadcaster
 {
-    // connectionId → sessionId
-    private readonly ConcurrentDictionary<string, Guid> _subscriptions = new();
+    // connectionId → set of subscribed sessionIds
+    // A single connection may subscribe to multiple sessions.
+    private readonly ConcurrentDictionary<string, HashSet<Guid>> _subscriptions = new();
 
     /// <inheritdoc/>
     public async ValueTask BroadcastChunkAsync(OutputChunk chunk, CancellationToken ct)
     {
         var payload = new ShellOutputPayload(
+            SessionId: chunk.SessionId.ToString(),   // shell session ID for downstream correlation
             Stream:    chunk.Stream.ToString().ToLowerInvariant(),
             Chunk:     chunk.Data,
             Sequence:  chunk.Sequence,
@@ -47,7 +50,11 @@ public sealed class OutputBroadcaster(
     /// <inheritdoc/>
     public async Task SubscribeAsync(string connectionId, Guid sessionId, CancellationToken ct)
     {
-        _subscriptions[connectionId] = sessionId;
+        _subscriptions.AddOrUpdate(
+            connectionId,
+            _ => [sessionId],
+            (_, set) => { lock (set) { set.Add(sessionId); } return set; });
+
         await _hub.Groups.AddToGroupAsync(connectionId, SessionGroup(sessionId), ct)
                   .ConfigureAwait(false);
         _logger.LogDebug("Connection {ConnId} subscribed to session {SessionId}", connectionId, sessionId);
@@ -56,8 +63,30 @@ public sealed class OutputBroadcaster(
     /// <inheritdoc/>
     public async Task UnsubscribeAsync(string connectionId, CancellationToken ct)
     {
-        if (!_subscriptions.TryRemove(connectionId, out var sessionId))
+        if (!_subscriptions.TryRemove(connectionId, out var sessions))
             return;
+
+        HashSet<Guid> snapshot;
+        lock (sessions) { snapshot = [..sessions]; }
+
+        foreach (var sessionId in snapshot)
+        {
+            await _hub.Groups.RemoveFromGroupAsync(connectionId, SessionGroup(sessionId), ct)
+                      .ConfigureAwait(false);
+        }
+        _logger.LogDebug("Connection {ConnId} unsubscribed from all sessions", connectionId);
+    }
+
+    /// <inheritdoc/>
+    public async Task UnsubscribeAsync(string connectionId, Guid sessionId, CancellationToken ct)
+    {
+        if (!_subscriptions.TryGetValue(connectionId, out var sessions))
+            return;
+
+        bool removed;
+        lock (sessions) { removed = sessions.Remove(sessionId); }
+
+        if (!removed) return;
 
         await _hub.Groups.RemoveFromGroupAsync(connectionId, SessionGroup(sessionId), ct)
                   .ConfigureAwait(false);
@@ -74,12 +103,14 @@ public sealed class OutputBroadcaster(
         if (_redis is null) return;
         try
         {
+            var cfg          = _config.Value;
+            var ringCapacity = Math.Clamp(cfg.OutputRingBufferLines, 1, ShellVMLimits.RedisRingBufferLines);
+
             var db  = _redis.GetDatabase();
             var key = $"{ShellVMLimits.RedisOutputPrefix}{chunk.SessionId}";
             var json = JsonSerializer.Serialize(payload);
             await db.ListRightPushAsync(key, json).ConfigureAwait(false);
-            await db.ListTrimAsync(key, -ShellVMLimits.RedisRingBufferLines, -1)
-                    .ConfigureAwait(false);
+            await db.ListTrimAsync(key, -ringCapacity, -1).ConfigureAwait(false);
             await db.KeyExpireAsync(key, ShellVMLimits.SessionRedisTtl).ConfigureAwait(false);
         }
         catch (Exception ex)

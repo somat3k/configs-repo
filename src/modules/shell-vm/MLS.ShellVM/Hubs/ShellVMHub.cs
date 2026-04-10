@@ -75,6 +75,7 @@ public sealed class ShellVMHub(
         var bytes = System.Text.Encoding.UTF8.GetBytes(payload.Data);
         await _pty.WriteInputAsync(session.PtyHandle, bytes, Context.ConnectionAborted)
                   .ConfigureAwait(false);
+        _sessions.UpdateLastActivity(sessionId);
     }
 
     /// <summary>
@@ -86,10 +87,17 @@ public sealed class ShellVMHub(
         var payload   = JsonSerializer.Deserialize<ShellResizePayload>(envelope.Payload.GetRawText());
         if (payload is null) return;
 
-        _logger.LogDebug("ResizePty session={SessionId} {Cols}×{Rows}",
-            sessionId, payload.Cols, payload.Rows);
-        // Actual resize is a no-op in managed mode (logged in PtyProviderService)
-        await Task.CompletedTask.ConfigureAwait(false);
+        var session = await _sessions.GetSessionAsync(sessionId, Context.ConnectionAborted)
+                                     .ConfigureAwait(false);
+        if (session?.PtyHandle is null)
+        {
+            _logger.LogWarning("ResizePty: no active PTY for session {SessionId}", sessionId);
+            return;
+        }
+
+        await _pty.ResizeAsync(session.PtyHandle, payload.Cols, payload.Rows, Context.ConnectionAborted)
+                  .ConfigureAwait(false);
+        _logger.LogDebug("ResizePty session={SessionId} {Cols}×{Rows}", sessionId, payload.Cols, payload.Rows);
     }
 
     /// <summary>
@@ -104,11 +112,11 @@ public sealed class ShellVMHub(
     }
 
     /// <summary>
-    /// Unsubscribes the caller's SignalR connection from all session output streams.
+    /// Unsubscribes the caller's SignalR connection from the specified session's output stream.
     /// </summary>
     public async Task UnsubscribeSession(Guid sessionId)
     {
-        await _broadcaster.UnsubscribeAsync(Context.ConnectionId, Context.ConnectionAborted)
+        await _broadcaster.UnsubscribeAsync(Context.ConnectionId, sessionId, Context.ConnectionAborted)
                           .ConfigureAwait(false);
     }
 
