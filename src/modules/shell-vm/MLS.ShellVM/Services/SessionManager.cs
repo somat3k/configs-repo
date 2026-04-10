@@ -154,10 +154,10 @@ public sealed class SessionManager(
         }
     }
 
-    // ── Internal helpers (accessible to services in the same assembly) ────────
+    // ── ISessionManager — state transition and PTY attachment ─────────────────
 
-    /// <summary>Updates the in-memory block state and persists to PostgreSQL.</summary>
-    internal async Task TransitionStateAsync(
+    /// <inheritdoc/>
+    public async Task TransitionStateAsync(
         Guid sessionId,
         ExecutionBlockState newState,
         int? exitCode,
@@ -179,8 +179,8 @@ public sealed class SessionManager(
         await PersistSessionStateAsync(sessionId, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Replaces the <see cref="PtyHandle"/> on an existing session record.</summary>
-    internal void AttachPtyHandle(Guid sessionId, PtyHandle handle)
+    /// <inheritdoc/>
+    public void AttachPtyHandle(Guid sessionId, PtyHandle handle)
     {
         if (!_sessions.TryGetValue(sessionId, out var session))
             return;

@@ -20,6 +20,17 @@ public interface ISessionManager
     /// </summary>
     Task PersistSessionStateAsync(Guid sessionId, CancellationToken ct);
 
+    /// <summary>
+    /// Transitions the session state machine to <paramref name="newState"/>, updates
+    /// timestamps, and persists the change to both PostgreSQL and Redis.
+    /// </summary>
+    Task TransitionStateAsync(Guid sessionId, ExecutionBlockState newState, int? exitCode, CancellationToken ct);
+
+    /// <summary>
+    /// Replaces the live <see cref="PtyHandle"/> on an existing in-memory session record.
+    /// </summary>
+    void AttachPtyHandle(Guid sessionId, PtyHandle handle);
+
     /// <summary>Returns the current number of active (non-terminal) sessions.</summary>
     int ActiveSessionCount { get; }
 }

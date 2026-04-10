@@ -14,6 +14,8 @@ public sealed class ExecutionEngine(
     IOptions<ShellVMConfig> _config,
     ILogger<ExecutionEngine> _logger) : IExecutionEngine
 {
+    // commandId → the CTS that can cancel that command.
+    // The CTS is owned by RunCommandAsync; CancelAsync only signals it (no dispose).
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _commands = new();
 
     /// <inheritdoc/>
@@ -27,27 +29,30 @@ public sealed class ExecutionEngine(
         var timeout = request.TimeoutSeconds > 0 ? request.TimeoutSeconds : cfg.CommandTimeoutSeconds;
 
         var commandId = Guid.NewGuid();
+        var startedAt = DateTimeOffset.UtcNow;
+
         var execution = new CommandExecution(
             Id:        commandId,
             SessionId: sessionId,
             Command:   request.Command,
             State:     CommandState.Pending,
-            StartedAt: DateTimeOffset.UtcNow);
-
-        var auditEntry = new AuditEntry
-        {
-            Id        = commandId,
-            BlockId   = sessionId,
-            Command   = request.Command,
-            StartedAt = execution.StartedAt,
-            ModuleId  = session.Block.RequestingModuleId,
-        };
+            StartedAt: startedAt);
 
         if (cfg.AuditEnabled)
+        {
+            var auditEntry = new AuditEntry
+            {
+                Id        = commandId,
+                BlockId   = sessionId,
+                Command   = request.Command,
+                StartedAt = startedAt,
+                ModuleId  = session.Block.RequestingModuleId,
+            };
             await _audit.LogCommandStartAsync(auditEntry, ct).ConfigureAwait(false);
+        }
 
-        // Launch execution on background task
-        _ = RunCommandAsync(session, commandId, request, timeout, ct);
+        // Fire-and-forget: output is streamed via IOutputBroadcaster
+        _ = RunCommandAsync(sessionId, commandId, startedAt, request, timeout, ct);
 
         return execution with { State = CommandState.Running };
     }
@@ -57,7 +62,6 @@ public sealed class ExecutionEngine(
         Guid sessionId, ScriptRunRequest request, CancellationToken ct)
     {
         var interpreter = request.Interpreter ?? "/bin/sh";
-        var args        = new[] { request.ScriptPath }.Concat(request.Arguments).ToArray();
         var execReq     = new ExecRequest(
             Command:        $"{interpreter} {request.ScriptPath} {string.Join(' ', request.Arguments)}",
             WorkingDir:     null,
@@ -71,11 +75,11 @@ public sealed class ExecutionEngine(
     /// <inheritdoc/>
     public Task CancelAsync(Guid commandId, CancellationToken ct)
     {
-        if (_commands.TryRemove(commandId, out var cts))
+        if (_commands.TryGetValue(commandId, out var cts))
         {
+            // Only cancel — RunCommandAsync owns the CTS lifetime and disposes it
             cts.Cancel();
-            cts.Dispose();
-            _logger.LogInformation("Command {CommandId} cancelled", commandId);
+            _logger.LogInformation("Command {CommandId} cancellation requested", commandId);
         }
         return Task.CompletedTask;
     }
@@ -83,21 +87,29 @@ public sealed class ExecutionEngine(
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private async Task RunCommandAsync(
-        ShellSession session,
+        Guid sessionId,
         Guid commandId,
+        DateTimeOffset startedAt,
         ExecRequest request,
         int timeoutSeconds,
         CancellationToken ct)
     {
-        using var timeoutCts  = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-        using var linkedCts   = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
-        _commands[commandId]  = linkedCts;
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        using var linkedCts  = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        _commands[commandId] = linkedCts;
 
-        var sessionId = session.Block.Id;
+        var session = await _sessions.GetSessionAsync(sessionId, CancellationToken.None)
+                                     .ConfigureAwait(false);
+        if (session is null)
+        {
+            _logger.LogWarning("RunCommandAsync: session {SessionId} no longer exists", sessionId);
+            _commands.TryRemove(commandId, out _);
+            return;
+        }
 
         try
         {
-            var env = request.Env?.ToDictionary() ?? [];
+            var env  = request.Env?.ToDictionary() ?? [];
             var opts = new PtySpawnOptions(
                 Executable:       session.Block.Shell,
                 Arguments:        ["-c", request.Command],
@@ -105,12 +117,10 @@ public sealed class ExecutionEngine(
                 Environment:      env);
 
             var handle = await _pty.SpawnAsync(opts, linkedCts.Token).ConfigureAwait(false);
+            _sessions.AttachPtyHandle(sessionId, handle);
 
-            if (_sessions is SessionManager sm)
-                sm.AttachPtyHandle(sessionId, handle);
-
-            await (_sessions as SessionManager)?.TransitionStateAsync(
-                sessionId, ExecutionBlockState.Running, null, linkedCts.Token)!;
+            await _sessions.TransitionStateAsync(
+                sessionId, ExecutionBlockState.Running, null, linkedCts.Token).ConfigureAwait(false);
 
             if (request.CaptureOutput)
             {
@@ -123,33 +133,31 @@ public sealed class ExecutionEngine(
             }
 
             var exitCode = await _pty.WaitForExitAsync(handle, linkedCts.Token).ConfigureAwait(false);
-            var newState  = exitCode == 0 ? ExecutionBlockState.Completed : ExecutionBlockState.Error;
+            var newState = exitCode == 0 ? ExecutionBlockState.Completed : ExecutionBlockState.Error;
 
-            await (_sessions as SessionManager)?.TransitionStateAsync(
-                sessionId, newState, exitCode, CancellationToken.None)!;
+            await _sessions.TransitionStateAsync(
+                sessionId, newState, exitCode, CancellationToken.None).ConfigureAwait(false);
 
-            var cfg = _config.Value;
-            if (cfg.AuditEnabled)
+            if (_config.Value.AuditEnabled)
             {
-                var duration = DateTimeOffset.UtcNow - DateTimeOffset.UtcNow; // placeholder — computed below
-                await _audit.LogCommandEndAsync(
-                    commandId, exitCode, DateTimeOffset.UtcNow - session.Block.StartedAt.GetValueOrDefault(DateTimeOffset.UtcNow),
-                    CancellationToken.None).ConfigureAwait(false);
+                var duration = DateTimeOffset.UtcNow - startedAt;
+                await _audit.LogCommandEndAsync(commandId, exitCode, duration, CancellationToken.None)
+                             .ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Command {CommandId} in session {SessionId} was cancelled/timed-out",
+            _logger.LogInformation("Command {CommandId} in session {SessionId} cancelled/timed-out",
                 commandId, sessionId);
-            await (_sessions as SessionManager)?.TransitionStateAsync(
-                sessionId, ExecutionBlockState.Error, -1, CancellationToken.None)!;
+            await _sessions.TransitionStateAsync(
+                sessionId, ExecutionBlockState.Error, -1, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Command {CommandId} in session {SessionId} failed",
                 commandId, sessionId);
-            await (_sessions as SessionManager)?.TransitionStateAsync(
-                sessionId, ExecutionBlockState.Error, -1, CancellationToken.None)!;
+            await _sessions.TransitionStateAsync(
+                sessionId, ExecutionBlockState.Error, -1, CancellationToken.None).ConfigureAwait(false);
         }
         finally
         {

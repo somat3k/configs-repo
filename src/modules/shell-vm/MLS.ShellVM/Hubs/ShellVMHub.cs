@@ -20,6 +20,7 @@ namespace MLS.ShellVM.Hubs;
 public sealed class ShellVMHub(
     ISessionManager _sessions,
     IExecutionEngine _engine,
+    IPtyProvider _pty,
     IOutputBroadcaster _broadcaster,
     ILogger<ShellVMHub> _logger) : Hub<IShellVMHubClient>
 {
@@ -65,12 +66,15 @@ public sealed class ShellVMHub(
 
         var session = await _sessions.GetSessionAsync(sessionId, Context.ConnectionAborted)
                                      .ConfigureAwait(false);
-        if (session?.PtyHandle is null) return;
+        if (session?.PtyHandle is null)
+        {
+            _logger.LogWarning("SendInput: no active PTY for session {SessionId}", sessionId);
+            return;
+        }
 
         var bytes = System.Text.Encoding.UTF8.GetBytes(payload.Data);
-        await _engine.ExecuteAsync(sessionId,
-            new ExecRequest(payload.Data, CaptureOutput: false),
-            Context.ConnectionAborted).ConfigureAwait(false);
+        await _pty.WriteInputAsync(session.PtyHandle, bytes, Context.ConnectionAborted)
+                  .ConfigureAwait(false);
     }
 
     /// <summary>
