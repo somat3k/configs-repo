@@ -1,8 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using MLS.DeFi.Interfaces;
-using MLS.DeFi.Models;
 using MLS.DeFi.Persistence;
 
 namespace MLS.DeFi.Controllers;

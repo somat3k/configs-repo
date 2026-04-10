@@ -39,9 +39,9 @@ public sealed class BlockControllerClient(
     {
         await base.StopAsync(ct).ConfigureAwait(false);
 
-        using var deregistrationCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deregistrationCts.CancelAfter(TimeSpan.FromSeconds(5));
-
+        // Use an independent (not linked) CTS so deregistration is always attempted
+        // even when the host shutdown token (`ct`) is already canceled.
+        using var deregistrationCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await DeregisterAsync(deregistrationCts.Token).ConfigureAwait(false);
     }
 

@@ -200,6 +200,7 @@ public sealed class DeFiModelsTests
         result.StrategyType.Should().Be(DeFiStrategyType.HyperliquidPerpetual);
         result.Venue.Should().Be("hyperliquid");
         result.EstimatedFeesBps.Should().Be(2);
+        result.ExecutedOrderResult.Should().BeNull("dry-run evaluation must not populate ExecutedOrderResult");
     }
 
     // ── WalletSignResult ──────────────────────────────────────────────────────

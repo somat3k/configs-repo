@@ -124,18 +124,23 @@ public sealed record DeFiStrategyRequest(
     int MaxSlippageBps,
     string RequestingModuleId);
 
-/// <summary>Outcome of strategy engine evaluation.</summary>
+/// <summary>Outcome of strategy engine evaluation or execution.</summary>
 /// <param name="StrategyType">Selected strategy.</param>
 /// <param name="Venue">Selected execution venue.</param>
 /// <param name="EstimatedOutputQuantity">Expected output quantity after fees and slippage.</param>
 /// <param name="EstimatedFeesBps">Total estimated fees in basis points.</param>
 /// <param name="ExecutionOrder">Order to submit; <see langword="null"/> when strategy is informational only.</param>
+/// <param name="ExecutedOrderResult">
+/// Populated after <c>ExecuteAsync</c> completes; contains the venue order ID, state, and fill
+/// price returned by the fallback chain. <see langword="null"/> for dry-run evaluations.
+/// </param>
 public sealed record DeFiStrategyResult(
     DeFiStrategyType StrategyType,
     string Venue,
     decimal EstimatedOutputQuantity,
     int EstimatedFeesBps,
-    DeFiOrderRequest? ExecutionOrder);
+    DeFiOrderRequest? ExecutionOrder,
+    DeFiOrderResult? ExecutedOrderResult = null);
 
 // ── Fill notifications ────────────────────────────────────────────────────────
 

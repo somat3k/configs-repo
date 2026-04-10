@@ -29,9 +29,11 @@ public sealed class DeFiOptions
     public string HyperliquidWsUrl { get; set; } = "wss://api.hyperliquid.xyz/ws";
 
     /// <summary>
-    /// Ordered list of broker venue IDs for the fallback chain.
-    /// The first entry is always HYPERLIQUID; subsequent entries are fallback venues.
-    /// Values are resolved from the <c>blockchain_addresses</c> table at runtime.
+    /// Ordered list of venue IDs for the fallback chain.
+    /// The first entry is always HYPERLIQUID (primary); subsequent entries are
+    /// alternative venues tried in order when HYPERLIQUID is unavailable.
+    /// These are plain configuration identifiers — they are not looked up in
+    /// the <c>blockchain_addresses</c> table (only contract addresses are stored there).
     /// </summary>
     public string[] FallbackChain { get; set; } = ["hyperliquid"];
 

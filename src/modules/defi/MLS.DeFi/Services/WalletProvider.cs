@@ -35,40 +35,46 @@ public sealed class WalletProvider(
     /// <inheritdoc/>
     public Task<string> SignHashAsync(string messageHash, CancellationToken ct)
     {
-        // Production: delegate to HSM/Vault. For now return an unsigned placeholder so
-        // the module can start without a live key; real signing is wired at deployment.
         var key = Environment.GetEnvironmentVariable(PrivKeyEnvVar);
         if (string.IsNullOrWhiteSpace(key))
         {
+            // Key is absent — log at Error so the misconfiguration is visible,
+            // and return an all-zero placeholder to allow the module to start.
             _logger.LogError("{EnvVar} is not set — transaction signing will not produce a valid signature",
                 PrivKeyEnvVar);
             return Task.FromResult("0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
         }
 
-        // Stub: returning a deterministic stub signature. In production, wire Nethereum's
-        // EthECKey.SignAndCalculateV or delegate to the configured vault/HSM backend.
-        // A critical-level log is emitted so this cannot be missed in production environments.
+        // Key is present but real EVM signing (Nethereum EthECKey.SignAndCalculateV or HSM
+        // delegation) is not yet wired.  Log at Critical so this cannot be missed in staging
+        // or production before the real backend is configured.
         _logger.LogCritical(
-            "WalletProvider is using a STUB signature — {EnvVar} is not set. " +
-            "This must be replaced with a real signing implementation before production use.",
-            PrivKeyEnvVar);
+            "WalletProvider is using a STUB signature implementation. " +
+            "Wire a real EthECKey / Vault / HSM backend before production use.");
         return Task.FromResult("0x" + messageHash.PadRight(130, '0')[..130]);
     }
 
     /// <inheritdoc/>
-    public async Task<WalletSignResult> SignTransactionAsync(OnChainTransactionRequest request, CancellationToken ct)
+    public async Task<WalletSignResult> SignTransactionAsync(
+        OnChainTransactionRequest request,
+        string toAddress,
+        CancellationToken ct)
     {
-        var address = await GetAddressAsync(ct).ConfigureAwait(false);
+        var fromAddress = await GetAddressAsync(ct).ConfigureAwait(false);
 
-        // Production: build and RLP-encode the unsigned transaction, then call the HSM/Vault
-        // to sign it. Nethereum's TransactionSigner handles RLP + EIP-155 chain ID replay
-        // protection.  Here we return a stub signed-tx for integration testing.
+        // Production: build the RLP-encoded unsigned transaction using `toAddress` as the
+        // destination, then sign with Nethereum's TransactionSigner (EIP-155 chain ID).
+        // Here we return a stub for integration testing — toAddress is included in the
+        // stub payload so callers can verify it flows through correctly.
         var signedTxHex = $"0x{Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(
-            $"stub-signed-{request.AddressName}-{request.EncodedCalldata[..Math.Min(8, request.EncodedCalldata.Length)]}"))}";
+            $"stub-signed-to:{toAddress}-{request.AddressName}-{request.EncodedCalldata[..Math.Min(8, request.EncodedCalldata.Length)]}"))}";
 
-        _logger.LogInformation("WalletProvider signed transaction for address={Address} target={AddressName}",
-            DeFiUtils.SafeLog(address), DeFiUtils.SafeLog(request.AddressName));
+        _logger.LogInformation(
+            "WalletProvider signed transaction: from={From} to={To} addressName={Name}",
+            DeFiUtils.SafeLog(fromAddress),
+            DeFiUtils.SafeLog(toAddress),
+            DeFiUtils.SafeLog(request.AddressName));
 
-        return new WalletSignResult(signedTxHex, address);
+        return new WalletSignResult(signedTxHex, fromAddress);
     }
 }

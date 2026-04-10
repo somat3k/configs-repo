@@ -30,9 +30,14 @@ public interface IWalletProvider
     /// Signs and encodes a raw EVM transaction for broadcast.
     /// </summary>
     /// <param name="request">The unsigned transaction parameters.</param>
+    /// <param name="toAddress">
+    /// The resolved on-chain destination address (e.g., contract address from the address book).
+    /// Passed separately so the wallet provider can include it in the RLP-encoded transaction
+    /// without performing its own address-book lookup.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// A <see cref="WalletSignResult"/> containing the RLP-encoded signed transaction.
     /// </returns>
-    Task<WalletSignResult> SignTransactionAsync(OnChainTransactionRequest request, CancellationToken ct);
+    Task<WalletSignResult> SignTransactionAsync(OnChainTransactionRequest request, string toAddress, CancellationToken ct);
 }

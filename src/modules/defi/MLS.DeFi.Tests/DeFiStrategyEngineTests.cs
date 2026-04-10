@@ -95,15 +95,16 @@ public sealed class DeFiStrategyEngineTests
     // ── ExecuteAsync ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Execute_SuccessfulStrategy_ReturnsResult()
+    public async Task Execute_SuccessfulStrategy_ReturnsResultWithExecutedOrderResult()
     {
+        var venueOrderId = "v-1";
         var fallback = new Mock<IBrokerFallbackChain>();
         fallback.Setup(c => c.GetActiveBrokersAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new[] { "hyperliquid" });
 
         fallback.Setup(c => c.ExecuteWithFallbackAsync(
                     It.IsAny<DeFiOrderRequest>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new DeFiOrderResult(Guid.NewGuid().ToString(), "v-1",
+                .ReturnsAsync(new DeFiOrderResult(Guid.NewGuid().ToString(), venueOrderId,
                     DeFiOrderState.Open, 0m, null, "hyperliquid", "BTC-USDT",
                     DeFiOrderSide.Buy, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
 
@@ -113,6 +114,9 @@ public sealed class DeFiStrategyEngineTests
         var result = await engine.ExecuteAsync(req, CancellationToken.None);
 
         result.StrategyType.Should().Be(DeFiStrategyType.HyperliquidPerpetual);
+        result.ExecutedOrderResult.Should().NotBeNull();
+        result.ExecutedOrderResult!.VenueOrderId.Should().Be(venueOrderId);
+        result.ExecutedOrderResult.State.Should().Be(DeFiOrderState.Open);
     }
 
     [Fact]

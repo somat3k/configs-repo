@@ -85,7 +85,7 @@ public sealed class DeFiStrategyEngine(
             DeFiUtils.SafeLog(result.ClientOrderId),
             result.State);
 
-        return strategy;
+        return strategy with { ExecutedOrderResult = result };
     }
 
     /// <inheritdoc/>

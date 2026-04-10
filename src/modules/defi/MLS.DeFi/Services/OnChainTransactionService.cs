@@ -22,11 +22,6 @@ public sealed class OnChainTransactionService(
     IOptions<DeFiOptions> _options,
     ILogger<OnChainTransactionService> _logger) : IOnChainTransactionService
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     /// <inheritdoc/>
     public async Task<OnChainTransactionResult> SubmitAsync(
         OnChainTransactionRequest request,
@@ -42,11 +37,11 @@ public sealed class OnChainTransactionService(
             return new OnChainTransactionResult(null, OnChainTxStatus.Failed, 0, 0, DateTimeOffset.UtcNow);
         }
 
-        // 2. Sign the transaction via wallet provider
+        // 2. Sign the transaction via wallet provider, passing the resolved on-chain address
         WalletSignResult signed;
         try
         {
-            signed = await _wallet.SignTransactionAsync(request, ct).ConfigureAwait(false);
+            signed = await _wallet.SignTransactionAsync(request, toAddress, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

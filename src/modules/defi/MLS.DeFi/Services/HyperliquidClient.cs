@@ -135,7 +135,7 @@ public sealed class HyperliquidClient(
                 var sideS  = item.TryGetProperty("side",    out var sd) ? sd.GetString() : "B";
                 var side   = sideS == "A" ? DeFiOrderSide.Sell : DeFiOrderSide.Buy;
                 var qty    = ParseDecimal(item.TryGetProperty("sz",      out var q) ? q : default);
-                var price  = ParseDecimal(item.TryGetProperty("limitPx", out var p) ? p : default);
+                var price  = item.TryGetProperty("limitPx", out var p) ? ParseDecimal(p) : (decimal?)null;
                 var cloid  = item.TryGetProperty("cloid",  out var cl) ? cl.GetString() ?? oid : oid;
 
                 results.Add(new DeFiOrderResult(cloid, oid, DeFiOrderState.Open, 0m, price,

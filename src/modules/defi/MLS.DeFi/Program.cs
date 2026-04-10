@@ -40,8 +40,6 @@ builder.Services.AddDbContextFactory<DeFiDbContext>(o =>
 builder.Services.AddDbContext<DeFiDbContext>(o =>
     o.UseNpgsql(opts.PostgresConnectionString));
 
-builder.Services.AddScoped<TransactionRepository>();
-
 // ── Redis ─────────────────────────────────────────────────────────────────────
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(opts.RedisConnectionString));
