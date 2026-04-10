@@ -32,7 +32,7 @@ public sealed class TaskIdGeneratorHub(
         var valid      = _service.ValidateTaskId(taskId);
         var components = _service.ParseTaskId(taskId);
         var response = EnvelopePayload.Create(
-            MessageTypes.TaskIdGenerated,
+            MessageTypes.TaskIdValidated,
             TaskIdGeneratorConstants.ModuleName,
             new { valid, components });
         await Clients.Caller.ReceiveTaskId(response).ConfigureAwait(false);

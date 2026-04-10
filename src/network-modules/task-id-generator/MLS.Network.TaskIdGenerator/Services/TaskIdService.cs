@@ -20,12 +20,28 @@ public sealed class TaskIdService : ITaskIdService
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Validates that the task ID:
+    /// <list type="bullet">
+    ///   <item>starts with <c>task:</c></item>
+    ///   <item>splits into exactly 5 colon-separated parts</item>
+    ///   <item>part [3] is a 16-digit timestamp (<c>yyyyMMddHHmmssff</c>)</item>
+    ///   <item>part [4] is a non-negative integer sequence number</item>
+    /// </list>
+    /// Note: <c>moduleId</c> or <c>taskType</c> values containing <c>:</c> will cause
+    /// validation to return <see langword="false"/>; avoid colons in those fields.
+    /// </remarks>
     public bool ValidateTaskId(string taskId)
     {
         if (string.IsNullOrWhiteSpace(taskId)) return false;
         if (!taskId.StartsWith("task:", StringComparison.Ordinal)) return false;
         var parts = taskId.Split(':');
-        return parts.Length == 5;
+        if (parts.Length != 5) return false;
+        // Validate timestamp part is exactly 16 digits (yyyyMMddHHmmssff)
+        var timestamp = parts[3];
+        if (timestamp.Length != 16 || !timestamp.All(char.IsAsciiDigit)) return false;
+        // Validate sequence part is a non-negative integer
+        return long.TryParse(parts[4], out var seq) && seq >= 0;
     }
 
     /// <inheritdoc/>

@@ -8,6 +8,9 @@ public static partial class MessageTypes
     /// <summary>Task ID successfully generated.</summary>
     public const string TaskIdGenerated = "TASK_ID_GENERATED";
 
+    /// <summary>Task ID validation result returned.</summary>
+    public const string TaskIdValidated = "TASK_ID_VALIDATED";
+
     /// <summary>Client subscribed to a topic.</summary>
     public const string TopicSubscribed = "TOPIC_SUBSCRIBED";
 

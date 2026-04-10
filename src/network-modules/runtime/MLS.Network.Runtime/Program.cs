@@ -25,6 +25,24 @@ builder.Services.AddHttpClient<BlockControllerClient>(client =>
     client.Timeout     = TimeSpan.FromSeconds(10);
 });
 
+builder.Services.AddSingleton<IDockerClientFacade>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<RuntimeConfig>>().Value;
+    try
+    {
+        var dockerClient = new Docker.DotNet.DockerClientConfiguration(
+            new Uri(options.DockerSocketPath)).CreateClient();
+        return new DockerClientFacade(dockerClient);
+    }
+    catch (Exception ex)
+    {
+        sp.GetRequiredService<ILogger<DockerClientFacade>>()
+          .LogWarning(ex, "Docker socket unavailable — container operations will return NotFound");
+        var fallback = new Docker.DotNet.DockerClientConfiguration(
+            new Uri("unix:///var/run/docker.sock")).CreateClient();
+        return new DockerClientFacade(fallback);
+    }
+});
 builder.Services.AddSingleton<IModuleRuntimeService, ModuleRuntimeService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockControllerClient>());
 

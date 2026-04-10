@@ -359,7 +359,7 @@ services:
       com.mls.module: "subscription-manager"
       com.mls.role: "infrastructure"
 
-  mls-runtime:
+  runtime:
     image: ghcr.io/somat3k/mls-runtime:latest
     build:
       context: src/network-modules/runtime

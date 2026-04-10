@@ -1,36 +1,19 @@
 using System.Runtime.CompilerServices;
-using Docker.DotNet;
 using Docker.DotNet.Models;
 
 namespace MLS.Network.Runtime.Services;
 
 /// <summary>Docker-backed implementation of <see cref="IModuleRuntimeService"/>.</summary>
 public sealed class ModuleRuntimeService(
-    IOptions<RuntimeConfig> _config,
+    IDockerClientFacade _docker,
     ILogger<ModuleRuntimeService> _logger) : IModuleRuntimeService, IDisposable
 {
-    private readonly DockerClient _docker = CreateDockerClient(_config.Value.DockerSocketPath);
-
-    private static DockerClient CreateDockerClient(string socketPath)
-    {
-        try
-        {
-            return new DockerClientConfiguration(new Uri(socketPath)).CreateClient();
-        }
-        catch (Exception ex)
-        {
-            // Return a client that will fail gracefully on each call
-            return new DockerClientConfiguration(new Uri("unix:///var/run/docker.sock"))
-                .CreateClient();
-        }
-    }
-
     /// <inheritdoc/>
     public async Task<ModuleStatus> GetStatusAsync(string moduleName, CancellationToken ct)
     {
         try
         {
-            var containers = await _docker.Containers.ListContainersAsync(
+            var containers = await _docker.ListContainersAsync(
                 new ContainersListParameters
                 {
                     All    = true,
@@ -61,7 +44,7 @@ public sealed class ModuleRuntimeService(
     {
         try
         {
-            var containers = await _docker.Containers.ListContainersAsync(
+            var containers = await _docker.ListContainersAsync(
                 new ContainersListParameters
                 {
                     All     = true,
@@ -94,7 +77,7 @@ public sealed class ModuleRuntimeService(
         {
             var status = await GetStatusAsync(moduleName, ct).ConfigureAwait(false);
             if (status.State == ModuleState.NotFound) return false;
-            return await _docker.Containers.StartContainerAsync(status.ContainerId,
+            return await _docker.StartContainerAsync(status.ContainerId,
                 new ContainerStartParameters(), ct).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -111,7 +94,7 @@ public sealed class ModuleRuntimeService(
         {
             var status = await GetStatusAsync(moduleName, ct).ConfigureAwait(false);
             if (status.State == ModuleState.NotFound) return false;
-            return await _docker.Containers.StopContainerAsync(status.ContainerId,
+            return await _docker.StopContainerAsync(status.ContainerId,
                 new ContainerStopParameters { WaitBeforeKillSeconds = 10u }, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -128,7 +111,7 @@ public sealed class ModuleRuntimeService(
         {
             var status = await GetStatusAsync(moduleName, ct).ConfigureAwait(false);
             if (status.State == ModuleState.NotFound) return false;
-            await _docker.Containers.RestartContainerAsync(status.ContainerId,
+            await _docker.RestartContainerAsync(status.ContainerId,
                 new ContainerRestartParameters { WaitBeforeKillSeconds = 10u }, ct).ConfigureAwait(false);
             return true;
         }
@@ -160,7 +143,7 @@ public sealed class ModuleRuntimeService(
         Docker.DotNet.MultiplexedStream logStream;
         try
         {
-            logStream = await _docker.Containers.GetContainerLogsAsync(status.ContainerId,
+            logStream = await _docker.GetContainerLogsAsync(status.ContainerId,
                 false,
                 new ContainerLogsParameters
                 {

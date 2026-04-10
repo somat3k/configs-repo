@@ -9,6 +9,10 @@ public enum SandboxState { Pending, Running, Completed, Failed, TimedOut }
 public sealed record SandboxRequest(
     string Script,
     int TimeoutSeconds = 30,
+    /// <summary>
+    /// Reserved for future out-of-process execution. Not enforced by the current in-process
+    /// Roslyn implementation.
+    /// </summary>
     int MemoryLimitMb = 64,
     int MaxOutputBytes = 65536);
 

@@ -45,6 +45,9 @@ public sealed class ContainerRegistryController(IContainerRegistryService _servi
     [HttpPost("{id:guid}/health")]
     public async Task<IActionResult> RecordHealth(Guid id, [FromBody] HealthCheckResult result)
     {
+        if (result.ImageId != id)
+            return BadRequest(new { error = "The image ID in the request body must match the image ID in the route." });
+
         await _service.RecordHealthCheckAsync(id, result, HttpContext.RequestAborted).ConfigureAwait(false);
         return NoContent();
     }

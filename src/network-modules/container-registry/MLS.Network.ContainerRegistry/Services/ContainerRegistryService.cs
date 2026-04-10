@@ -21,7 +21,8 @@ public sealed class ContainerRegistryService(ILogger<ContainerRegistryService> _
             request.Digest,
             DateTimeOffset.UtcNow,
             null,
-            false);
+            false,
+            request.HealthEndpoint);
         _images[image.Id] = image;
         _logger.LogInformation("Registered image {Name}:{Tag} from {Registry}", request.Name, request.Tag, request.Registry);
         return Task.FromResult(image);

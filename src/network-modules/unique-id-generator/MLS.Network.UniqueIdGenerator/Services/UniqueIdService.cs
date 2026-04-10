@@ -13,7 +13,7 @@ public sealed class UniqueIdService : IUniqueIdService
 
     /// <inheritdoc/>
     public long GenerateSequentialId(string prefix) =>
-        _counters.AddOrUpdate(prefix, 1L, (_, prev) => Interlocked.Increment(ref prev));
+        _counters.AddOrUpdate(prefix, 1L, (_, prev) => prev + 1);
 
     /// <inheritdoc/>
     public async IAsyncEnumerable<string> StreamUuidsAsync(

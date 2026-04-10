@@ -3,7 +3,16 @@ using System.Runtime.CompilerServices;
 namespace MLS.Network.ContainerRegistry.Services;
 
 /// <summary>Request payload for registering a container image.</summary>
-public sealed record RegisterImageRequest(string Name, string Tag, string Registry, string? Digest);
+public sealed record RegisterImageRequest(
+    string Name,
+    string Tag,
+    string Registry,
+    string? Digest,
+    /// <summary>
+    /// Optional explicit health probe endpoint (e.g. <c>http://my-service:8080/health</c>).
+    /// When <see langword="null"/> or empty the background prober skips this image.
+    /// </summary>
+    string? HealthEndpoint = null);
 
 /// <summary>A registered container image.</summary>
 public sealed record ContainerImage(
@@ -14,7 +23,12 @@ public sealed record ContainerImage(
     string? Digest,
     DateTimeOffset RegisteredAt,
     DateTimeOffset? LastHealthAt,
-    bool IsHealthy);
+    bool IsHealthy,
+    /// <summary>
+    /// Optional HTTP URL probed every 30 s by <see cref="HealthProbeService"/>.
+    /// Null or empty disables automated probing for this image.
+    /// </summary>
+    string? HealthEndpoint = null);
 
 /// <summary>Result of a health check probe.</summary>
 public sealed record HealthCheckResult(

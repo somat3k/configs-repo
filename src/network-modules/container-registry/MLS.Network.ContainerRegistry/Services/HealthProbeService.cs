@@ -6,6 +6,15 @@ public sealed class HealthProbeService(
     IHttpClientFactory _httpFactory,
     ILogger<HealthProbeService> _logger) : BackgroundService
 {
+    // Reused across all probes to avoid socket exhaustion.
+    private readonly HttpClient _probeClient = InitProbeClient(_httpFactory);
+
+    private static HttpClient InitProbeClient(IHttpClientFactory factory)
+    {
+        var client = factory.CreateClient("health-probe");
+        client.Timeout = TimeSpan.FromSeconds(5);
+        return client;
+    }
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -26,15 +35,32 @@ public sealed class HealthProbeService(
 
     private async Task ProbeImageAsync(ContainerImage img, CancellationToken ct)
     {
-        var url = $"http://{img.Registry}/{img.Name}:{img.Tag}/health";
+        // Only probe images that have an explicit health endpoint configured.
+        if (string.IsNullOrWhiteSpace(img.HealthEndpoint))
+        {
+            _logger.LogDebug(
+                "Skipping health probe for {Image}:{Tag} — no HealthEndpoint configured",
+                img.Name, img.Tag);
+            return;
+        }
+
+        if (!Uri.TryCreate(img.HealthEndpoint, UriKind.Absolute, out var probeUri) ||
+            (probeUri.Scheme != Uri.UriSchemeHttp && probeUri.Scheme != Uri.UriSchemeHttps))
+        {
+            var invalid = new HealthCheckResult(img.Id, DateTimeOffset.UtcNow, false, 0,
+                $"Invalid HealthEndpoint URI: {img.HealthEndpoint}");
+            await _registry.RecordHealthCheckAsync(img.Id, invalid, ct).ConfigureAwait(false);
+            _logger.LogWarning("Invalid HealthEndpoint URI for {Image}:{Tag}: {Uri}",
+                img.Name, img.Tag, img.HealthEndpoint);
+            return;
+        }
+
         bool healthy;
         int statusCode;
         string message;
         try
         {
-            using var client = _httpFactory.CreateClient();
-            client.Timeout   = TimeSpan.FromSeconds(5);
-            var response     = await client.GetAsync(url, ct).ConfigureAwait(false);
+            using var response = await _probeClient.GetAsync(probeUri, ct).ConfigureAwait(false);
             healthy    = response.IsSuccessStatusCode;
             statusCode = (int)response.StatusCode;
             message    = response.ReasonPhrase ?? string.Empty;

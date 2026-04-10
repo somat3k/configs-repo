@@ -16,11 +16,18 @@ public sealed class UniqueIdGeneratorController(IUniqueIdService _service) : Con
     public IActionResult GetSequential(string prefix) =>
         Ok(new { prefix, id = _service.GenerateSequentialId(prefix) });
 
-    /// <summary>Streams <paramref name="count"/> UUIDs as a JSON array.</summary>
+    /// <summary>
+    /// Returns up to <paramref name="count"/> UUIDs as a JSON array (max 1000).
+    /// The result is buffered server-side before returning; use the WebSocket
+    /// <c>StreamUuids</c> hub method for true streaming.
+    /// </summary>
     [HttpGet("stream")]
     public async Task<IActionResult> StreamUuids([FromQuery] int count = 10)
     {
-        var ids = new List<string>();
+        if (count <= 0 || count > 1000)
+            return BadRequest(new { error = "count must be between 1 and 1000" });
+
+        var ids = new List<string>(count);
         await foreach (var id in _service.StreamUuidsAsync(count, HttpContext.RequestAborted)
             .ConfigureAwait(false))
         {

@@ -1,13 +1,14 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.SignalR;
+using MLS.Core.Constants;
 using MLS.Network.SubscriptionManager.Hubs;
 
 namespace MLS.Network.SubscriptionManager.Services;
 
 /// <summary>Thread-safe in-memory implementation of <see cref="ISubscriptionService"/>.</summary>
 public sealed class SubscriptionService(
-    IHubContext<SubscriptionManagerHub> _hubContext,
+    IHubContext<SubscriptionManagerHub, ISubscriptionManagerHubClient> _hubContext,
     ILogger<SubscriptionService> _logger) : ISubscriptionService
 {
     // topic → subscriptionId → info
@@ -78,8 +79,12 @@ public sealed class SubscriptionService(
         {
             try
             {
+                var envelope = EnvelopePayload.Create(
+                    MessageTypes.TopicMessage,
+                    SubscriptionManagerConstants.ModuleName,
+                    new { topic, message });
                 await _hubContext.Clients.Client(sub.ConnectionId)
-                    .SendAsync("ReceiveMessage", new { topic, message }, ct)
+                    .ReceiveMessage(envelope)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)

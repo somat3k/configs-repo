@@ -27,7 +27,12 @@ public sealed class SubscriptionManagerController(ISubscriptionService _service)
         return Ok(subs);
     }
 
-    /// <summary>Creates a new subscription.</summary>
+/// <summary>Creates a new subscription.</summary>
+    /// <remarks>
+    /// <b>Internal callers only.</b> <c>connection_id</c> should be a SignalR
+    /// <c>Context.ConnectionId</c> value obtained server-side; exposing this endpoint to
+    /// external clients allows cross-connection subscription manipulation.
+    /// </remarks>
     [HttpPost]
     public async Task<IActionResult> Subscribe([FromBody] SubscribeRequest request)
     {

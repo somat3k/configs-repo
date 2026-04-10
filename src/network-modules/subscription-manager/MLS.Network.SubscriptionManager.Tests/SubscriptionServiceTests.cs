@@ -9,12 +9,13 @@ namespace MLS.Network.SubscriptionManager.Tests;
 
 public sealed class SubscriptionServiceTests
 {
-    private readonly Mock<IHubContext<Hubs.SubscriptionManagerHub>> _hubContextMock = new();
+    private readonly Mock<IHubContext<Hubs.SubscriptionManagerHub, Hubs.ISubscriptionManagerHubClient>> _hubContextMock = new();
     private readonly SubscriptionService _sut;
 
     public SubscriptionServiceTests()
     {
-        _hubContextMock.Setup(h => h.Clients).Returns(Mock.Of<IHubClients>());
+        _hubContextMock.Setup(h => h.Clients)
+            .Returns(Mock.Of<IHubClients<Hubs.ISubscriptionManagerHubClient>>());
         _sut = new SubscriptionService(
             _hubContextMock.Object,
             NullLogger<SubscriptionService>.Instance);

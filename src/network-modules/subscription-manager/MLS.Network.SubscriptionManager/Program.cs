@@ -28,9 +28,9 @@ builder.Services.AddHttpClient<BlockControllerClient>(client =>
 
 builder.Services.AddSignalR();
 
-// SubscriptionService needs IHubContext — register after SignalR
+// SubscriptionService needs typed IHubContext — register after SignalR
 builder.Services.AddSingleton<ISubscriptionService>(sp => new SubscriptionService(
-    sp.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<SubscriptionManagerHub>>(),
+    sp.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<SubscriptionManagerHub, ISubscriptionManagerHubClient>>(),
     sp.GetRequiredService<ILogger<SubscriptionService>>()));
 
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockControllerClient>());

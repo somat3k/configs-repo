@@ -1,12 +1,20 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 
 namespace MLS.Network.VirtualMachine.Services;
 
-/// <summary>C# Roslyn scripting-based implementation of <see cref="IVirtualMachineService"/>.</summary>
+/// <summary>
+/// In-process C# Roslyn scripting sandbox.
+/// <para>
+/// <b>Security notice:</b> Scripts run in the same process as the host with default CLR permissions.
+/// This service is intended for <b>trusted internal callers only</b>. Untrusted user-supplied scripts
+/// must be executed in an isolated out-of-process container instead.
+/// </para>
+/// </summary>
 public sealed class VirtualMachineService(ILogger<VirtualMachineService> _logger) : IVirtualMachineService
 {
     private readonly ConcurrentDictionary<Guid, SandboxInfo> _sandboxes = new();
@@ -14,52 +22,52 @@ public sealed class VirtualMachineService(ILogger<VirtualMachineService> _logger
     /// <inheritdoc/>
     public async Task<SandboxResult> ExecuteAsync(SandboxRequest request, CancellationToken ct)
     {
-        var sandboxId = Guid.NewGuid();
-        _sandboxes[sandboxId] = new SandboxInfo(sandboxId, SandboxState.Running,
-            DateTimeOffset.UtcNow, null);
-
         var sw = Stopwatch.StartNew();
+
+        // Reject assembly-loading / file-include directives that bypass import restrictions.
+        if (request.Script.Contains("#r ", StringComparison.Ordinal) ||
+            request.Script.Contains("#load ", StringComparison.Ordinal))
+        {
+            sw.Stop();
+            return new SandboxResult(Guid.Empty, false, string.Empty,
+                "Script directives #r and #load are not permitted.", sw.ElapsedMilliseconds, 1);
+        }
+
+        var sandboxId  = Guid.NewGuid();
+        var createdAt  = DateTimeOffset.UtcNow;
+        _sandboxes[sandboxId] = new SandboxInfo(sandboxId, SandboxState.Running, createdAt, null);
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds));
-
-        var originalOut = Console.Out;
-        using var outputWriter = new StringWriter();
-        Console.SetOut(outputWriter);
 
         try
         {
             var options = ScriptOptions.Default
-                .WithImports("System", "System.Linq", "System.Collections.Generic");
+                .WithImports("System", "System.Linq", "System.Collections.Generic")
+                .WithAllowUnsafe(false);
 
-            await CSharpScript.EvaluateAsync<object?>(
+            var returnValue = await CSharpScript.EvaluateAsync<object?>(
                 request.Script, options, cancellationToken: cts.Token).ConfigureAwait(false);
 
-            var output = TruncateOutput(outputWriter.ToString(), request.MaxOutputBytes);
+            var output = TruncateOutput(returnValue?.ToString() ?? string.Empty, request.MaxOutputBytes);
             sw.Stop();
-            _sandboxes[sandboxId] = new SandboxInfo(sandboxId, SandboxState.Completed,
-                _sandboxes[sandboxId].CreatedAt, DateTimeOffset.UtcNow);
+            _sandboxes[sandboxId] = new SandboxInfo(sandboxId, SandboxState.Completed, createdAt, DateTimeOffset.UtcNow);
             return new SandboxResult(sandboxId, true, output, null, sw.ElapsedMilliseconds, 0);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
             sw.Stop();
-            _sandboxes[sandboxId] = new SandboxInfo(sandboxId, SandboxState.TimedOut,
-                _sandboxes[sandboxId].CreatedAt, DateTimeOffset.UtcNow);
+            _sandboxes[sandboxId] = new SandboxInfo(sandboxId, SandboxState.TimedOut, createdAt, DateTimeOffset.UtcNow);
             return new SandboxResult(sandboxId, false, string.Empty, "Script execution timed out",
                 sw.ElapsedMilliseconds, -1);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            _sandboxes[sandboxId] = new SandboxInfo(sandboxId, SandboxState.Failed,
-                _sandboxes[sandboxId].CreatedAt, DateTimeOffset.UtcNow);
+            _sandboxes[sandboxId] = new SandboxInfo(sandboxId, SandboxState.Failed, createdAt, DateTimeOffset.UtcNow);
             _logger.LogDebug(ex, "Script execution failed in sandbox {SandboxId}", sandboxId);
             return new SandboxResult(sandboxId, false, string.Empty, ex.Message,
                 sw.ElapsedMilliseconds, 1);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
         }
     }
 
@@ -86,9 +94,16 @@ public sealed class VirtualMachineService(ILogger<VirtualMachineService> _logger
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Truncates <paramref name="output"/> so its UTF-8 encoding does not exceed
+    /// <paramref name="maxBytes"/> bytes, appending <c>...[truncated]</c> when cut.
+    /// </summary>
     private static string TruncateOutput(string output, int maxBytes)
     {
-        if (System.Text.Encoding.UTF8.GetByteCount(output) <= maxBytes) return output;
-        return output[..Math.Min(output.Length, maxBytes / 4)] + "...[truncated]";
+        if (maxBytes <= 0) return string.Empty;
+        var bytes = Encoding.UTF8.GetBytes(output);
+        if (bytes.Length <= maxBytes) return output;
+        // Decode safely — GetString handles partial multibyte sequences gracefully.
+        return Encoding.UTF8.GetString(bytes, 0, maxBytes) + "...[truncated]";
     }
 }
