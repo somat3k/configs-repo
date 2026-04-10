@@ -21,7 +21,8 @@ public sealed class OrderManager(
     ModuleIdentity _identity,
     ILogger<OrderManager> _logger) : IOrderManager
 {
-    private string ModuleId => _identity.Id.ToString();
+    // Cached GUID string — _identity.Id is immutable, no need to call ToString() on each access.
+    private readonly string _moduleId = _identity.Id.ToString("D");
 
     private readonly ConcurrentDictionary<string, TraderOrder> _cache = new();
 
@@ -77,12 +78,12 @@ public sealed class OrderManager(
                 limit_price         = (decimal?)null,
                 stop_price          = (decimal?)null,
                 client_order_id     = clientOrderId,
-                requesting_module_id = ModuleId,
+                requesting_module_id = _moduleId,
             };
 
             var envelope = EnvelopePayload.Create(
                 MessageTypes.OrderCreate,
-                ModuleId,
+                _moduleId,
                 payload);
 
             await _sender.SendEnvelopeAsync(envelope, ct).ConfigureAwait(false);
@@ -119,10 +120,10 @@ public sealed class OrderManager(
             var payload = new
             {
                 client_order_id      = clientOrderId,
-                requesting_module_id = ModuleId,
+                requesting_module_id = _moduleId,
             };
 
-            var envelope = EnvelopePayload.Create(MessageTypes.OrderCancel, ModuleId, payload);
+            var envelope = EnvelopePayload.Create(MessageTypes.OrderCancel, _moduleId, payload);
             await _sender.SendEnvelopeAsync(envelope, ct).ConfigureAwait(false);
         }
 

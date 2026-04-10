@@ -27,7 +27,8 @@ public sealed class MarketDataWorker(
     IOptions<TraderOptions> _options,
     ILogger<MarketDataWorker> _logger) : BackgroundService
 {
-    private string ModuleId => _identity.Id.ToString();
+    // Cached GUID string — _identity.Id is immutable, no need to call ToString() on each access.
+    private readonly string _moduleId = _identity.Id.ToString("D");
 
     private static readonly TimeSpan[] ReconnectDelays =
     [
@@ -245,7 +246,7 @@ public sealed class MarketDataWorker(
             ClientOrderId:   order.ClientOrderId,
             Timestamp:       signal.Timestamp);
 
-        var signalEnvelope = EnvelopePayload.Create(MessageTypes.TradeSignal, ModuleId, signalPayload);
+        var signalEnvelope = EnvelopePayload.Create(MessageTypes.TradeSignal, _moduleId, signalPayload);
         await _sender.SendEnvelopeAsync(signalEnvelope, ct).ConfigureAwait(false);
 
         _logger.LogInformation(

@@ -9,7 +9,7 @@ namespace MLS.Trader.Services;
 /// </summary>
 public sealed class EnvelopeSender(
     HttpClient _http,
-    ILogger<EnvelopeSender> _logger) : IEnvelopeSender
+    ILogger<EnvelopeSender> _logger) : IEnvelopeSender, IAsyncDisposable
 {
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private HubConnection? _hubConnection;
@@ -26,6 +26,14 @@ public sealed class EnvelopeSender(
         {
             _logger.LogWarning(ex, "Failed to send envelope type={Type}", envelope.Type);
         }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync().ConfigureAwait(false);
+        _connectionLock.Dispose();
     }
 
     private async Task<HubConnection> GetConnectedHubAsync(CancellationToken ct)
@@ -53,7 +61,7 @@ public sealed class EnvelopeSender(
     {
         var baseAddress = _http.BaseAddress
             ?? throw new InvalidOperationException(
-                "EnvelopeSender requires HttpClient.BaseAddress to resolve the Block Controller hub endpoint.");
+                "EnvelopeSender requires HttpClient.BaseAddress to be configured pointing to the Block Controller endpoint (hub path: /hubs/block-controller).");
 
         var hubUri = new Uri(baseAddress, "/hubs/block-controller");
 
