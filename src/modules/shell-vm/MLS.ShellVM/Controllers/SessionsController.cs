@@ -189,8 +189,8 @@ public sealed class SessionsController(
             return BadRequest(new { error = "lines must be greater than 0" });
 
         // Clamp to the configured ring-buffer size to prevent oversized reads
-        var maxLines = Math.Max(1, _config.Value.OutputRingBufferLines);
-        lines = Math.Min(lines, maxLines);
+        var ringBufferCapacity = Math.Max(1, _config.Value.OutputRingBufferLines);
+        lines = Math.Min(lines, ringBufferCapacity);
 
         var key = $"{ShellVMLimits.RedisOutputPrefix}{id}";
         var db  = _redis.GetDatabase();

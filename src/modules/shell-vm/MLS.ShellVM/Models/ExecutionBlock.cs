@@ -40,7 +40,17 @@ public class ExecutionBlock
     /// Updated on every input write and every output chunk broadcast.
     /// Used by <c>SessionWatchdog</c> to detect truly idle sessions.
     /// </summary>
-    public DateTimeOffset LastActivityAt { get; set; } = DateTimeOffset.UtcNow;
+    /// <remarks>
+    /// Backed by a <see langword="long"/> ticks field written via <see cref="Interlocked.Exchange(ref long, long)"/>
+    /// so concurrent updates from multiple I/O threads are safe without external locking.
+    /// </remarks>
+    public DateTimeOffset LastActivityAt
+    {
+        get => new DateTimeOffset(Interlocked.Read(ref _lastActivityTicks), TimeSpan.Zero);
+        set => Interlocked.Exchange(ref _lastActivityTicks, value.UtcTicks);
+    }
+
+    private long _lastActivityTicks = DateTimeOffset.UtcNow.UtcTicks;
 
     /// <summary>Registered module ID of the entity that requested this session.</summary>
     public string? RequestingModuleId { get; set; }

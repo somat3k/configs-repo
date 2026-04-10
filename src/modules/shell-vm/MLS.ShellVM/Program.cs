@@ -67,7 +67,6 @@ builder.Services.AddHostedService<SessionWatchdog>();
 
 // ── ASP.NET Core ──────────────────────────────────────────────────────────────
 builder.Services.AddControllers()
-    .AddControllersAsServices()        // enables factory-based registration for controllers
     .AddJsonOptions(o => o.JsonSerializerOptions.WriteIndented = false);
 
 // Register SessionsController with factory so IConnectionMultiplexer? resolves optionally

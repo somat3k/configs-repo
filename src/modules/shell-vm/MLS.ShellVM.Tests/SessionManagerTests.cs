@@ -192,21 +192,31 @@ public sealed class SessionManagerTests : IDisposable
     // ── ActiveSessionCount ────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ActiveSessionCount_IncludesCreatedAndRunning()
+    public async Task ActiveSessionCount_IncludesCreatedStartingRunningAndPaused()
     {
         _ptyMock.Setup(p => p.KillAsync(It.IsAny<PtyHandle>(), It.IsAny<CancellationToken>()))
                 .Returns(ValueTask.CompletedTask);
 
         // Created state IS counted for admission control (prevents unbounded unstarted sessions)
-        await _manager.CreateSessionAsync(new CreateSessionRequest("created-1", "/bin/sh"), CancellationToken.None);
-        _manager.ActiveSessionCount.Should().Be(1);
+        var s1 = await _manager.CreateSessionAsync(new CreateSessionRequest("s1", "/bin/sh"), CancellationToken.None);
+        _manager.ActiveSessionCount.Should().Be(1, "Created sessions count toward the cap");
 
-        await _manager.CreateSessionAsync(new CreateSessionRequest("created-2", "/bin/sh"), CancellationToken.None);
+        await _manager.TransitionStateAsync(s1.Block.Id, ExecutionBlockState.Starting, null, CancellationToken.None);
+        _manager.ActiveSessionCount.Should().Be(1, "Starting is an active state");
+
+        await _manager.TransitionStateAsync(s1.Block.Id, ExecutionBlockState.Running, null, CancellationToken.None);
+        _manager.ActiveSessionCount.Should().Be(1, "Running is an active state");
+
+        await _manager.TransitionStateAsync(s1.Block.Id, ExecutionBlockState.Paused, null, CancellationToken.None);
+        _manager.ActiveSessionCount.Should().Be(1, "Paused is an active state");
+
+        // Create a second session to confirm cumulative count
+        await _manager.CreateSessionAsync(new CreateSessionRequest("s2", "/bin/sh"), CancellationToken.None);
         _manager.ActiveSessionCount.Should().Be(2);
     }
 
     [Fact]
-    public async Task ActiveSessionCount_ExcludesTerminatedSessions()
+    public async Task ActiveSessionCount_ExcludesTerminatedAndCompletedSessions()
     {
         _ptyMock.Setup(p => p.KillAsync(It.IsAny<PtyHandle>(), It.IsAny<CancellationToken>()))
                 .Returns(ValueTask.CompletedTask);
@@ -217,7 +227,25 @@ public sealed class SessionManagerTests : IDisposable
         _manager.ActiveSessionCount.Should().Be(1);
 
         await _manager.TerminateSessionAsync(session.Block.Id, graceful: false, CancellationToken.None);
-        _manager.ActiveSessionCount.Should().Be(0);
+        _manager.ActiveSessionCount.Should().Be(0, "Terminated sessions must not count");
+    }
+
+    [Fact]
+    public async Task ActiveSessionCount_ExcludesCompletedAndErrorSessions()
+    {
+        _ptyMock.Setup(p => p.KillAsync(It.IsAny<PtyHandle>(), It.IsAny<CancellationToken>()))
+                .Returns(ValueTask.CompletedTask);
+
+        var session = await _manager.CreateSessionAsync(
+            new CreateSessionRequest("completed", "/bin/sh"), CancellationToken.None);
+
+        await _manager.TransitionStateAsync(session.Block.Id, ExecutionBlockState.Completed, 0, CancellationToken.None);
+        _manager.ActiveSessionCount.Should().Be(0, "Completed sessions must not count");
+
+        var session2 = await _manager.CreateSessionAsync(
+            new CreateSessionRequest("errored", "/bin/sh"), CancellationToken.None);
+        await _manager.TransitionStateAsync(session2.Block.Id, ExecutionBlockState.Error, -1, CancellationToken.None);
+        _manager.ActiveSessionCount.Should().Be(0, "Error sessions must not count");
     }
 }
 

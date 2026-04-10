@@ -18,9 +18,9 @@ public sealed class OutputBroadcaster(
     IOptions<ShellVMConfig> _config,
     ILogger<OutputBroadcaster> _logger) : IOutputBroadcaster
 {
-    // connectionId → set of subscribed sessionIds
-    // A single connection may subscribe to multiple sessions.
-    private readonly ConcurrentDictionary<string, HashSet<Guid>> _subscriptions = new();
+    // connectionId → ConcurrentDictionary<sessionId, byte> used as a concurrent set.
+    // A single connection may subscribe to multiple sessions simultaneously.
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _subscriptions = new();
 
     /// <inheritdoc/>
     public async ValueTask BroadcastChunkAsync(OutputChunk chunk, CancellationToken ct)
@@ -50,10 +50,8 @@ public sealed class OutputBroadcaster(
     /// <inheritdoc/>
     public async Task SubscribeAsync(string connectionId, Guid sessionId, CancellationToken ct)
     {
-        _subscriptions.AddOrUpdate(
-            connectionId,
-            _ => [sessionId],
-            (_, set) => { lock (set) { set.Add(sessionId); } return set; });
+        var sessions = _subscriptions.GetOrAdd(connectionId, _ => new ConcurrentDictionary<Guid, byte>());
+        sessions.TryAdd(sessionId, 0);
 
         await _hub.Groups.AddToGroupAsync(connectionId, SessionGroup(sessionId), ct)
                   .ConfigureAwait(false);
@@ -66,10 +64,7 @@ public sealed class OutputBroadcaster(
         if (!_subscriptions.TryRemove(connectionId, out var sessions))
             return;
 
-        HashSet<Guid> snapshot;
-        lock (sessions) { snapshot = [..sessions]; }
-
-        foreach (var sessionId in snapshot)
+        foreach (var (sessionId, _) in sessions)
         {
             await _hub.Groups.RemoveFromGroupAsync(connectionId, SessionGroup(sessionId), ct)
                       .ConfigureAwait(false);
@@ -83,10 +78,8 @@ public sealed class OutputBroadcaster(
         if (!_subscriptions.TryGetValue(connectionId, out var sessions))
             return;
 
-        bool removed;
-        lock (sessions) { removed = sessions.Remove(sessionId); }
-
-        if (!removed) return;
+        if (!sessions.TryRemove(sessionId, out _))
+            return;
 
         await _hub.Groups.RemoveFromGroupAsync(connectionId, SessionGroup(sessionId), ct)
                   .ConfigureAwait(false);
@@ -120,3 +113,4 @@ public sealed class OutputBroadcaster(
         }
     }
 }
+
