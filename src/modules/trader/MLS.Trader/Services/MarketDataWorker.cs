@@ -27,7 +27,7 @@ public sealed class MarketDataWorker(
     IOptions<TraderOptions> _options,
     ILogger<MarketDataWorker> _logger) : BackgroundService
 {
-    private const string ModuleId = "trader";
+    private string ModuleId => _identity.Id.ToString();
 
     private static readonly TimeSpan[] ReconnectDelays =
     [
@@ -202,7 +202,7 @@ public sealed class MarketDataWorker(
 
         _logger.LogDebug(
             "MarketDataWorker: signal={Direction} confidence={Conf:F3} symbol={Symbol}",
-            signal.Direction, signal.Confidence, signal.Symbol);
+            signal.Direction, signal.Confidence, TraderUtils.SafeLog(signal.Symbol));
 
         var opts = _options.Value;
 
@@ -250,25 +250,36 @@ public sealed class MarketDataWorker(
 
         _logger.LogInformation(
             "MarketDataWorker: TRADE_SIGNAL {Direction} {Symbol} qty={Qty} size={Size:F2} USD conf={Conf:F3}",
-            signal.Direction, payload.Symbol, quantity, positionSizeUsd, signal.Confidence);
+            signal.Direction, TraderUtils.SafeLog(payload.Symbol), quantity, positionSizeUsd, signal.Confidence);
     }
 
     private void HandlePositionUpdate(EnvelopePayload envelope)
     {
         try
         {
-            using var doc    = JsonDocument.Parse(envelope.Payload.GetRawText());
-            var root         = doc.RootElement;
-            var symbol       = root.GetProperty("symbol").GetString() ?? string.Empty;
-            var directionStr = root.TryGetProperty("side", out var sideEl) ? sideEl.GetString() : "Buy";
+            using var doc = JsonDocument.Parse(envelope.Payload.GetRawText());
+            var root      = doc.RootElement;
+
+            // Accept both snake_case (Broker) and PascalCase producers
+            var symbol = GetString(root, "symbol", "Symbol")?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(symbol))
+            {
+                _logger.LogWarning("MarketDataWorker: ignoring POSITION_UPDATE payload with missing or empty symbol");
+                return;
+            }
+
+            var directionStr = GetString(root, "side", "Side");
             var direction    = directionStr?.Equals("Sell", StringComparison.OrdinalIgnoreCase) == true
                                ? SignalDirection.Sell : SignalDirection.Buy;
-            var qty           = root.TryGetProperty("quantity", out var qEl) ? qEl.GetDecimal() : 0m;
-            var avgEntry      = root.TryGetProperty("average_entry_price", out var aeEl) ? aeEl.GetDecimal() : 0m;
-            var pnl           = root.TryGetProperty("unrealised_pnl", out var pnlEl) ? pnlEl.GetDecimal() : 0m;
-            var venue         = root.TryGetProperty("venue", out var vEl) ? vEl.GetString() ?? "hyperliquid" : "hyperliquid";
+            var qty      = GetDecimal(root, "quantity", "Quantity");
+            var avgEntry = GetDecimal(root, "average_entry_price", "AverageEntryPrice");
+            var pnl      = GetDecimal(root, "unrealised_pnl", "UnrealisedPnl");
+            var venue    = (GetString(root, "venue", "Venue")?.Trim() is { Length: > 0 } v ? v : "hyperliquid");
 
-            _positions[symbol] = new TraderPosition(
+            // Key by (venue, symbol) so positions across venues are tracked independently.
+            var positionKey = $"{venue}:{symbol}";
+
+            _positions[positionKey] = new TraderPosition(
                 Symbol:            symbol,
                 Direction:         direction,
                 Quantity:          qty,
@@ -281,5 +292,21 @@ public sealed class MarketDataWorker(
         {
             _logger.LogWarning(ex, "MarketDataWorker: failed to parse POSITION_UPDATE payload");
         }
+    }
+
+    // ── JSON helpers ──────────────────────────────────────────────────────────────
+
+    private static string? GetString(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+            if (root.TryGetProperty(name, out var el)) return el.GetString();
+        return null;
+    }
+
+    private static decimal GetDecimal(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+            if (root.TryGetProperty(name, out var el)) return el.GetDecimal();
+        return 0m;
     }
 }

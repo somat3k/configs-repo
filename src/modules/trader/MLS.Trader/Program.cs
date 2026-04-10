@@ -37,20 +37,16 @@ builder.Services.AddDbContextFactory<TraderDbContext>(o =>
 builder.Services.AddDbContext<TraderDbContext>(o =>
     o.UseNpgsql(opts.PostgresConnectionString));
 
-// ── Redis (optional) ──────────────────────────────────────────────────────────
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+// ── Redis (optional — position cache disabled gracefully when unavailable) ────
+try
 {
-    try
-    {
-        return ConnectionMultiplexer.Connect(opts.RedisConnectionString);
-    }
-    catch (Exception ex)
-    {
-        var log = sp.GetRequiredService<ILogger<Program>>();
-        log.LogWarning(ex, "Redis unavailable — position cache will use in-memory only");
-        return ConnectionMultiplexer.Connect("localhost:6379,abortConnect=false");
-    }
-});
+    var redis = ConnectionMultiplexer.Connect(opts.RedisConnectionString);
+    builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[Trader] Redis connection failed: {ex.Message} — position cache disabled.");
+}
 
 // ── Module identity (shared between BlockControllerClient and MarketDataWorker) ──
 builder.Services.AddSingleton<ModuleIdentity>();

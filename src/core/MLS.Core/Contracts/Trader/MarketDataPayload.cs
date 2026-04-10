@@ -4,7 +4,7 @@ namespace MLS.Core.Contracts.Trader;
 
 /// <summary>
 /// Payload for <c>MARKET_DATA_UPDATE</c> envelopes.
-/// Carries OHLCV data and pre-computed technical indicators for a single symbol.
+/// Carries a market price snapshot and pre-computed technical indicators for a single symbol.
 /// </summary>
 /// <param name="Symbol">Normalised trading symbol, e.g. <c>BTC-USDT</c>.</param>
 /// <param name="Price">Current mid-market price in quote currency.</param>

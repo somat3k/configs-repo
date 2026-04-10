@@ -1,5 +1,4 @@
 using Microsoft.ML.OnnxRuntime;
-using Microsoft.ML.OnnxRuntime.Tensors;
 using MLS.Trader.Configuration;
 using MLS.Trader.Interfaces;
 using MLS.Trader.Models;
@@ -30,6 +29,10 @@ public sealed class SignalEngine : ISignalEngine, IDisposable
     private readonly IOptions<TraderOptions> _options;
     private readonly ILogger<SignalEngine> _logger;
 
+    // Cached input/output names — resolved once at load time to avoid per-inference allocations.
+    private readonly string? _inputName;
+    private readonly string? _outputName;
+
     // Pre-allocated feature buffer — reused per inference call.
     // SignalEngine is a singleton but GenerateSignalAsync is serialised via the worker's channel.
     private readonly float[] _features = new float[7];
@@ -54,7 +57,9 @@ public sealed class SignalEngine : ISignalEngine, IDisposable
                     InterOpNumThreads      = 1,
                     IntraOpNumThreads      = 1,
                 };
-                _session = new InferenceSession(modelPath, sessionOptions);
+                _session    = new InferenceSession(modelPath, sessionOptions);
+                _inputName  = _session.InputMetadata.Keys.First();
+                _outputName = _session.OutputMetadata.Keys.First();
                 _logger.LogInformation("SignalEngine: loaded model-t ONNX from {Path}", modelPath);
             }
             catch (Exception ex)
@@ -95,16 +100,11 @@ public sealed class SignalEngine : ISignalEngine, IDisposable
         _features[5] = f.VolumeDelta / 1_000_000f;
         _features[6] = f.Momentum / MathF.Max(price, 1f);
 
-        var inputMeta = _session!.InputMetadata;
-        var inputName = inputMeta.Keys.First();
-
-        var tensor = new DenseTensor<float>(_features.AsMemory(), [1, 7]);
-
         using var inputOrtValue = OrtValue.CreateTensorValueFromMemory(
             OrtMemoryInfo.DefaultInstance, _features.AsMemory(), [1L, 7L]);
 
-        var inputs  = new Dictionary<string, OrtValue> { [inputName] = inputOrtValue };
-        var outputs = _session.Run(new RunOptions(), inputs, _session.OutputMetadata.Keys.ToList());
+        var inputs  = new Dictionary<string, OrtValue> { [_inputName!] = inputOrtValue };
+        var outputs = _session!.Run(new RunOptions(), inputs, [_outputName!]);
 
         try
         {

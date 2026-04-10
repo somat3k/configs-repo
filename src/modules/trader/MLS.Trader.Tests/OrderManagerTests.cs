@@ -7,7 +7,6 @@ using MLS.Trader.Orders;
 using MLS.Trader.Persistence;
 using MLS.Trader.Services;
 using Xunit;
-
 namespace MLS.Trader.Tests;
 
 /// <summary>Tests for <see cref="OrderManager"/>.</summary>
@@ -16,6 +15,7 @@ public sealed class OrderManagerTests
     private readonly DbContextOptions<TraderDbContext> _dbOpts;
     private readonly Mock<IDbContextFactory<TraderDbContext>> _factoryMock;
     private readonly Mock<IEnvelopeSender> _senderMock;
+    private readonly ModuleIdentity _identity;
 
     public OrderManagerTests()
     {
@@ -33,10 +33,12 @@ public sealed class OrderManagerTests
         _senderMock
             .Setup(s => s.SendEnvelopeAsync(It.IsAny<MLS.Core.Contracts.EnvelopePayload>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
+
+        _identity = new ModuleIdentity();
     }
 
     private OrderManager Create() =>
-        new(_factoryMock.Object, _senderMock.Object,
+        new(_factoryMock.Object, _senderMock.Object, _identity,
             NullLogger<OrderManager>.Instance);
 
     // ── CreateOrderAsync ──────────────────────────────────────────────────────

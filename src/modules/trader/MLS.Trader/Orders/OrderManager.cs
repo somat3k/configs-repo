@@ -18,9 +18,10 @@ namespace MLS.Trader.Orders;
 public sealed class OrderManager(
     IDbContextFactory<TraderDbContext> _dbFactory,
     IEnvelopeSender _sender,
+    ModuleIdentity _identity,
     ILogger<OrderManager> _logger) : IOrderManager
 {
-    private const string ModuleId = "trader";
+    private string ModuleId => _identity.Id.ToString();
 
     private readonly ConcurrentDictionary<string, TraderOrder> _cache = new();
 

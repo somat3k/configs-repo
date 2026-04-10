@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using MLS.Trader.Models;
+using Npgsql;
 
 namespace MLS.Trader.Persistence;
 
@@ -107,6 +108,5 @@ public sealed class TradeRepository(TraderDbContext _db)
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private static bool IsUniqueConstraint(DbUpdateException ex) =>
-        ex.InnerException?.Message.Contains("23505", StringComparison.Ordinal) == true ||
-        ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true;
+        ex.InnerException is PostgresException pg && pg.SqlState == "23505";
 }
