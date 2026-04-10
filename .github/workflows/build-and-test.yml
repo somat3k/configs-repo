@@ -1,0 +1,45 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "main", "copilot/**" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (net9.0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore NuGet packages
+        run: dotnet restore MLS.sln
+
+      - name: Build solution
+        run: dotnet build MLS.sln --no-restore --configuration Release
+
+      - name: Run tests (all modules)
+        run: |
+          dotnet test MLS.sln \
+            --no-build \
+            --configuration Release \
+            --logger "console;verbosity=normal" \
+            --results-directory TestResults \
+            -- xunit.parallelizeAssembly=false
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          retention-days: 7

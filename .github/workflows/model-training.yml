@@ -1,0 +1,121 @@
+name: MTF Classifier Training
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Comma-separated symbols to train on"
+        required: false
+        default: "BTC-USDT,ETH-USDT,ARB-USDT,SOL-USDT"
+        type: string
+      timeframes:
+        description: "Comma-separated timeframes"
+        required: false
+        default: "1m,5m,15m,1h,4h,1D"
+        type: string
+      epochs:
+        description: "Training epochs per model"
+        required: false
+        default: "100"
+        type: string
+      cycles:
+        description: "Number of evaluation+retrain cycles"
+        required: false
+        default: "1"
+        type: string
+      block_controller_url:
+        description: "Block Controller HTTP URL"
+        required: false
+        default: "http://localhost:5100"
+        type: string
+
+jobs:
+  train-mtf:
+    name: MTF Classifier Training (${{ inputs.symbols }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy scikit-learn joblib onnx
+
+      - name: Prepare MTF training config
+        run: |
+          cat > /tmp/mtf-config.json << 'EOF'
+          {
+            "job_id": "${{ github.run_id }}-mtf",
+            "model_type": "model-t",
+            "ensemble": true,
+            "mtf_symbols": "${{ inputs.symbols }}",
+            "mtf_timeframes": "${{ inputs.timeframes }}",
+            "hyperparams": {
+              "epochs": ${{ inputs.epochs }},
+              "batch_size": 256,
+              "learning_rate": 0.001,
+              "dropout_rate": 0.2,
+              "hidden_dims": [128, 64],
+              "fusion_dim": 64,
+              "weight_decay": 0.00001,
+              "early_stopping_patience": 20,
+              "n_classes": 3
+            },
+            "data_range": {
+              "from": "",
+              "to": ""
+            }
+          }
+          EOF
+
+      - name: Run MTF Classifier training
+        run: |
+          python src/modules/ml-runtime/scripts/training_pipeline.py \
+            --config /tmp/mtf-config.json \
+            --mtf-symbols "${{ inputs.symbols }}" \
+            --mtf-timeframes "${{ inputs.timeframes }}" \
+            | tee /tmp/mtf-training-log-${{ github.run_id }}.ndjson
+
+      - name: Build WorkflowRunner
+        run: |
+          dotnet restore src/workflow-runner/MLS.WorkflowRunner/MLS.WorkflowRunner.csproj
+          dotnet build src/workflow-runner/MLS.WorkflowRunner/MLS.WorkflowRunner.csproj \
+            --no-restore \
+            --configuration Release
+
+      - name: Run evaluation cycles
+        run: |
+          dotnet run \
+            --project src/workflow-runner/MLS.WorkflowRunner/MLS.WorkflowRunner.csproj \
+            --configuration Release \
+            -- \
+            --workflow src/workflow-runner/workflows/mtf-classifier-workflow.json \
+            --cycles ${{ inputs.cycles }} \
+            --bc-url ${{ inputs.block_controller_url }} \
+            --json-log /tmp/mtf-workflow-${{ github.run_id }}.ndjson
+        continue-on-error: true
+
+      - name: Upload training logs and artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mtf-training-${{ github.run_id }}
+          path: |
+            /tmp/mtf-training-log-${{ github.run_id }}.ndjson
+            /tmp/mtf-workflow-${{ github.run_id }}.ndjson
+            /tmp/mls_models/mtf/
+          retention-days: 30

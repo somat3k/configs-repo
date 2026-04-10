@@ -1,0 +1,43 @@
+{
+  "name": "defi-price-checks",
+  "cycles": 1,
+  "symbols": [
+    "BTC-USDT",
+    "ETH-USDT",
+    "ARB-USDT",
+    "SOL-USDT",
+    "LINK-USDT",
+    "AAVE-USDT"
+  ],
+  "timeframes": ["1m", "5m"],
+  "steps": [
+    "price-check",
+    "arbitrage-availability",
+    "defi-health-check"
+  ],
+  "block_controller_url": "http://localhost:5100",
+  "designer_url": "http://localhost:5250",
+  "data_layer_url": "http://localhost:5700",
+  "step_params": {
+    "price-check": {
+      "include_funding_rate": true,
+      "include_oracle_price": true
+    },
+    "arbitrage-availability": {
+      "min_spread_pct": 0.05,
+      "max_hop_depth": 4,
+      "venues": ["Camelot", "DFYN", "Balancer", "Hyperliquid"]
+    },
+    "defi-health-check": {
+      "min_health_factor": 1.2,
+      "protocols": ["Morpho", "Balancer"],
+      "alert_on_liquidation_risk": true
+    }
+  },
+  "retrain_gate": {
+    "min_accuracy": 0.65,
+    "min_f1": 0.60,
+    "max_epochs_no_improve": 20,
+    "retrain_interval_cycles": 5
+  }
+}

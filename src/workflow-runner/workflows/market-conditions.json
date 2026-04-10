@@ -1,0 +1,41 @@
+{
+  "name": "market-conditions",
+  "cycles": 1,
+  "symbols": [
+    "BTC-USDT",
+    "ETH-USDT",
+    "ARB-USDT",
+    "SOL-USDT"
+  ],
+  "timeframes": ["1m", "5m", "15m", "1h", "4h", "1D"],
+  "steps": [
+    "price-check",
+    "market-conditions",
+    "model-evaluation"
+  ],
+  "block_controller_url": "http://localhost:5100",
+  "designer_url": "http://localhost:5250",
+  "data_layer_url": "http://localhost:5700",
+  "step_params": {
+    "market-conditions": {
+      "rsi_period": 14,
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9,
+      "atr_period": 14,
+      "vwap_period": 20,
+      "emit_block_signals": true
+    },
+    "model-evaluation": {
+      "model_type": "model-t",
+      "min_confidence": 0.65,
+      "log_signal_distribution": true
+    }
+  },
+  "retrain_gate": {
+    "min_accuracy": 0.65,
+    "min_f1": 0.60,
+    "max_epochs_no_improve": 20,
+    "retrain_interval_cycles": 5
+  }
+}
