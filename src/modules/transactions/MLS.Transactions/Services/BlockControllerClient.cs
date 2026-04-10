@@ -1,0 +1,111 @@
+using System.Net.Http.Json;
+using MLS.Transactions.Configuration;
+using MLS.Transactions.Services;
+
+namespace MLS.Transactions.Services;
+
+/// <summary>
+/// Hosted background service that registers the Transactions module with Block Controller,
+/// sends <c>MODULE_HEARTBEAT</c> every 5 seconds, and deregisters on shutdown.
+/// </summary>
+public sealed class BlockControllerClient(
+    HttpClient _http,
+    ModuleIdentity _identity,
+    IOptions<TransactionsOptions> _options,
+    ILogger<BlockControllerClient> _logger) : BackgroundService
+{
+    private const string ModuleName = "transactions";
+
+    /// <inheritdoc/>
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        await RegisterAsync(ct).ConfigureAwait(false);
+
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+        {
+            if (_identity.Id == Guid.Empty)
+                await RegisterAsync(ct).ConfigureAwait(false);
+            else
+                await SendHeartbeatAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override async Task StopAsync(CancellationToken ct)
+    {
+        await base.StopAsync(ct).ConfigureAwait(false);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await DeregisterAsync(cts.Token).ConfigureAwait(false);
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────────
+
+    private async Task RegisterAsync(CancellationToken ct)
+    {
+        var opts = _options.Value;
+        var request = new
+        {
+            module_name   = ModuleName,
+            endpoint_http = opts.HttpEndpoint,
+            endpoint_ws   = opts.WsEndpoint,
+            capabilities  = new[] { "tx-lifecycle", "tx-confirmation", "tx-monitoring" },
+            version       = "1.0.0",
+        };
+
+        try
+        {
+            var response = await _http.PostAsJsonAsync("/api/modules/register", request, ct).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+
+            var reg = await response.Content.ReadFromJsonAsync<RegistrationResponse>(ct).ConfigureAwait(false);
+            if (reg is not null)
+            {
+                _identity.Id = reg.ModuleId;
+                _logger.LogInformation("Transactions module registered with Block Controller as {Id}", _identity.Id);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not register with Block Controller — will retry on next tick");
+        }
+    }
+
+    private async Task SendHeartbeatAsync(CancellationToken ct)
+    {
+        if (_identity.Id == Guid.Empty) return;
+
+        try
+        {
+            var response = await _http.PatchAsJsonAsync($"/api/modules/{_identity.Id}/heartbeat", new { }, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                _logger.LogWarning("Heartbeat returned {Status}", response.StatusCode);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to send heartbeat to Block Controller");
+        }
+    }
+
+    private async Task DeregisterAsync(CancellationToken ct)
+    {
+        if (_identity.Id == Guid.Empty) return;
+
+        try
+        {
+            await _http.DeleteAsync($"/api/modules/{_identity.Id}", ct).ConfigureAwait(false);
+            _logger.LogInformation("Transactions module deregistered from Block Controller");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to deregister from Block Controller");
+        }
+    }
+
+    private sealed class RegistrationResponse
+    {
+        public Guid ModuleId { get; init; }
+    }
+}
