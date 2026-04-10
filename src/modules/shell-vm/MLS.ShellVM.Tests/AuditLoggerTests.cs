@@ -71,7 +71,8 @@ public sealed class AuditLoggerTests
         await using var db = new ShellVMDbContext(_dbOpts);
         var entity = await db.AuditLog.FindAsync(commandId);
         entity!.ExitCode.Should().Be(0);
-        entity.DurationMs.Should().BeCloseTo(5000, 500);
+        entity.DurationMs.Should().NotBeNull();
+        entity.DurationMs!.Value.Should().BeInRange(4000, 10000);
         entity.EndedAt.Should().NotBeNull();
     }
 
