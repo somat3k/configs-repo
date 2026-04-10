@@ -1,0 +1,25 @@
+using System.Text.RegularExpressions;
+
+namespace MLS.DeFi;
+
+/// <summary>
+/// Shared sanitisation helpers used in log messages to prevent log-forging attacks.
+/// </summary>
+internal static partial class DeFiUtils
+{
+    // Allow alphanumeric, hyphen, underscore, dot, colon — covers addresses, symbols, txHash formats.
+    [GeneratedRegex(@"[^A-Za-z0-9\-_.:x]", RegexOptions.Compiled)]
+    private static partial Regex SafeIdRegex();
+
+    /// <summary>
+    /// Sanitises any user-controlled identifier before embedding it in a log message.
+    /// Strips all characters except alphanumerics, hyphen, underscore, dot, colon, and 'x';
+    /// truncates to 128 characters.
+    /// </summary>
+    internal static string SafeLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var truncated = value.Length > 128 ? value[..128] : value;
+        return SafeIdRegex().Replace(truncated, "_");
+    }
+}
