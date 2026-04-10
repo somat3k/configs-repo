@@ -45,12 +45,18 @@ public sealed class ArrayBuilder(
                 routerAddress = await _addressBook.GetRouterAddressAsync(routerKey, ct)
                                                   .ConfigureAwait(false);
             }
-            catch (KeyNotFoundException)
+            catch (KeyNotFoundException ex)
             {
-                _logger.LogWarning(
-                    "ArrayBuilder: no router address for exchange '{Exchange}' — using zero address.",
-                    hop.Exchange);
-                routerAddress = "0x0000000000000000000000000000000000000000";
+                _logger.LogError(
+                    ex,
+                    "ArrayBuilder: required router address for exchange '{Exchange}' (router key '{RouterKey}') was not found. Dropping transaction array build.",
+                    hop.Exchange,
+                    routerKey);
+
+                throw new InvalidOperationException(
+                    $"Missing router address for exchange '{hop.Exchange}' (router key '{routerKey}'). " +
+                    "Ensure the blockchain_addresses table contains this address on chain_id 42161.",
+                    ex);
             }
 
             var estimatedOut = amountIn * hop.Price * (1m - hop.Fee);

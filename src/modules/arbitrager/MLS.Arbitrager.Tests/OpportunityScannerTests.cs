@@ -84,35 +84,45 @@ public sealed class OpportunityScannerTests
         prices.Should().HaveCount(3);
     }
 
-    // ── Opportunity emission ──────────────────────────────────────────────────
+    // ── Opportunity emission via RunScan ─────────────────────────────────────
 
     [Fact]
     public void PublishPrice_DoesNotEmitWhenSinglePriceOnly()
     {
-        // With only one price snapshot there can be no circular path
+        // PublishPrice no longer triggers BFS — RunScan must be called explicitly.
+        // With only one price snapshot, RunScan still cannot find a circular path.
         var scanner = CreateScanner(minProfit: 0.001m);
         scanner.PublishPrice(Snap("camelot", "WETH/USDC", 2_000m));
+        scanner.RunScan();
         scanner.Opportunities.TryRead(out _).Should().BeFalse();
     }
 
     [Fact]
-    public void PublishPrice_EmitsOpportunityWhenProfitableCycleExists()
+    public void RunScan_DoesNotCrashWithEmptyPriceGraph()
     {
-        // Create an artificial triangle: WETH→USDC on camelot (high), USDC→ARB on dfyn,
-        // ARB→WETH on balancer — crafted so the cycle returns > input.
+        var scanner = CreateScanner();
+        // Should complete without throwing even if no prices are published
+        var act = () => scanner.RunScan();
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void RunScan_ProcessesPricesPublishedBeforeCall()
+    {
+        // Create an artificial triangle: WETH→USDC on camelot, USDC→ARB on dfyn,
+        // ARB→WETH on balancer — verify RunScan reads updated graph.
         var scanner = CreateScanner(minProfit: 0.001m, inputAmount: 1_000m);
 
-        // WETH→USDC: price = 2010 (selling WETH for USDC at premium)
         scanner.PublishPrice(Snap("camelot", "WETH/USDC", 2_010m));
-        // USDC→ARB: price = 1.3 (buying ARB cheaply)
         scanner.PublishPrice(Snap("dfyn",    "USDC/ARB",  1.3m));
-        // ARB→WETH: price = 0.00078 (selling ARB for WETH at slight premium)
         scanner.PublishPrice(Snap("balancer","ARB/WETH",  0.00078m));
 
-        // At minimum, the scanner shouldn't crash; may or may not find a cycle
-        // depending on price ratios — just verify the method is callable.
-        // (Real arbitrage requires very specific price relationships.)
-        var _ = scanner.GetCurrentPrices();
+        // Verify that RunScan runs without throwing regardless of whether a profitable cycle exists.
+        var act = () => scanner.RunScan();
+        act.Should().NotThrow();
+
+        // Price graph must be intact after the scan.
+        scanner.GetCurrentPrices().Should().HaveCount(3);
     }
 
     // ── Channel capacity ──────────────────────────────────────────────────────

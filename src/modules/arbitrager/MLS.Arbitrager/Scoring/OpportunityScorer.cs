@@ -97,7 +97,11 @@ public sealed class OpportunityScorer : IOpportunityScorer, IDisposable
             using var results = _session!.Run(inputs);
             var output = results[0].AsEnumerable<float>().ToArray();
             // output shape [1,2]: [P(reject), P(accept)]
-            return output.Length >= 2 ? output[1] : output[0];
+            if (output.Length >= 2) return output[1];
+            if (output.Length == 1) return output[0];
+
+            _logger.LogWarning("OpportunityScorer: ONNX inference returned an empty output tensor — falling back to rule-based score.");
+            return ScoreWithRules(o);
         }
         catch (Exception ex)
         {

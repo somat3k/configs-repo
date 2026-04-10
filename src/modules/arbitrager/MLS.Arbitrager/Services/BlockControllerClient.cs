@@ -38,7 +38,10 @@ public sealed class BlockControllerClient(
     public override async Task StopAsync(CancellationToken ct)
     {
         await base.StopAsync(ct).ConfigureAwait(false);
-        await DeregisterAsync(CancellationToken.None).ConfigureAwait(false);
+
+        // Use a short bounded timeout so shutdown is never blocked by an unreachable controller.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        await DeregisterAsync(cts.Token).ConfigureAwait(false);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

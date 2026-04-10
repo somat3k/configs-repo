@@ -111,7 +111,7 @@ public sealed class ArrayBuilderTests
     }
 
     [Fact]
-    public async Task BuildAsync_UsesZeroAddressWhenKeyNotFound()
+    public async Task BuildAsync_ThrowsInvalidOperationWhenRouterAddressMissing()
     {
         var mock = new Mock<IArbitragerAddressBook>();
         mock.Setup(m => m.GetRouterAddressAsync(It.IsAny<BlockchainAddress>(), It.IsAny<CancellationToken>()))
@@ -120,10 +120,10 @@ public sealed class ArrayBuilderTests
         var builder = new ArrayBuilder(mock.Object, NullLogger<ArrayBuilder>.Instance);
         var opp     = MakeOpportunity();
 
-        var array = await builder.BuildAsync(opp, CancellationToken.None);
-
-        array.Steps.All(s => s.RouterAddress == "0x0000000000000000000000000000000000000000")
-             .Should().BeTrue();
+        // Missing router address should throw InvalidOperationException (not silently use zero address)
+        await builder.Invoking(b => b.BuildAsync(opp, CancellationToken.None).AsTask())
+                     .Should().ThrowAsync<InvalidOperationException>()
+                     .WithMessage("*Missing router address*");
     }
 
     [Fact]

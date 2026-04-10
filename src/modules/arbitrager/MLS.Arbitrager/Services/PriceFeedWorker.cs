@@ -6,13 +6,20 @@ namespace MLS.Arbitrager.Services;
 
 /// <summary>
 /// Background service that polls price feeds from Hyperliquid REST API and
-/// a lightweight Camelot/DFYN/Balancer price estimate endpoint, then publishes
-/// <see cref="PriceSnapshot"/> ticks to <see cref="IOpportunityScanner"/>.
+/// publishes <see cref="PriceSnapshot"/> ticks to <see cref="IOpportunityScanner"/>.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Hyperliquid's <c>allMids</c> endpoint returns coins <em>without</em> a leading <c>W</c>
+/// (e.g. <c>ETH</c>, <c>BTC</c>). <see cref="ToHyperliquidCoin"/> strips the prefix so lookups work.
+/// </para>
+/// <para>
+/// Cross-rate pairs (e.g. <c>WETH/ARB</c>) are computed as
+/// <c>mid_WETH_USD / mid_ARB_USD</c> rather than reusing a single base-token price.
+/// </para>
+/// <para>
 /// Production: replace HTTP polling with WebSocket subscriptions from each exchange adapter.
-/// The module architecture is designed so <see cref="IOpportunityScanner.PublishPrice"/>
-/// can be called from any number of concurrent feed workers.
+/// </para>
 /// </remarks>
 public sealed class PriceFeedWorker(
     IOpportunityScanner _scanner,
@@ -31,7 +38,22 @@ public sealed class PriceFeedWorker(
         ("RDNT", "USDC"),
     ];
 
-    private static readonly string[] Exchanges = ["hyperliquid", "camelot", "dfyn", "balancer"];
+    // Bid-ask half-spread assumed for Hyperliquid (CEX — tightest spread)
+    private const decimal HyperliquidHalfSpread = 0.0005m;
+
+    // Default liquidity estimate for Hyperliquid in USD (conservative)
+    private const decimal DefaultHyperliquidLiquidityUsd = 100_000m;
+
+    // Synthetic DEX liquidity estimates per exchange (USD)
+    private const decimal CamelotLiquidityUsd  = 50_000m;
+    private const decimal DfynLiquidityUsd     = 30_000m;
+    private const decimal BalancerLiquidityUsd = 80_000m;
+
+    // Synthetic DEX price offsets relative to reference mid-price
+    private const decimal CamelotMidPremium   = 0.001m;   // +0.10%
+    private const decimal DfynMidDiscount     = 0.0005m;  // −0.05%
+    private const decimal BalancerMidPremium  = 0.0008m;  // +0.08%
+    private const decimal SyntheticSpread     = 0.0004m;  // ±0.04% half-spread
 
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -57,7 +79,6 @@ public sealed class PriceFeedWorker(
 
     private async Task PollPricesAsync(ArbitragerOptions opts, CancellationToken ct)
     {
-        // Poll Hyperliquid REST (allMids endpoint returns all mid prices)
         var hlPrices = await FetchHyperliquidPricesAsync(opts.HyperliquidRestUrl, ct)
                            .ConfigureAwait(false);
 
@@ -65,60 +86,78 @@ public sealed class PriceFeedWorker(
 
         foreach (var (baseToken, quoteToken) in WatchedPairs)
         {
+            // Derive Hyperliquid coin identifiers (strip leading 'W', upper-case)
+            var baseCoin  = ToHyperliquidCoin(baseToken);
+            var quoteCoin = ToHyperliquidCoin(quoteToken);
+
+            if (!hlPrices.TryGetValue(baseCoin, out var baseMidUsd) || baseMidUsd <= 0)
+                continue;
+
+            // Compute the correct cross-rate:
+            // If quote is USDC the USD price IS the cross-rate.
+            // For non-USD quotes compute baseMidUsd / quoteMidUsd.
+            decimal crossMid;
+            if (string.Equals(quoteToken, "USDC", StringComparison.OrdinalIgnoreCase))
+            {
+                crossMid = baseMidUsd;
+            }
+            else
+            {
+                if (!hlPrices.TryGetValue(quoteCoin, out var quoteMidUsd) || quoteMidUsd <= 0)
+                    continue;
+                crossMid = baseMidUsd / quoteMidUsd;
+            }
+
             var symbol = $"{baseToken}/{quoteToken}";
 
             // Publish Hyperliquid price (CEX — tightest spread)
-            if (hlPrices.TryGetValue(baseToken, out var hlMid) && hlMid > 0)
-            {
-                _scanner.PublishPrice(new PriceSnapshot(
-                    Exchange:     "hyperliquid",
-                    Symbol:       symbol,
-                    BidPrice:     hlMid * 0.9995m,
-                    AskPrice:     hlMid * 1.0005m,
-                    MidPrice:     hlMid,
-                    LiquidityUsd: 100_000m,  // default liquidity estimate
-                    Timestamp:    now));
-            }
+            _scanner.PublishPrice(new PriceSnapshot(
+                Exchange:     "hyperliquid",
+                Symbol:       symbol,
+                BidPrice:     crossMid * (1m - HyperliquidHalfSpread),
+                AskPrice:     crossMid * (1m + HyperliquidHalfSpread),
+                MidPrice:     crossMid,
+                LiquidityUsd: DefaultHyperliquidLiquidityUsd,
+                Timestamp:    now));
 
-            // For DEX exchanges: use Hyperliquid mid ± synthetic spread to simulate DEX pricing.
-            // In production each exchange adapter would call its own price source.
-            if (hlPrices.TryGetValue(baseToken, out var refPrice) && refPrice > 0)
-            {
-                PublishSyntheticDexPrices(symbol, refPrice, now);
-            }
+            // Publish synthetic DEX prices computed from the same reference cross-rate
+            PublishSyntheticDexPrices(symbol, crossMid, now);
         }
     }
 
     private void PublishSyntheticDexPrices(string symbol, decimal refPrice, DateTimeOffset now)
     {
         // Camelot: slight premium (0.1%)
+        var camelotMid = refPrice * (1m + CamelotMidPremium);
         _scanner.PublishPrice(new PriceSnapshot(
             Exchange:     "camelot",
             Symbol:       symbol,
-            BidPrice:     refPrice * 1.0008m,
-            AskPrice:     refPrice * 1.0012m,
-            MidPrice:     refPrice * 1.001m,
-            LiquidityUsd: 50_000m,
+            BidPrice:     camelotMid * (1m - SyntheticSpread),
+            AskPrice:     camelotMid * (1m + SyntheticSpread),
+            MidPrice:     camelotMid,
+            LiquidityUsd: CamelotLiquidityUsd,
             Timestamp:    now));
 
         // DFYN: slight discount (0.05%)
+        var dfynMid = refPrice * (1m - DfynMidDiscount);
         _scanner.PublishPrice(new PriceSnapshot(
             Exchange:     "dfyn",
             Symbol:       symbol,
-            BidPrice:     refPrice * 0.9993m,
-            AskPrice:     refPrice * 0.9997m,
-            MidPrice:     refPrice * 0.9995m,
-            LiquidityUsd: 30_000m,
+            BidPrice:     dfynMid * (1m - SyntheticSpread),
+            AskPrice:     dfynMid * (1m + SyntheticSpread),
+            MidPrice:     dfynMid,
+            LiquidityUsd: DfynLiquidityUsd,
             Timestamp:    now));
 
         // Balancer: weighted pool, slight premium (0.08%)
+        var balancerMid = refPrice * (1m + BalancerMidPremium);
         _scanner.PublishPrice(new PriceSnapshot(
             Exchange:     "balancer",
             Symbol:       symbol,
-            BidPrice:     refPrice * 1.0006m,
-            AskPrice:     refPrice * 1.001m,
-            MidPrice:     refPrice * 1.0008m,
-            LiquidityUsd: 80_000m,
+            BidPrice:     balancerMid * (1m - SyntheticSpread),
+            AskPrice:     balancerMid * (1m + SyntheticSpread),
+            MidPrice:     balancerMid,
+            LiquidityUsd: BalancerLiquidityUsd,
             Timestamp:    now));
     }
 
@@ -168,4 +207,19 @@ public sealed class PriceFeedWorker(
 
         return result;
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Converts a MLS token symbol to the Hyperliquid coin ID.
+    /// Hyperliquid uses bare coin names without a leading <c>W</c>
+    /// (e.g. <c>WETH</c> → <c>ETH</c>, <c>WBTC</c> → <c>BTC</c>, <c>USDC</c> → <c>USDC</c>).
+    /// </summary>
+    private static string ToHyperliquidCoin(string token) =>
+        token.ToUpperInvariant() switch
+        {
+            "WETH" => "ETH",
+            "WBTC" => "BTC",
+            _      => token.ToUpperInvariant(),
+        };
 }

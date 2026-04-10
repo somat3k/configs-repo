@@ -13,6 +13,7 @@ namespace MLS.Arbitrager.Controllers;
 public sealed class ArbitrageController(
     IOpportunityScanner _scanner,
     IArbitragerAddressBook _addressBook,
+    IWebHostEnvironment _env,
     ILogger<ArbitrageController> _logger) : ControllerBase
 {
     /// <summary>
@@ -23,11 +24,15 @@ public sealed class ArbitrageController(
         => Ok(_scanner.GetCurrentPrices());
 
     /// <summary>
-    /// POST /api/arbitrage/prices — inject a price snapshot into the scanner (for testing).
+    /// POST /api/arbitrage/prices — inject a price snapshot into the scanner (Development only).
+    /// Restricted to the Development environment to prevent production DoS and live price manipulation.
     /// </summary>
     [HttpPost("prices")]
     public IActionResult InjectPrice([FromBody] PriceSnapshot snapshot)
     {
+        if (!_env.IsDevelopment())
+            return StatusCode(403, new { error = "Price injection is only available in the Development environment." });
+
         _scanner.PublishPrice(snapshot);
         _logger.LogInformation("ArbitrageController: injected price for {Exchange}/{Symbol}",
             ArbitrageUtils.SanitiseId(snapshot.Exchange),

@@ -40,8 +40,11 @@ builder.Services.AddSingleton<IArrayBuilder, ArrayBuilder>();
 builder.Services.AddSingleton<IArbitrageExecutor, ArbitrageExecutor>();
 
 // ── Hosted services ───────────────────────────────────────────────────────────
-builder.Services.AddHostedService<BlockControllerClient>();
+// Resolve BlockControllerClient from DI so it gets the typed-client HttpClient
+// (BaseAddress + Timeout) configured above via AddHttpClient<BlockControllerClient>.
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BlockControllerClient>());
 builder.Services.AddHostedService<AddressBookStartupService>();
+builder.Services.AddHostedService<ScannerWorker>();
 builder.Services.AddHostedService<PriceFeedWorker>();
 builder.Services.AddHostedService<ExecutorPipeline>();
 

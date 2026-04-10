@@ -14,8 +14,10 @@ namespace MLS.Arbitrager.Scanning;
 /// Supported exchanges: Camelot, DFYN, Balancer, Hyperliquid.
 /// </para>
 /// <para>
-/// Hot path (<see cref="PublishPrice"/>) is lock-free via <see cref="ConcurrentDictionary{TKey,TValue}"/>
-/// and writes to a bounded <see cref="Channel{T}"/> with <c>DropOldest</c> overflow.
+/// <see cref="PublishPrice"/> is allocation-free on the hot path — it updates
+/// <see cref="_prices"/> (lock-free <see cref="ConcurrentDictionary{TKey,TValue}"/>)
+/// and returns immediately. BFS runs on a dedicated periodic background worker
+/// (<c>ScannerWorker</c>) so the price-feed path is never blocked.
 /// </para>
 /// </remarks>
 public sealed class OpportunityScanner : IOpportunityScanner
@@ -24,7 +26,7 @@ public sealed class OpportunityScanner : IOpportunityScanner
     private static readonly IReadOnlyList<string> Tokens =
         ["WETH", "USDC", "ARB", "WBTC", "GMX", "RDNT"];
 
-    // ── Price graph: "exchange/tokenIn/tokenOut" → snapshot ──────────────────
+    // ── Price graph: "exchange/symbol" → snapshot ─────────────────────────────
     private readonly ConcurrentDictionary<string, PriceSnapshot> _prices = new();
 
     // ── Output channel ────────────────────────────────────────────────────────
@@ -57,30 +59,32 @@ public sealed class OpportunityScanner : IOpportunityScanner
     public IReadOnlyDictionary<string, PriceSnapshot> GetCurrentPrices() => _prices;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Hot path: updates the price dictionary only.
+    /// BFS is triggered by the <c>ScannerWorker</c> background service on a fixed interval.
+    /// </remarks>
     public void PublishPrice(PriceSnapshot snapshot)
     {
         var key = PriceKey(snapshot.Exchange, snapshot.Symbol);
         _prices[key] = snapshot;
+    }
 
-        // Decompose the symbol into tokenIn/tokenOut and update forward graph
-        var parts    = snapshot.Symbol.Split('/');
-        if (parts.Length != 2) return;
-
-        var tokenIn  = parts[0].ToUpperInvariant();
-        var tokenOut = parts[1].ToUpperInvariant();
-
-        if (!Tokens.Contains(tokenIn, StringComparer.OrdinalIgnoreCase) ||
-            !Tokens.Contains(tokenOut, StringComparer.OrdinalIgnoreCase))
-            return;
-
-        // After each price update: run BFS and emit opportunities
+    /// <summary>
+    /// Runs one full BFS scan over all supported start tokens and emits profitable opportunities.
+    /// Called by <c>ScannerWorker</c> on a periodic timer — not on the price-feed hot path.
+    /// </summary>
+    internal void RunScan()
+    {
         var opts = _options.Value;
-        var paths = FindPaths(tokenIn, opts.SimulatedInputAmountUsd, opts.MinProfitUsd);
 
-        foreach (var path in paths)
+        foreach (var startToken in Tokens)
         {
-            if (!_channel.Writer.TryWrite(path))
-                _logger.LogTrace("Opportunity channel full — oldest item dropped.");
+            var paths = FindPaths(startToken, opts.SimulatedInputAmountUsd, opts.MinProfitUsd);
+            foreach (var path in paths)
+            {
+                if (!_channel.Writer.TryWrite(path))
+                    _logger.LogTrace("Opportunity channel full — oldest item dropped.");
+            }
         }
     }
 
@@ -91,8 +95,7 @@ public sealed class OpportunityScanner : IOpportunityScanner
     private List<ArbitrageOpportunity> FindPaths(
         string startToken, decimal inputAmount, decimal minProfitUsd)
     {
-        // Build adjacency list from current price graph
-        // key: (tokenIn, tokenOut) → list of exchange edges
+        // Build adjacency list from current price snapshot (snapshot of concurrent dict)
         var adjacency = BuildAdjacency();
 
         var results = new List<ArbitrageOpportunity>();
@@ -131,27 +134,26 @@ public sealed class OpportunityScanner : IOpportunityScanner
             if (hops.Count >= 4) continue; // max 4 hops
 
             var key = token.ToUpperInvariant();
-            foreach (var kv in adjacency)
-            {
-                if (!string.Equals(kv.Key.TokenIn, key, StringComparison.OrdinalIgnoreCase))
-                    continue;
+            if (!adjacency.TryGetValue(key, out var outgoingEdges)) continue;
 
-                foreach (var edge in kv.Value)
+            foreach (var (toToken, edgeList) in outgoingEdges)
+            {
+                foreach (var edge in edgeList)
                 {
                     // Avoid re-visiting tokens (except cycling back to start)
                     if (hops.Count > 0 &&
-                        !string.Equals(edge.Exchange + kv.Key.TokenOut, startToken, StringComparison.OrdinalIgnoreCase) &&
-                        hops.Any(h => string.Equals(h.ToToken, kv.Key.TokenOut, StringComparison.OrdinalIgnoreCase)))
+                        !string.Equals(toToken, startToken, StringComparison.OrdinalIgnoreCase) &&
+                        hops.Any(h => string.Equals(h.ToToken, toToken, StringComparison.OrdinalIgnoreCase)))
                         continue;
 
                     var nextAmount = amount * edge.Price * (1m - edge.Fee);
                     var nextGas    = gas + edge.GasUsd;
                     var nextHops   = new List<ArbHopDetail>(hops)
                     {
-                        new(token, kv.Key.TokenOut, edge.Exchange, edge.Price, edge.Fee, edge.GasUsd)
+                        new(token, toToken, edge.Exchange, edge.Price, edge.Fee, edge.GasUsd)
                     };
 
-                    queue.Enqueue((kv.Key.TokenOut, nextHops, nextAmount, nextGas));
+                    queue.Enqueue((toToken, nextHops, nextAmount, nextGas));
                 }
             }
         }
@@ -161,9 +163,13 @@ public sealed class OpportunityScanner : IOpportunityScanner
         return results.Count > 3 ? results[..3] : results;
     }
 
-    private Dictionary<(string TokenIn, string TokenOut), List<EdgeInfo>> BuildAdjacency()
+    // ── Adjacency: tokenIn → { tokenOut → [EdgeInfo] } ───────────────────────
+    // O(outgoing edges) lookup instead of full dict iteration per dequeue step.
+
+    private Dictionary<string, Dictionary<string, List<EdgeInfo>>> BuildAdjacency()
     {
-        var adj = new Dictionary<(string, string), List<EdgeInfo>>(32);
+        var adj = new Dictionary<string, Dictionary<string, List<EdgeInfo>>>(
+            Tokens.Count, StringComparer.OrdinalIgnoreCase);
 
         foreach (var snapshot in _prices.Values)
         {
@@ -173,7 +179,10 @@ public sealed class OpportunityScanner : IOpportunityScanner
             var tIn  = parts[0].ToUpperInvariant();
             var tOut = parts[1].ToUpperInvariant();
 
-            // Estimate fee per exchange (standard LP fees)
+            if (!Tokens.Contains(tIn,  StringComparer.OrdinalIgnoreCase) ||
+                !Tokens.Contains(tOut, StringComparer.OrdinalIgnoreCase))
+                continue;
+
             var fee = snapshot.Exchange.ToLowerInvariant() switch
             {
                 "camelot"     => 0.003m,
@@ -183,41 +192,38 @@ public sealed class OpportunityScanner : IOpportunityScanner
                 _             => 0.003m,
             };
 
-            // Estimate gas cost per hop (Arbitrum is cheap; ~0.01-0.05 USD per swap)
             const decimal gasPerHopUsd = 0.03m;
 
-            var key  = (tIn, tOut);
-            if (!adj.TryGetValue(key, out var edges))
-            {
-                edges      = new List<EdgeInfo>(4);
-                adj[key]   = edges;
-            }
+            AddEdge(adj, tIn, tOut, new EdgeInfo(snapshot.Exchange, snapshot.MidPrice, fee, gasPerHopUsd));
 
-            var idx = edges.FindIndex(e =>
-                string.Equals(e.Exchange, snapshot.Exchange, StringComparison.OrdinalIgnoreCase));
-            var edge = new EdgeInfo(snapshot.Exchange, snapshot.MidPrice, fee, gasPerHopUsd);
-            if (idx >= 0) edges[idx] = edge;
-            else          edges.Add(edge);
-
-            // Also add the reverse direction (toToken → fromToken) using 1/price
+            // Reverse direction using 1/price
             if (snapshot.MidPrice > 0)
-            {
-                var revKey = (tOut, tIn);
-                if (!adj.TryGetValue(revKey, out var revEdges))
-                {
-                    revEdges      = new List<EdgeInfo>(4);
-                    adj[revKey]   = revEdges;
-                }
-
-                var revEdge = new EdgeInfo(snapshot.Exchange, 1m / snapshot.MidPrice, fee, gasPerHopUsd);
-                var revIdx  = revEdges.FindIndex(e =>
-                    string.Equals(e.Exchange, snapshot.Exchange, StringComparison.OrdinalIgnoreCase));
-                if (revIdx >= 0) revEdges[revIdx] = revEdge;
-                else             revEdges.Add(revEdge);
-            }
+                AddEdge(adj, tOut, tIn, new EdgeInfo(snapshot.Exchange, 1m / snapshot.MidPrice, fee, gasPerHopUsd));
         }
 
         return adj;
+    }
+
+    private static void AddEdge(
+        Dictionary<string, Dictionary<string, List<EdgeInfo>>> adj,
+        string from, string to, EdgeInfo edge)
+    {
+        if (!adj.TryGetValue(from, out var outgoing))
+        {
+            outgoing  = new Dictionary<string, List<EdgeInfo>>(StringComparer.OrdinalIgnoreCase);
+            adj[from] = outgoing;
+        }
+
+        if (!outgoing.TryGetValue(to, out var edgeList))
+        {
+            edgeList    = new List<EdgeInfo>(4);
+            outgoing[to] = edgeList;
+        }
+
+        var idx = edgeList.FindIndex(e =>
+            string.Equals(e.Exchange, edge.Exchange, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0) edgeList[idx] = edge;
+        else          edgeList.Add(edge);
     }
 
     private static string PriceKey(string exchange, string symbol) =>
