@@ -125,7 +125,7 @@ public sealed class OrderManager(
             await _sender.SendEnvelopeAsync(envelope, ct).ConfigureAwait(false);
         }
 
-        _logger.LogInformation("OrderManager: order {ClientOrderId} cancelled", clientOrderId);
+        _logger.LogInformation("OrderManager: order {ClientOrderId} cancelled", TraderUtils.SafeLog(clientOrderId));
     }
 
     /// <inheritdoc/>

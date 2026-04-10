@@ -76,7 +76,7 @@ public sealed class TraderController(
 
         await _orderManager.CancelOrderAsync(clientOrderId, ct).ConfigureAwait(false);
 
-        _logger.LogInformation("TraderController: order {ClientOrderId} cancelled via HTTP API", clientOrderId);
+        _logger.LogInformation("TraderController: order {ClientOrderId} cancelled via HTTP API", TraderUtils.SafeLog(clientOrderId));
         return Ok(new { message = "Order cancelled", client_order_id = clientOrderId });
     }
 }
