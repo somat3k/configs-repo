@@ -1,0 +1,25 @@
+{
+  "name": "block-registry-entries",
+  "cycles": 1,
+  "symbols": ["BTC-USDT"],
+  "timeframes": ["1m"],
+  "steps": [
+    "block-registry-check"
+  ],
+  "block_controller_url": "http://localhost:5100",
+  "designer_url": "http://localhost:5250",
+  "data_layer_url": "http://localhost:5700",
+  "step_params": {
+    "block-registry-check": {
+      "verify_instantiation": true,
+      "compare_filesystem": true,
+      "blocks_dir": "src/modules/designer/MLS.Designer/Blocks"
+    }
+  },
+  "retrain_gate": {
+    "min_accuracy": 0.65,
+    "min_f1": 0.60,
+    "max_epochs_no_improve": 20,
+    "retrain_interval_cycles": 5
+  }
+}

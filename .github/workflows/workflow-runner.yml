@@ -1,0 +1,89 @@
+name: Workflow Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_name:
+        description: "Workflow definition file (relative to src/workflow-runner/workflows/)"
+        required: true
+        default: "market-conditions.json"
+        type: choice
+        options:
+          - market-conditions.json
+          - defi-price-checks.json
+          - block-registry-entries.json
+          - mtf-classifier-workflow.json
+      cycles:
+        description: "Number of cycles to run (overrides definition file value)"
+        required: false
+        default: "1"
+        type: string
+      symbols:
+        description: "Comma-separated symbols to include (e.g. BTC-USDT,ETH-USDT)"
+        required: false
+        default: ""
+        type: string
+      timeframes:
+        description: "Comma-separated timeframes (e.g. 1m,5m,15m,1h)"
+        required: false
+        default: ""
+        type: string
+      block_controller_url:
+        description: "Block Controller HTTP URL"
+        required: false
+        default: "http://localhost:5100"
+        type: string
+
+jobs:
+  run-workflow:
+    name: Run MLS Workflow — ${{ inputs.workflow_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore NuGet packages
+        run: dotnet restore src/workflow-runner/MLS.WorkflowRunner/MLS.WorkflowRunner.csproj
+
+      - name: Build WorkflowRunner
+        run: |
+          dotnet build src/workflow-runner/MLS.WorkflowRunner/MLS.WorkflowRunner.csproj \
+            --no-restore \
+            --configuration Release
+
+      - name: Prepare workflow arguments
+        id: args
+        run: |
+          ARGS="--workflow src/workflow-runner/workflows/${{ inputs.workflow_name }}"
+          if [ -n "${{ inputs.cycles }}" ]; then
+            ARGS="$ARGS --cycles ${{ inputs.cycles }}"
+          fi
+          if [ -n "${{ inputs.block_controller_url }}" ]; then
+            ARGS="$ARGS --bc-url ${{ inputs.block_controller_url }}"
+          fi
+          echo "RUNNER_ARGS=$ARGS" >> $GITHUB_OUTPUT
+
+      - name: Run workflow
+        run: |
+          dotnet run \
+            --project src/workflow-runner/MLS.WorkflowRunner/MLS.WorkflowRunner.csproj \
+            --configuration Release \
+            -- ${{ steps.args.outputs.RUNNER_ARGS }} \
+            --json-log /tmp/workflow-run-${{ github.run_id }}.ndjson
+        env:
+          MLS_BC_URL: ${{ inputs.block_controller_url }}
+
+      - name: Upload NDJSON log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-log-${{ github.run_id }}
+          path: /tmp/workflow-run-${{ github.run_id }}.ndjson
+          retention-days: 14
