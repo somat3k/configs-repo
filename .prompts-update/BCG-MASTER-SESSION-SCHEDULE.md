@@ -2,7 +2,7 @@
 ## Production Program for Tensorification, Runtime Governance, and Module Evolution
 
 > **Document Class**: Program Governance — Level 0 (Foundation)  
-> **Version**: 1.0.0  
+> **Version**: 1.1.0  
 > **Status**: Active — First Iteration (Ultra High-Level)  
 > **Source**: BCG Program Mandate  
 > **Note**: This is the first, ultra high-level position document. Per-session detail documents will be added incrementally as the program progresses. Each subsequent document in `.prompts-update/` narrows focus to a single session, block, or module and drives concrete code changes.
@@ -655,13 +655,130 @@ No session is considered complete unless it produces:
 
 ---
 
+## 9. Hot-Reload Update Installation Rule
+
+> **Scope**: Platform-wide mandatory rule — applies to every module, every session, every release.  
+> **Related Session**: Session 11 (Live Runtime, Hot Refresh, and Session Joinability) — this rule operationalises that session's intent as a hard constraint on all update delivery paths.
+
+### 9.1 Principle
+
+The platform **must remain online and alive** during any update installation. Cold restarts of the full fabric are prohibited in production. Every update — code, configuration, model artifact, schema migration, or dependency change — must travel through the hot-reload path described in this rule.
+
+The hot-reload path is not optional and not a secondary concern. It is the primary installation mechanism from Session 11 onward and must be treated as a first-class engineering deliverable in every affected session.
+
+---
+
+### 9.2 Update Classes and Hot-Reload Paths
+
+| Update Class | Hot-Reload Path | Notes |
+|---|---|---|
+| Module binary / container image | rolling replacement via Block Controller drain signal | zero simultaneous loss of all replicas |
+| Configuration value | live config push via Block Controller envelope (`CONFIG_UPDATE`) | modules apply without restart; immutable-config modules receive graceful reload signal |
+| ONNX model artifact | `MODEL_RELOAD` envelope to ML Runtime; `InferenceWorker` swaps `ModelRegistry` entry atomically | old session stays alive until new session passes warm-up |
+| Schema migration (Postgres) | additive-only migrations applied before new binary cuts over; no column drops until two releases later | controlled by migration gate in CI |
+| Redis schema / key-space change | dual-read bridge period; old key-space retired only after all readers confirmed on new version | |
+| Feature / indicator definition | `FEATURE_SCHEMA_VERSION` increment broadcast; consumers re-subscribe on new version | backward-compatible for one version minimum |
+| Blockchain address / resource | runtime push to `AddressBook` via Block Controller; no hardcoded values | |
+| Python training script | staged to IPFS; `ML_SCRIPT_RELOAD` envelope; training jobs drain before cut-over | inference path unaffected |
+
+---
+
+### 9.3 Hot-Reload Instruction Sequence
+
+The following sequence is mandatory for every module-level update.
+
+```
+1. PREPARE
+   ├── build and validate new artifact (CI gate must pass)
+   ├── push artifact to staging registry or IPFS
+   └── emit HOT_RELOAD_STAGED envelope to Block Controller
+       payload: { module_id, artifact_ref, version, update_class, rollback_ref }
+
+2. DRAIN
+   ├── Block Controller sends DRAIN_REQUEST to target module
+   ├── module stops accepting new work (WebSocket hub rejects new streams)
+   ├── in-flight requests complete or time out (max drain window: 30 s)
+   └── module emits DRAIN_COMPLETE envelope
+
+3. WARM-UP (parallel — new instance starts while old is draining)
+   ├── new container / process starts alongside the running instance
+   ├── new instance registers with Block Controller as HOT_STANDBY
+   ├── new instance runs health check suite (HTTP /health + WS echo)
+   ├── new instance emits WARM_UP_READY envelope when all checks pass
+   └── Block Controller validates new instance heartbeat ≥ 3 consecutive OK pulses
+
+4. CUT-OVER
+   ├── Block Controller atomically switches routing table entry
+   ├── new instance transitions from HOT_STANDBY to ACTIVE
+   ├── old instance receives SHUTDOWN envelope (graceful 10 s window)
+   └── Block Controller emits HOT_RELOAD_COMPLETE broadcast to all modules
+
+5. VERIFY
+   ├── Block Controller monitors new instance for 60 s post cut-over
+   ├── health check failure within 60 s triggers automatic rollback (step 6)
+   └── on sustained health, Block Controller emits RELOAD_VERIFIED envelope
+
+6. ROLLBACK (automatic on verify failure — manual on any other trigger)
+   ├── Block Controller re-routes to rollback_ref artifact
+   ├── rollback instance starts as HOT_STANDBY and follows steps 3–5
+   ├── incident envelope ROLLBACK_TRIGGERED emitted with root cause payload
+   └── on-call runbook activated (see Section 5, doc 17: Failure Modes and Recovery)
+```
+
+---
+
+### 9.4 Constraints
+
+- **No total fabric restart in production.** A startup of the full Docker Compose stack or full Aspire AppHost is permitted only in development or disaster-recovery drills. It must never be the normal update path.
+- **Block Controller must survive any single-module hot-reload.** If the Block Controller itself requires a reload, a shadow standby instance must be promoted first using the same sequence.
+- **Heartbeat continuity is mandatory.** A module undergoing hot-reload must emit heartbeats from either the draining instance (steps 1–2) or the warming instance (step 3) at all times. A heartbeat gap exceeding 15 seconds triggers an automatic health alert.
+- **Atomic registry swap.** `ModelRegistry`, `BlockRegistry`, `AddressBook`, and routing tables must be updated using compare-and-swap or lock-protected swap — never a tear-down-and-rebuild that creates a window of unavailability.
+- **Rollback artifact is always pre-staged.** The `rollback_ref` in the `HOT_RELOAD_STAGED` envelope must point to the immediately previous validated artifact. Rollback must be possible within 60 seconds of a cut-over failure.
+- **Schema migrations are always forward-only at cut-over.** Destructive migrations (column drops, table renames) are forbidden during an active hot-reload window. They are applied in a subsequent release after the consuming code has been fully retired.
+- **All hot-reload events are observable.** Every envelope emitted in this sequence (STAGED, DRAIN_REQUEST, DRAIN_COMPLETE, WARM_UP_READY, HOT_RELOAD_COMPLETE, RELOAD_VERIFIED, ROLLBACK_TRIGGERED) must be ingested by the observability subsystem and must appear in the SLO dashboard.
+
+---
+
+### 9.5 Per-Session Compliance Gate
+
+Every session from Session 11 onward must include a **Hot-Reload Compliance Checklist** as part of its exit criteria:
+
+- [ ] all new or modified modules implement the DRAIN_REQUEST handler
+- [ ] all new configuration values are deliverable via `CONFIG_UPDATE` envelope without restart
+- [ ] all new model artifacts are deliverable via `MODEL_RELOAD` envelope
+- [ ] all new schema migrations are additive-only at the cut-over boundary
+- [ ] heartbeat emission is uninterrupted across the drain-warm-up-cut-over sequence
+- [ ] rollback path is tested in the session's QA drill
+- [ ] all six hot-reload envelopes are present in the observability trace for the session's integration test run
+
+---
+
+### 9.6 Message Types
+
+The following message types are registered in `MLS.Core.Constants.MessageTypes` for this rule:
+
+| Constant | Value | Direction |
+|---|---|---|
+| `HOT_RELOAD_STAGED` | `"HOT_RELOAD_STAGED"` | module → Block Controller |
+| `DRAIN_REQUEST` | `"DRAIN_REQUEST"` | Block Controller → module |
+| `DRAIN_COMPLETE` | `"DRAIN_COMPLETE"` | module → Block Controller |
+| `WARM_UP_READY` | `"WARM_UP_READY"` | new instance → Block Controller |
+| `HOT_RELOAD_COMPLETE` | `"HOT_RELOAD_COMPLETE"` | Block Controller → broadcast |
+| `RELOAD_VERIFIED` | `"RELOAD_VERIFIED"` | Block Controller → broadcast |
+| `ROLLBACK_TRIGGERED` | `"ROLLBACK_TRIGGERED"` | Block Controller → broadcast |
+| `CONFIG_UPDATE` | `"CONFIG_UPDATE"` | Block Controller → module |
+| `MODEL_RELOAD` | `"MODEL_RELOAD"` | Block Controller → ML Runtime |
+| `ML_SCRIPT_RELOAD` | `"ML_SCRIPT_RELOAD"` | Block Controller → ML Runtime |
+
+---
+
 ## 8. Document Registry for `.prompts-update/`
 
 This directory accumulates the living governance layer of the BCG program. Documents are added session by session. Each document drives a targeted, high-impact update to the project.
 
 | File | Session | Status |
 |------|---------|--------|
-| `BCG-MASTER-SESSION-SCHEDULE.md` | Program Level | ✅ Added |
+| `BCG-MASTER-SESSION-SCHEDULE.md` | Program Level | ✅ Active — v1.1.0 (Hot-Reload Rule added) |
 | `SESSION-01-GOVERNANCE-BASELINE.md` | Session 01 | ⏳ Pending |
 | `SESSION-02-BLOCK-CONTROLLER-GOVERNOR.md` | Session 02 | ⏳ Pending |
 | `SESSION-03-TENSOR-CONTRACT.md` | Session 03 | ⏳ Pending |
@@ -672,7 +789,7 @@ This directory accumulates the living governance layer of the BCG program. Docum
 | `SESSION-08-TENSOR-TRAINER-MODULE.md` | Session 08 | ⏳ Pending |
 | `SESSION-09-ML-RUNTIME-HYBRID.md` | Session 09 | ⏳ Pending |
 | `SESSION-10-STORAGE-STATE-DISCIPLINE.md` | Session 10 | ⏳ Pending |
-| `SESSION-11-LIVE-RUNTIME-HOT-REFRESH.md` | Session 11 | ⏳ Pending |
+| `SESSION-11-LIVE-RUNTIME-HOT-REFRESH.md` | Session 11 | ⏳ Pending — governed by Section 9 Hot-Reload Rule |
 | `SESSION-12-DYNAMIC-PORTS-DISCOVERY.md` | Session 12 | ⏳ Pending |
 | `SESSION-13-STREAMING-FABRIC.md` | Session 13 | ⏳ Pending |
 | `SESSION-14-SECURITY-TRUST-FABRIC.md` | Session 14 | ⏳ Pending |
