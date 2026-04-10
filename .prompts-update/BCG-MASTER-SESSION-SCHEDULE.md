@@ -655,12 +655,12 @@ No session is considered complete unless it produces:
 
 ---
 
-## 9. Hot-Reload Update Installation Rule
+## 8. Hot-Reload Update Installation Rule
 
 > **Scope**: Platform-wide mandatory rule — applies to every module, every session, every release.  
 > **Related Session**: Session 11 (Live Runtime, Hot Refresh, and Session Joinability) — this rule operationalises that session's intent as a hard constraint on all update delivery paths.
 
-### 9.1 Principle
+### 8.1 Principle
 
 The platform **must remain online and alive** during any update installation. Cold restarts of the full fabric are prohibited in production. Every update — code, configuration, model artifact, schema migration, or dependency change — must travel through the hot-reload path described in this rule.
 
@@ -668,7 +668,7 @@ The hot-reload path is not optional and not a secondary concern. It is the prima
 
 ---
 
-### 9.2 Update Classes and Hot-Reload Paths
+### 8.2 Update Classes and Hot-Reload Paths
 
 | Update Class | Hot-Reload Path | Notes |
 |---|---|---|
@@ -677,13 +677,13 @@ The hot-reload path is not optional and not a secondary concern. It is the prima
 | ONNX model artifact | `MODEL_RELOAD` envelope to ML Runtime; `InferenceWorker` swaps `ModelRegistry` entry atomically | old session stays alive until new session passes warm-up |
 | Schema migration (Postgres) | additive-only migrations applied before new binary cuts over; no column drops until two releases later | controlled by migration gate in CI |
 | Redis schema / key-space change | dual-read bridge period; old key-space retired only after all readers confirmed on new version | |
-| Feature / indicator definition | `FEATURE_SCHEMA_VERSION` increment broadcast; consumers re-subscribe on new version | backward-compatible for one version minimum |
+| Feature / indicator definition | live config push via Block Controller envelope (`CONFIG_UPDATE`) carrying `feature_schema_version`; consumers re-subscribe on version change | backward-compatible for one version minimum |
 | Blockchain address / resource | runtime push to `AddressBook` via Block Controller; no hardcoded values | |
 | Python training script | staged to IPFS; `ML_SCRIPT_RELOAD` envelope; training jobs drain before cut-over | inference path unaffected |
 
 ---
 
-### 9.3 Hot-Reload Instruction Sequence
+### 8.3 Hot-Reload Instruction Sequence
 
 The following sequence is mandatory for every module-level update.
 
@@ -710,7 +710,7 @@ The following sequence is mandatory for every module-level update.
 4. CUT-OVER
    ├── Block Controller atomically switches routing table entry
    ├── new instance transitions from HOT_STANDBY to ACTIVE
-   ├── old instance receives SHUTDOWN envelope (graceful 10 s window)
+   ├── old instance enters graceful shutdown under the existing Block Controller stop procedure (10 s window; no dedicated envelope type)
    └── Block Controller emits HOT_RELOAD_COMPLETE broadcast to all modules
 
 5. VERIFY
@@ -727,7 +727,7 @@ The following sequence is mandatory for every module-level update.
 
 ---
 
-### 9.4 Constraints
+### 8.4 Constraints
 
 - **No total fabric restart in production.** A startup of the full Docker Compose stack or full Aspire AppHost is permitted only in development or disaster-recovery drills. It must never be the normal update path.
 - **Block Controller must survive any single-module hot-reload.** If the Block Controller itself requires a reload, a shadow standby instance must be promoted first using the same sequence.
@@ -739,7 +739,7 @@ The following sequence is mandatory for every module-level update.
 
 ---
 
-### 9.5 Per-Session Compliance Gate
+### 8.5 Per-Session Compliance Gate
 
 Every session from Session 11 onward must include a **Hot-Reload Compliance Checklist** as part of its exit criteria:
 
@@ -749,13 +749,13 @@ Every session from Session 11 onward must include a **Hot-Reload Compliance Chec
 - [ ] all new schema migrations are additive-only at the cut-over boundary
 - [ ] heartbeat emission is uninterrupted across the drain-warm-up-cut-over sequence
 - [ ] rollback path is tested in the session's QA drill
-- [ ] all six hot-reload envelopes are present in the observability trace for the session's integration test run
+- [ ] all seven hot-reload envelopes are present in the observability trace for the session's integration test run
 
 ---
 
-### 9.6 Message Types
+### 8.6 Message Types
 
-The following message types are registered in `MLS.Core.Constants.MessageTypes` for this rule:
+The following message types must be registered in `MLS.Core.Constants.MessageTypes` (see `src/core/MLS.Core/Constants/MessageTypes.HotReload.cs`) before any session that depends on this rule is implemented:
 
 | Constant | Value | Direction |
 |---|---|---|
@@ -772,7 +772,7 @@ The following message types are registered in `MLS.Core.Constants.MessageTypes` 
 
 ---
 
-## 8. Document Registry for `.prompts-update/`
+## 9. Document Registry for `.prompts-update/`
 
 This directory accumulates the living governance layer of the BCG program. Documents are added session by session. Each document drives a targeted, high-impact update to the project.
 
@@ -789,7 +789,7 @@ This directory accumulates the living governance layer of the BCG program. Docum
 | `SESSION-08-TENSOR-TRAINER-MODULE.md` | Session 08 | ⏳ Pending |
 | `SESSION-09-ML-RUNTIME-HYBRID.md` | Session 09 | ⏳ Pending |
 | `SESSION-10-STORAGE-STATE-DISCIPLINE.md` | Session 10 | ⏳ Pending |
-| `SESSION-11-LIVE-RUNTIME-HOT-REFRESH.md` | Session 11 | ⏳ Pending — governed by Section 9 Hot-Reload Rule |
+| `SESSION-11-LIVE-RUNTIME-HOT-REFRESH.md` | Session 11 | ⏳ Pending — governed by Section 8 Hot-Reload Rule |
 | `SESSION-12-DYNAMIC-PORTS-DISCOVERY.md` | Session 12 | ⏳ Pending |
 | `SESSION-13-STREAMING-FABRIC.md` | Session 13 | ⏳ Pending |
 | `SESSION-14-SECURITY-TRUST-FABRIC.md` | Session 14 | ⏳ Pending |
