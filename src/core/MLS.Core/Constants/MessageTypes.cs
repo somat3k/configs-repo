@@ -44,6 +44,14 @@ public static partial class MessageTypes
     /// <summary>Shell session terminated notification.</summary>
     public const string ShellSessionTerminated = "SHELL_SESSION_TERMINATED";
 
+    // ── DeFi domain ─────────────────────────────────────────────────────────────
+    /// <summary>defi → all subscribers: DeFi strategy selected and executed.</summary>
+    public const string DeFiStrategyExecuted = "DEFI_STRATEGY_EXECUTED";
+    /// <summary>defi → all subscribers: on-chain transaction submitted.</summary>
+    public const string DeFiTxSubmitted = "DEFI_TX_SUBMITTED";
+    /// <summary>defi → all subscribers: on-chain transaction confirmed or reverted.</summary>
+    public const string DeFiTxStatus = "DEFI_TX_STATUS";
+
     // ── Broker / Order management ────────────────────────────────────────────────
     /// <summary>Trader or DeFi → broker: place a new order on a venue.</summary>
     public const string OrderCreate       = "ORDER_CREATE";
