@@ -274,3 +274,201 @@ services:
     labels:
       com.mls.module: "shell-vm"
       com.mls.role: "execution-console"
+
+  unique-id-generator:
+    image: ghcr.io/somat3k/mls-unique-id-generator:latest
+    build:
+      context: src/network-modules/unique-id-generator
+      dockerfile: Dockerfile
+    container_name: mls-unique-id-generator
+    restart: unless-stopped
+    ports:
+      - "5010:5010"
+      - "6010:6010"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5010
+      - MLS_MODULE=unique-id-generator
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "unique-id-generator"
+      com.mls.role: "infrastructure"
+
+  task-id-generator:
+    image: ghcr.io/somat3k/mls-task-id-generator:latest
+    build:
+      context: src/network-modules/task-id-generator
+      dockerfile: Dockerfile
+    container_name: mls-task-id-generator
+    restart: unless-stopped
+    ports:
+      - "5011:5011"
+      - "6011:6011"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5011
+      - MLS_MODULE=task-id-generator
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "task-id-generator"
+      com.mls.role: "infrastructure"
+
+  subscription-manager:
+    image: ghcr.io/somat3k/mls-subscription-manager:latest
+    build:
+      context: src/network-modules/subscription-manager
+      dockerfile: Dockerfile
+    container_name: mls-subscription-manager
+    restart: unless-stopped
+    ports:
+      - "5012:5012"
+      - "6012:6012"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5012
+      - MLS_MODULE=subscription-manager
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "subscription-manager"
+      com.mls.role: "infrastructure"
+
+  runtime:
+    image: ghcr.io/somat3k/mls-runtime:latest
+    build:
+      context: src/network-modules/runtime
+      dockerfile: Dockerfile
+    container_name: mls-runtime
+    restart: unless-stopped
+    ports:
+      - "5013:5013"
+      - "6013:6013"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5013
+      - MLS_MODULE=runtime
+      - MLS_BC_URL=http://block-controller:5100
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "runtime"
+      com.mls.role: "infrastructure"
+
+  virtual-machine:
+    image: ghcr.io/somat3k/mls-virtual-machine:latest
+    build:
+      context: src/network-modules/virtual-machine
+      dockerfile: Dockerfile
+    container_name: mls-virtual-machine
+    restart: unless-stopped
+    ports:
+      - "5014:5014"
+      - "6014:6014"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5014
+      - MLS_MODULE=virtual-machine
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5014/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "virtual-machine"
+      com.mls.role: "infrastructure"
+
+  container-registry:
+    image: ghcr.io/somat3k/mls-container-registry:latest
+    build:
+      context: src/network-modules/container-registry
+      dockerfile: Dockerfile
+    container_name: mls-container-registry
+    restart: unless-stopped
+    ports:
+      - "5015:5015"
+      - "6015:6015"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5015
+      - MLS_MODULE=container-registry
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5015/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "container-registry"
+      com.mls.role: "infrastructure"
+
+  network-mask:
+    image: ghcr.io/somat3k/mls-network-mask:latest
+    build:
+      context: src/network-modules/network-mask
+      dockerfile: Dockerfile
+    container_name: mls-network-mask
+    restart: unless-stopped
+    ports:
+      - "5016:5016"
+      - "6016:6016"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5016
+      - MLS_MODULE=network-mask
+      - MLS_BC_URL=http://block-controller:5100
+    networks:
+      - mls-network
+    depends_on:
+      - block-controller
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5016/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      com.mls.module: "network-mask"
+      com.mls.role: "infrastructure"
