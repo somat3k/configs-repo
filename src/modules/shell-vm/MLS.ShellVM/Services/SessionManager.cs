@@ -66,7 +66,8 @@ public sealed class SessionManager(
         var session = new ShellSession(block, PtyHandle: null, outputChannel);
         _sessions[block.Id] = session;
 
-        _logger.LogInformation("Session {Id} created (shell={Shell})", block.Id, block.Shell);
+        _logger.LogInformation("Session {Id} created (shell={Shell})",
+            block.Id, SanitiseForLog(block.Shell));
         return session;
     }
 
@@ -246,4 +247,13 @@ public sealed class SessionManager(
             _logger.LogWarning(ex, "Failed to remove session {Id} from Redis", sessionId);
         }
     }
+
+    /// <summary>
+    /// Strips CR/LF characters from a user-supplied string before it is written to a log sink,
+    /// preventing log-forging attacks.
+    /// </summary>
+    private static string SanitiseForLog(string? value) =>
+        (value ?? string.Empty)
+            .Replace('\r', '_')
+            .Replace('\n', '_');
 }

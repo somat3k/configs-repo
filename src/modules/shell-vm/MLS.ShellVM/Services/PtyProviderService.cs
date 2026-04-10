@@ -15,13 +15,25 @@ namespace MLS.ShellVM.Services;
 /// for script execution, diagnostics, and non-interactive commands.
 /// </remarks>
 public sealed class PtyProviderService(
+    IOptions<ShellVMConfig> _config,
     ILogger<PtyProviderService> _logger) : IPtyProvider, IDisposable
 {
     private readonly ConcurrentDictionary<int, Process> _processes = new();
 
+    /// <summary>Allow-listed executable values from configuration.</summary>
+    private IReadOnlySet<string> AllowedExecutables =>
+        new HashSet<string>(_config.Value.AllowedShells, StringComparer.Ordinal);
+
     /// <inheritdoc/>
     public Task<PtyHandle> SpawnAsync(PtySpawnOptions options, CancellationToken ct)
     {
+        // Defense-in-depth: validate the executable against the allow-list even though
+        // SessionManager already performs this check at session creation time.
+        if (!AllowedExecutables.Contains(options.Executable))
+            throw new InvalidOperationException(
+                $"Executable '{SanitiseForLog(options.Executable)}' is not in the allow-list. " +
+                "Refusing to spawn process.");
+
         var psi = new ProcessStartInfo
         {
             FileName               = options.Executable,
@@ -212,4 +224,8 @@ public sealed class PtyProviderService(
             // expected on shutdown
         }
     }
+
+    /// <summary>Strips CR/LF from a user-supplied string before it enters a log message or exception text.</summary>
+    private static string SanitiseForLog(string? value) =>
+        (value ?? string.Empty).Replace('\r', '_').Replace('\n', '_');
 }
