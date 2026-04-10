@@ -242,11 +242,9 @@ services:
 
   shell-vm:
     image: ghcr.io/somat3k/mls-shell-vm:latest
-    # build:
-    #   context: src/modules/shell-vm
-    #   dockerfile: Dockerfile
-    # Dockerfile will be added when the project is scaffolded.
-    # Until then, only the published image is used.
+    build:
+      context: src/modules/shell-vm
+      dockerfile: Dockerfile
     container_name: mls-shell-vm
     restart: unless-stopped
     ports:
@@ -260,6 +258,9 @@ services:
       - MLS_BC_URL=http://block-controller:5100
       - ConnectionStrings__Redis=redis:6379
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=mls_db;Username=mls_user;Password=${POSTGRES_PASSWORD}
+      - ShellVM__BlockControllerUrl=http://block-controller:5100
+      - ShellVM__RedisConnectionString=redis:6379
+      - ShellVM__PostgresConnectionString=Host=postgres;Port=5432;Database=mls_db;Username=mls_user;Password=${POSTGRES_PASSWORD}
     networks:
       - mls-network
     # Requires infra services: postgres, redis (start docker-compose.infra.yml first)
