@@ -39,10 +39,9 @@ public sealed class BlockControllerClient(
     {
         await base.StopAsync(ct).ConfigureAwait(false);
 
-        // Honour the 5-second deregistration window; don't block shutdown indefinitely.
-        using var deregistrationCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deregistrationCts.CancelAfter(TimeSpan.FromSeconds(5));
-
+        // Use an independent CTS so the 5-second budget is always honoured,
+        // even when `ct` is already cancelled by the host shutdown signal.
+        using var deregistrationCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await DeregisterAsync(deregistrationCts.Token).ConfigureAwait(false);
     }
 

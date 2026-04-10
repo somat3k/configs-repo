@@ -73,6 +73,10 @@ public sealed class FillNotificationService(
     {
         // Fetch current order state to compute running cumulative fill + VWAP.
         var current = await _orderTracker.GetAsync(fill.ClientOrderId, ct).ConfigureAwait(false);
+        if (current is null)
+            _logger.LogWarning(
+                "Received fill for unknown order {ClientOrderId} — order may not have been tracked",
+                BrokerUtils.SafeLog(fill.ClientOrderId));
 
         var priorFilled = current?.FilledQuantity ?? 0m;
         var cumulativeFilled = priorFilled + fill.FillQuantity;

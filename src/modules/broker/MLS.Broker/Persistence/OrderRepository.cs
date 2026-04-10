@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
 using MLS.Broker.Models;
+using Npgsql;
 
 namespace MLS.Broker.Persistence;
 
@@ -40,13 +41,7 @@ public sealed class OrderRepository(BrokerDbContext _db)
     /// (SQLSTATE 23505) or the in-memory provider equivalent.
     /// </summary>
     private static bool IsUniqueViolation(DbUpdateException ex)
-    {
-        // Npgsql surfaces unique violations as PostgresException with SqlState "23505".
-        var inner = ex.InnerException;
-        if (inner is null) return false;
-        return inner.GetType().Name == "PostgresException"
-               && (string?)inner.GetType().GetProperty("SqlState")?.GetValue(inner) == "23505";
-    }
+        => ex.InnerException is PostgresException pg && pg.SqlState == "23505";
 
     /// <summary>
     /// Applies a state/fill update to an existing order identified by

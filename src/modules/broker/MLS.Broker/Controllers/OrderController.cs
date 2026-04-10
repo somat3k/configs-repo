@@ -96,7 +96,7 @@ public sealed class OrderController(
         if (cancelResult.State == OrderState.Rejected)
         {
             _logger.LogWarning("Venue rejected cancel for {ClientOrderId}", BrokerUtils.SafeLog(clientOrderId));
-            return StatusCode(503, new { error = "Venue could not cancel the order — it may have already been filled" });
+            return Conflict(new { error = "Venue could not cancel the order — it may have already been filled" });
         }
 
         await _orderTracker.UpdateAsync(clientOrderId, OrderState.Cancelled, order.FilledQuantity, order.AveragePrice, ct)
