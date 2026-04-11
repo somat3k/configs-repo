@@ -24,6 +24,12 @@ builder.Services.AddSingleton<IModuleRegistry, InMemoryModuleRegistry>();
 builder.Services.AddSingleton<IMessageRouter, InMemoryMessageRouter>();
 builder.Services.AddSingleton<IStrategyRouter, StrategyRouter>();
 
+// ── Session 02 — Runtime Governor services ────────────────────────────────────
+builder.Services.AddSingleton<ICapabilityRegistry, InMemoryCapabilityRegistry>();
+builder.Services.AddSingleton<IModuleHealthTracker, ModuleHealthTracker>();
+builder.Services.AddSingleton<IRouteAdmissionService, RouteAdmissionService>();
+builder.Services.AddSingleton<IExecutionPolicyService, ExecutionPolicyService>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

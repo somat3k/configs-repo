@@ -11,6 +11,8 @@ namespace MLS.BlockController.Controllers;
 [Route("api/modules")]
 public sealed class ModulesController(
     IModuleRegistry _registry,
+    ICapabilityRegistry _capabilities,
+    IModuleHealthTracker _health,
     ILogger<ModulesController> _logger) : ControllerBase
 {
     /// <summary>Register a module and return its assigned registration record.</summary>
@@ -24,6 +26,13 @@ public sealed class ModulesController(
         CancellationToken ct)
     {
         var registration = await _registry.RegisterAsync(request, ct).ConfigureAwait(false);
+
+        // Session 02: store capability declaration and initialize health state
+        var capability = CapabilityRecord.FromRegistration(
+            registration.ModuleId, registration.ModuleName, registration.Capabilities);
+        await _capabilities.RegisterAsync(capability, ct).ConfigureAwait(false);
+        await _health.InitializeAsync(registration.ModuleId, registration.ModuleName, ct).ConfigureAwait(false);
+
         _logger.LogInformation("Module registered: {Name} ({Id})", registration.ModuleName, registration.ModuleId);
         return Ok(registration);
     }
@@ -35,6 +44,8 @@ public sealed class ModulesController(
     public async Task<IActionResult> DeregisterAsync(Guid moduleId, CancellationToken ct)
     {
         await _registry.DeregisterAsync(moduleId, ct).ConfigureAwait(false);
+        await _capabilities.EvictAsync(moduleId, ct).ConfigureAwait(false);
+        await _health.RemoveAsync(moduleId, ct).ConfigureAwait(false);
         return NoContent();
     }
 
@@ -61,7 +72,27 @@ public sealed class ModulesController(
             return NotFound(new { error = $"Module {moduleId} is not registered." });
 
         await _registry.UpdateHeartbeatAsync(moduleId, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+        await _health.RecordHeartbeatAsync(moduleId, ct).ConfigureAwait(false);
         _logger.LogDebug("Heartbeat from module {Id}", moduleId);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Transition a module to the Draining state. No new workloads will be routed to it.
+    /// </summary>
+    /// <response code="204">Module is now draining.</response>
+    /// <response code="404">Module not found.</response>
+    [HttpPost("{moduleId:guid}/drain")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DrainAsync(Guid moduleId, CancellationToken ct)
+    {
+        var existing = await _registry.GetByIdAsync(moduleId, ct).ConfigureAwait(false);
+        if (existing is null)
+            return NotFound(new { error = $"Module {moduleId} is not registered." });
+
+        await _health.TransitionStateAsync(moduleId, Models.ModuleHealthState.Draining,
+            reason: "operator drain request", ct).ConfigureAwait(false);
         return NoContent();
     }
 }
