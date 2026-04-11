@@ -21,6 +21,49 @@ public sealed record KernelDescriptor(
     string Version,
     string TensorCompatibilityProfile)
 {
+    /// <inheritdoc />
+    public bool Equals(KernelDescriptor? other)
+    {
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        if (other is null)
+        {
+            return false;
+        }
+
+        return string.Equals(OperationId, other.OperationId, StringComparison.Ordinal)
+               && string.Equals(InputContract, other.InputContract, StringComparison.Ordinal)
+               && string.Equals(OutputContract, other.OutputContract, StringComparison.Ordinal)
+               && StateClass == other.StateClass
+               && ExecutionModes.SequenceEqual(other.ExecutionModes)
+               && Equals(PerformanceBudget, other.PerformanceBudget)
+               && string.Equals(Version, other.Version, StringComparison.Ordinal)
+               && string.Equals(TensorCompatibilityProfile, other.TensorCompatibilityProfile, StringComparison.Ordinal);
+    }
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(OperationId, StringComparer.Ordinal);
+        hash.Add(InputContract, StringComparer.Ordinal);
+        hash.Add(OutputContract, StringComparer.Ordinal);
+        hash.Add(StateClass);
+
+        foreach (var mode in ExecutionModes)
+        {
+            hash.Add(mode);
+        }
+
+        hash.Add(PerformanceBudget);
+        hash.Add(Version, StringComparer.Ordinal);
+        hash.Add(TensorCompatibilityProfile, StringComparer.Ordinal);
+        return hash.ToHashCode();
+    }
+
     /// <summary>
     /// Creates a validated descriptor instance.
     /// </summary>

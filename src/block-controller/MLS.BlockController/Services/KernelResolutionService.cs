@@ -62,7 +62,7 @@ public sealed class KernelResolutionService(
         EmitLifecycleAsync(
             MessageTypes.KernelFaulted,
             request,
-            new KernelPlacementDecision(moduleId, lane, score: 0),
+            new KernelPlacementDecision(moduleId, lane, Score: 0),
             state: KernelState.Faulted.ToString(),
             reason,
             ct);
@@ -83,7 +83,7 @@ public sealed class KernelResolutionService(
         await EmitLifecycleAsync(
             MessageTypes.KernelDisposed,
             request,
-            new KernelPlacementDecision(resolved.ModuleId, resolved.Lane, score: 0),
+            new KernelPlacementDecision(resolved.ModuleId, resolved.Lane, Score: 0),
             state: KernelState.Disposing.ToString(),
             reason: null,
             ct).ConfigureAwait(false);
