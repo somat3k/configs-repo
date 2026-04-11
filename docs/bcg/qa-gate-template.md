@@ -126,13 +126,13 @@ Module version: {version}
 
 | Item | Requirement | Result | Evidence |
 |------|------------|--------|---------|
-| 3.1 Liveness probe | GET /health/live returns 200 | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
-| 3.2 Readiness probe | GET /health/ready returns 200 when ready, 503 when not | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
-| 3.3 Heartbeat active | Heartbeat sends to Block Controller every 5 seconds | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
-| 3.4 Structured logs | JSON-structured logs with trace ID, module ID, and log level | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
+| 3.1 Health endpoint | GET /health returns 200 (current standard: single endpoint) | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
+| 3.2 Health response body | Response includes `status` and `module` fields | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
+| 3.3 Heartbeat active | HTTP PATCH /api/modules/{moduleId}/heartbeat sent every 5 seconds; type constant: `MODULE_HEARTBEAT` | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
+| 3.4 Structured logs | JSON-structured logs with correlation ID (session_id from envelope), module ID, and log level | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
 | 3.5 Metrics emitted | p50/p95/p99 metrics emitted for all critical operations | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
-| 3.6 Trace ID propagated | Trace ID from envelope header propagated to all downstream calls | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
-| 3.7 Error telemetry | Errors logged with exception details, trace ID, and module context | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
+| 3.6 Trace context propagated | W3C trace context (Activity) propagated to downstream calls where available; envelope `session_id` used as correlation ID | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
+| 3.7 Error telemetry | Errors logged with exception details, correlation ID, and module context | [ ] Pass / [ ] Fail / [ ] Deferred | {evidence} |
 
 **Category 3 Result**: [ ] Pass / [ ] Fail
 **Notes**: {notes}

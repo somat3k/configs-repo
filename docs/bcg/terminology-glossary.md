@@ -84,7 +84,7 @@ The element data type of a tensor (e.g., float32, float16, int64, bool). Dtype i
 ## E
 
 **Envelope**
-The standard message wrapper used for all inter-module communication. An envelope carries: `block_id`, `block_sha`, `block_data`, `block_state`, `type`, `version`, `unique_id`, `task_id`, `session_id`, `module_id`, `module_network_address`, `module_network_port`, `timestamp`, and `payload`. No production message may travel unenvelope between modules.
+The standard message wrapper used for all inter-module WebSocket communication. The current `EnvelopePayload` contract carries: `type`, `version`, `session_id`, `module_id`, `timestamp`, and `payload`. `session_id` is a per-message UUID v4 correlation identifier (generated fresh by `Guid.NewGuid()` on each call to `EnvelopePayload.Create`), not a long-lived runtime session handle. No production message may travel unenveloped between modules.
 
 **Execution Intent**
 A declaration by an operator or scheduler about what computation a module should perform. Execution intents are routed by the Block Controller and may be queued, scheduled, or rejected based on capability, health, and policy.

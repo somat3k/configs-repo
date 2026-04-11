@@ -51,14 +51,14 @@ Every tensor in BCG that crosses a module boundary or participates in an advance
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | GUID | Yes | Unique identifier for this tensor instance |
-| `dtype` | TensorDtype enum | Yes | Element data type (float32, float16, float64, int32, int64, bool, string) |
+| `dtype` | TensorDtype enum | Yes | Element data type (float32, float16, bfloat16, float64, int32, int64, bool, string, uint8) |
 | `shape` | int[] | Yes | Dimension sizes in order (e.g., [1, 7]) |
 | `payload` | byte[] or null | Conditional | Inline binary payload for small/medium tensors |
 | `artifactRef` | string or null | Conditional | IPFS content-addressed reference for large tensors |
 | `originModuleId` | GUID | Yes | Module that created this tensor |
 | `originBlockId` | GUID or null | No | Block within the module that created this tensor |
 | `timestamp` | DateTimeOffset | Yes | UTC creation time |
-| `traceId` | string | Yes | Distributed trace identifier (propagated from envelope) |
+| `traceId` | string | Yes | Distributed trace identifier. Source: W3C `traceparent` header / .NET `Activity.Current.TraceId` where available. The current `EnvelopePayload` contract does not carry a trace field; until a formal envelope extension is defined (planned for Session 04), modules use the envelope `session_id` as a correlation ID and propagate W3C trace context via HTTP/SignalR headers independently. |
 | `tensorClass` | TensorClass enum | Yes | Classification of this tensor's purpose |
 | `tags` | string[] | No | Arbitrary labels for routing, filtering, and observability |
 | `lineage` | LineageMarker[] | No | Ordered list of transformations applied to this tensor |

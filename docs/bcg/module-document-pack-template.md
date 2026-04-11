@@ -183,13 +183,13 @@ E.g., model path, tensor threshold, batch size.}
 7. Signal readiness
 
 ## Health Model
-- Liveness: GET /health/live — returns 200 if process is alive
-- Readiness: GET /health/ready — returns 200 if all critical dependencies are reachable
-- Startup: GET /health/startup — returns 200 when startup sequence is complete
+- Health endpoint (current standard): `GET /health` — returns `{"status":"healthy","module":"{name}"}` if process is alive and dependencies are reachable
+- The split probe surface (`/health/live`, `/health/ready`, `/health/startup`) is the **planned future standard**; it will be introduced as a migration in a future session. Do not add it to new modules until the migration session defines the required behavior and rollout plan.
 
 ## Heartbeat
 - Interval: 5 seconds
-- Destination: Block Controller hub, type: HEARTBEAT
+- Mechanism: HTTP `PATCH /api/modules/{moduleId}/heartbeat` (current implementation)
+- Message type constant: `MessageTypes.ModuleHeartbeat` (`MODULE_HEARTBEAT`)
 - Missed threshold: 3 consecutive → Block Controller escalates module health state
 
 ## Shutdown and Drain

@@ -111,15 +111,14 @@ Every module must document its startup sequence:
 
 Every module must define:
 
-- liveness probe (path: `/health/live`) — is the process alive?
-- readiness probe (path: `/health/ready`) — is the module ready to accept traffic?
-- startup probe (path: `/health/startup`) — has startup completed?
+- health endpoint (path: `/health`) — current standard; all existing modules expose `GET /health` returning `{"status":"healthy","module":"{name}"}`. The split live/ready/startup probe surface (`/health/live`, `/health/ready`, `/health/startup`) is the **planned future standard** to be introduced as a breaking change in a future session with a defined migration timeline.
 - health escalation policy (what happens when the module fails to respond to the Block Controller within N missed heartbeats)
 - degraded state definition (the module is alive but not at full capacity)
 
 **Heartbeat discipline**:
 - heartbeat interval: 5 seconds
-- heartbeat endpoint: Block Controller hub, `ReceiveEnvelope` with type `HEARTBEAT`
+- heartbeat mechanism: HTTP `PATCH /api/modules/{moduleId}/heartbeat` (current implementation)
+- message type constant: `MessageTypes.ModuleHeartbeat` (`MODULE_HEARTBEAT`)
 - missed heartbeat threshold: 3 consecutive missed beats triggers health escalation
 
 ### 5.3 Routeability
