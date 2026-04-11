@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../MLS.Core/MLS.Core.csproj" />
+    <ProjectReference Include="../../block-controller/MLS.BlockController/MLS.BlockController.csproj" />
   </ItemGroup>
 </Project>

@@ -29,6 +29,9 @@ builder.Services.AddSingleton<ICapabilityRegistry, InMemoryCapabilityRegistry>()
 builder.Services.AddSingleton<IModuleHealthTracker, ModuleHealthTracker>();
 builder.Services.AddSingleton<IRouteAdmissionService, RouteAdmissionService>();
 builder.Services.AddSingleton<IExecutionPolicyService, ExecutionPolicyService>();
+builder.Services.AddSingleton<MLS.Core.Kernels.KernelRegistry>();
+builder.Services.AddSingleton<KernelScheduler>();
+builder.Services.AddSingleton<KernelResolutionService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
