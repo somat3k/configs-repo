@@ -148,7 +148,12 @@ service SessionService {
 
 // Request to begin watching events for a specific session.
 message SessionWatchRequest {
+  // Session identifier to watch.
   string session_id = 1;
+
+  // Operator initiating the watch request.
   string operator_id = 2;
+
+  // W3C traceparent-compatible trace identifier for this watch session.
   string trace_id = 3;
 }

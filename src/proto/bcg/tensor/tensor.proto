@@ -203,7 +203,7 @@ message TensorTransformRequest {
 // Result of a tensor transformation operation.
 message TensorTransformResponse {
   // Whether the transformation succeeded.
-  bool success = 2;
+  bool success = 1;
 
   // Error class if transformation failed.
   string error_class = 3;
