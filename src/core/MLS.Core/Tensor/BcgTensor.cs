@@ -18,6 +18,11 @@ namespace MLS.Core.Tensor;
 ///   <item><see cref="Meta"/>.<c>TraceId</c> must remain stable across a request/session lineage.</item>
 ///   <item><see cref="Meta"/>.<c>OriginModuleId</c> must be explicit for every production tensor.</item>
 /// </list>
+///
+/// Encoding convention for raw byte dtypes:
+/// When <see cref="Encoding"/> is <see cref="TensorEncoding.RawFloat32LE"/> or any other raw binary
+/// encoding, the bytes are represented as a base64-encoded JSON string inside <see cref="Data"/>.
+/// Consumers must base64-decode the string value before interpreting the bytes.
 /// </remarks>
 /// <param name="Id">Globally unique tensor identifier. Generated with <see cref="Guid.NewGuid"/>.</param>
 /// <param name="DType">Declared scalar or semantic data type.</param>
@@ -32,6 +37,8 @@ namespace MLS.Core.Tensor;
 /// <param name="Data">
 /// Inline data payload when <see cref="TransportClass"/> is <see cref="TensorTransportClass.Inline"/>.
 /// <see langword="null"/> when the payload is externalized — see <see cref="Persistence"/>.
+/// The <see cref="JsonElement"/> is always a self-contained clone; it is not tied to any
+/// particular <see cref="JsonDocument"/> lifetime.
 /// </param>
 /// <param name="Meta">Origin and context metadata.</param>
 /// <param name="Lineage">
@@ -56,7 +63,15 @@ public sealed record BcgTensor(
 {
     /// <summary>
     /// Creates a root (un-derived) inline tensor born at a block kernel or ingestion boundary.
+    /// The <paramref name="data"/> element is cloned so the tensor is safe to route and persist
+    /// beyond the lifetime of the caller's <see cref="JsonDocument"/>.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="originModuleId"/> is null or whitespace.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="shape"/> is null.
+    /// </exception>
     public static BcgTensor CreateRoot(
         TensorDType dtype,
         IReadOnlyList<int> shape,
@@ -70,8 +85,12 @@ public sealed record BcgTensor(
         Guid? originBlockId = null,
         Guid? sessionId = null,
         string? semanticTag = null,
-        double? confidenceScore = null) =>
-        new(
+        double? confidenceScore = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(originModuleId);
+        ArgumentNullException.ThrowIfNull(shape);
+
+        return new BcgTensor(
             Id: Guid.NewGuid(),
             DType: dtype,
             Shape: shape,
@@ -79,7 +98,7 @@ public sealed record BcgTensor(
             ShapeClass: shapeClass,
             TransportClass: TensorTransportClass.Inline,
             Encoding: encoding,
-            Data: data,
+            Data: data.Clone(),
             Meta: new TensorMeta(
                 OriginBlockId: originBlockId,
                 OriginModuleId: originModuleId,
@@ -93,9 +112,66 @@ public sealed record BcgTensor(
             Lineage: [],
             Persistence: null,
             Integrity: null);
+    }
 
     /// <summary>
-    /// Creates a derived tensor that inherits the trace ID and references the parent tensor in its lineage.
+    /// Creates a root reference tensor whose payload is externalized to a storage tier.
+    /// Use this when the payload exceeds the inline size threshold.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="originModuleId"/> is null or whitespace.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="shape"/> or <paramref name="persistence"/> is null.
+    /// </exception>
+    public static BcgTensor CreateReference(
+        TensorDType dtype,
+        IReadOnlyList<int> shape,
+        TensorLayout layout,
+        TensorShapeClass shapeClass,
+        TensorEncoding encoding,
+        string originModuleId,
+        Guid traceId,
+        TensorPersistenceRef persistence,
+        TensorIntegrity? integrity = null,
+        IReadOnlyList<string>? tags = null,
+        Guid? originBlockId = null,
+        Guid? sessionId = null,
+        string? semanticTag = null,
+        double? confidenceScore = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(originModuleId);
+        ArgumentNullException.ThrowIfNull(shape);
+        ArgumentNullException.ThrowIfNull(persistence);
+
+        return new BcgTensor(
+            Id: Guid.NewGuid(),
+            DType: dtype,
+            Shape: shape,
+            Layout: layout,
+            ShapeClass: shapeClass,
+            TransportClass: TensorTransportClass.Reference,
+            Encoding: encoding,
+            Data: null,
+            Meta: new TensorMeta(
+                OriginBlockId: originBlockId,
+                OriginModuleId: originModuleId,
+                TraceId: traceId,
+                SessionId: sessionId,
+                CreatedAt: DateTimeOffset.UtcNow,
+                Tags: tags ?? [],
+                ContractVersion: TensorMeta.CurrentContractVersion,
+                SemanticTag: semanticTag,
+                ConfidenceScore: confidenceScore),
+            Lineage: [],
+            Persistence: persistence,
+            Integrity: integrity);
+    }
+
+    /// <summary>
+    /// Creates an inline derived tensor that inherits the trace ID and appends a lineage step.
+    /// The <paramref name="data"/> element is cloned so the tensor is safe to route and persist
+    /// beyond the lifetime of the caller's <see cref="JsonDocument"/>.
     /// </summary>
     public BcgTensor Derive(
         TensorDType dtype,
@@ -109,6 +185,9 @@ public sealed record BcgTensor(
         string? semanticTag = null,
         double? confidenceScore = null)
     {
+        ArgumentNullException.ThrowIfNull(shape);
+        ArgumentNullException.ThrowIfNull(lineageStep);
+
         var newLineage = new List<TensorLineageRecord>(Lineage) { lineageStep };
         return new BcgTensor(
             Id: Guid.NewGuid(),
@@ -118,7 +197,7 @@ public sealed record BcgTensor(
             ShapeClass: shapeClass,
             TransportClass: TensorTransportClass.Inline,
             Encoding: encoding,
-            Data: data,
+            Data: data.Clone(),
             Meta: new TensorMeta(
                 OriginBlockId: lineageStep.ProducingBlockId,
                 OriginModuleId: lineageStep.ProducingModuleId,
@@ -134,7 +213,57 @@ public sealed record BcgTensor(
             Integrity: null);
     }
 
-    /// <summary>Returns the element count implied by <see cref="Shape"/> for dense tensors.</summary>
+    /// <summary>
+    /// Creates a reference-transport derived tensor. The payload is externalized; <see cref="Data"/> is null.
+    /// Use when a transformation produces a large output that must be stored before dispatch.
+    /// </summary>
+    public BcgTensor DeriveReference(
+        TensorDType dtype,
+        IReadOnlyList<int> shape,
+        TensorLayout layout,
+        TensorShapeClass shapeClass,
+        TensorEncoding encoding,
+        TensorLineageRecord lineageStep,
+        TensorPersistenceRef persistence,
+        TensorIntegrity? integrity = null,
+        IReadOnlyList<string>? tags = null,
+        string? semanticTag = null,
+        double? confidenceScore = null)
+    {
+        ArgumentNullException.ThrowIfNull(shape);
+        ArgumentNullException.ThrowIfNull(lineageStep);
+        ArgumentNullException.ThrowIfNull(persistence);
+
+        var newLineage = new List<TensorLineageRecord>(Lineage) { lineageStep };
+        return new BcgTensor(
+            Id: Guid.NewGuid(),
+            DType: dtype,
+            Shape: shape,
+            Layout: layout,
+            ShapeClass: shapeClass,
+            TransportClass: TensorTransportClass.Reference,
+            Encoding: encoding,
+            Data: null,
+            Meta: new TensorMeta(
+                OriginBlockId: lineageStep.ProducingBlockId,
+                OriginModuleId: lineageStep.ProducingModuleId,
+                TraceId: Meta.TraceId,
+                SessionId: Meta.SessionId,
+                CreatedAt: DateTimeOffset.UtcNow,
+                Tags: tags ?? Meta.Tags,
+                ContractVersion: TensorMeta.CurrentContractVersion,
+                SemanticTag: semanticTag ?? Meta.SemanticTag,
+                ConfidenceScore: confidenceScore),
+            Lineage: newLineage,
+            Persistence: persistence,
+            Integrity: integrity);
+    }
+
+    /// <summary>
+    /// Returns the element count implied by <see cref="Shape"/> for dense tensors,
+    /// or <c>-1</c> when the shape contains dynamic dimensions or the count is not
+    /// representable in a <see cref="long"/>.
+    /// </summary>
     [JsonIgnore]
     public long ElementCount
     {
@@ -142,12 +271,19 @@ public sealed record BcgTensor(
         {
             if (Shape.Count == 0) return 1L;
             long count = 1L;
-            foreach (var dim in Shape)
+            try
             {
-                if (dim < 0) return -1L; // dynamic dimension — unknown at inspection time
-                count *= dim;
+                foreach (var dim in Shape)
+                {
+                    if (dim < 0) return -1L; // dynamic dimension — unknown at inspection time
+                    count = checked(count * dim);
+                }
+                return count;
             }
-            return count;
+            catch (OverflowException)
+            {
+                return -1L; // element count exceeds the representable range for long
+            }
         }
     }
 

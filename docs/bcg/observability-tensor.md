@@ -46,7 +46,15 @@ Every tensor-critical envelope payload must carry the following telemetry fields
 ### 3.1 `TENSOR_ACCEPTED`
 Emitted by the Block Controller when a tensor passes validation and enters the routing fabric.
 
-**Payload fields**: `tensor_id`, `trace_id`, `producer_module_id`, `dtype`, `shape_summary`, `contract_version`
+**Payload**: `TensorAcceptedPayload`
+```csharp
+record TensorAcceptedPayload(
+    Guid TensorId, Guid TraceId,
+    string ProducerModuleId,
+    TensorDType DType, string ShapeSummary,
+    int ContractVersion,
+    TensorLayout Layout, TensorTransportClass TransportClass);
+```
 
 ### 3.2 `TENSOR_VALIDATION_FAILED`
 Emitted by the Block Controller when a tensor fails any validation check.
@@ -119,6 +127,19 @@ record TensorLineageCreatedPayload(
     IReadOnlyList<Guid> ParentTensorIds, Guid TraceId,
     string ProducingModuleId, string TransformationStepId,
     bool IsLossyCast);
+```
+
+### 3.8 `TENSOR_BATCH_COMPLETE`
+Emitted by the ML Runtime or TensorTrainer when a batch of tensors has completed an inference pass or training epoch.
+
+**Payload**: `TensorBatchCompletePayload`
+```csharp
+record TensorBatchCompletePayload(
+    Guid TraceId, string ProducerModuleId,
+    int BatchSize,
+    TensorDType DType, string ShapeSummary,
+    Guid BatchId, DateTimeOffset CompletedAt,
+    double DurationMs, string? ModelKey);
 ```
 
 ---

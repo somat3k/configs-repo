@@ -6,7 +6,7 @@
 
 ## Overview
 
-Session 5 makes `trader` tensor-compatible via the transformation bus. The module declares its `ITensorContract` for `MLSignal` and `FeatureVector` sockets, receives transformed tensors from the bus, and emits `TENSOR_LINEAGE_CREATED` when it derives a new trade decision tensor from an inference output.
+Session 5 makes `trader` tensor-compatible via the transformation bus. The module declares its `ITensorContract` for `MLSignal` and `FeatureVector` sockets and receives transformed tensors from the bus. `SignalEngine` consumes inference tensors internally and produces domain payloads (`TradeSignalPayload`) — no raw tensor or `TENSOR_LINEAGE_CREATED` event is emitted externally by the trader module. Lineage records for the inference-to-signal path are the responsibility of the ml-runtime and transformation bus.
 
 ---
 

@@ -51,6 +51,13 @@ public sealed record TensorLineageRecord(
     [property: JsonPropertyName("compatibility_notes")] string? CompatibilityNotes)
 {
     /// <summary>Creates a new lineage record with a generated ID and the current UTC time.</summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="parentTensorIds"/> or <paramref name="operations"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="parentTensorIds"/> is empty or contains empty GUIDs,
+    /// or when any of <paramref name="transformationStepId"/>, <paramref name="producingModuleId"/>,
+    /// or <paramref name="kernelVersion"/> is null or whitespace,
+    /// or when any element of <paramref name="operations"/> is null or whitespace.
+    /// </exception>
     public static TensorLineageRecord Create(
         IReadOnlyList<Guid> parentTensorIds,
         string transformationStepId,
@@ -60,17 +67,43 @@ public sealed record TensorLineageRecord(
         Guid? producingBlockId = null,
         bool isLossyCast = false,
         string? persistenceRelocationNote = null,
-        string? compatibilityNotes = null) =>
-        new(
+        string? compatibilityNotes = null)
+    {
+        ArgumentNullException.ThrowIfNull(parentTensorIds);
+        ArgumentNullException.ThrowIfNull(operations);
+        ArgumentException.ThrowIfNullOrWhiteSpace(transformationStepId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(producingModuleId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(kernelVersion);
+
+        if (parentTensorIds.Count == 0)
+            throw new ArgumentException("At least one parent tensor ID is required.", nameof(parentTensorIds));
+
+        var parentTensorIdsCopy = new Guid[parentTensorIds.Count];
+        for (var i = 0; i < parentTensorIds.Count; i++)
+        {
+            if (parentTensorIds[i] == Guid.Empty)
+                throw new ArgumentException("Parent tensor IDs must not contain empty GUID values.", nameof(parentTensorIds));
+            parentTensorIdsCopy[i] = parentTensorIds[i];
+        }
+
+        var operationsCopy = new string[operations.Count];
+        for (var i = 0; i < operations.Count; i++)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(operations[i], nameof(operations));
+            operationsCopy[i] = operations[i];
+        }
+
+        return new TensorLineageRecord(
             LineageId: Guid.NewGuid(),
-            ParentTensorIds: parentTensorIds,
+            ParentTensorIds: parentTensorIdsCopy,
             TransformationStepId: transformationStepId,
             ProducingModuleId: producingModuleId,
             ProducingBlockId: producingBlockId,
             KernelVersion: kernelVersion,
             Timestamp: DateTimeOffset.UtcNow,
-            Operations: operations,
+            Operations: operationsCopy,
             IsLossyCast: isLossyCast,
             PersistenceRelocationNote: persistenceRelocationNote,
             CompatibilityNotes: compatibilityNotes);
+    }
 }
