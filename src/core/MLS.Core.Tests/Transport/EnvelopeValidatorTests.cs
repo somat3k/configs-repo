@@ -140,6 +140,27 @@ public class EnvelopeValidatorTests
     }
 
     [Fact]
+    public void Validate_EnvelopeV2_MalformedTraceId_ReturnsError()
+    {
+        var envelope = MakeEnvelopeV2() with { TraceId = "not-a-traceparent" };
+        var result = EnvelopeValidator.Validate(envelope);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "trace_id");
+    }
+
+    [Fact]
+    public void Validate_EnvelopeV2_ValidTraceParent_ReturnsValid()
+    {
+        // All-lowercase hex trace, valid 55-char format.
+        var envelope = MakeEnvelopeV2() with
+        {
+            TraceId = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        };
+        var result = EnvelopeValidator.Validate(envelope);
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
     public void Validate_EnvelopeV2_EmptyCorrelationId_ReturnsError()
     {
         var envelope = MakeEnvelopeV2() with { CorrelationId = Guid.Empty };
@@ -185,6 +206,26 @@ public class EnvelopeValidatorTests
     }
 
     [Fact]
+    public void Validate_EnvelopeV2_UndefinedTransportClass_ReturnsError()
+    {
+        // 0 is not a valid TransportClass (enum starts at ClassA = 1)
+        var envelope = MakeEnvelopeV2() with { TransportClass = (TransportClass)0 };
+        var result = EnvelopeValidator.Validate(envelope);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "transport_class");
+    }
+
+    [Fact]
+    public void Validate_EnvelopeV2_UndefinedRoutingScope_ReturnsError()
+    {
+        // 0 is not a valid RoutingScope (enum starts at Broadcast = 1)
+        var envelope = MakeEnvelopeV2() with { RoutingScope = (RoutingScope)0 };
+        var result = EnvelopeValidator.Validate(envelope);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Field == "routing_scope");
+    }
+
+    [Fact]
     public void Validate_EnvelopeV2_ModuleScope_MissingTargetModule_ReturnsError()
     {
         var envelope = MakeEnvelopeV2() with
@@ -220,6 +261,34 @@ public class EnvelopeValidatorTests
         };
         var result = EnvelopeValidator.Validate(envelope);
         result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Create_ModuleScope_WithoutTargetModule_Throws()
+    {
+        var act = () => EnvelopeV2.Create(
+            type: "MODULE_REGISTER",
+            moduleId: "trader",
+            payload: new { ok = true },
+            traceId: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+            payloadSchema: "bcg.module.RegisterModule:1",
+            routingScope: RoutingScope.Module,
+            targetModule: null);
+        act.Should().Throw<ArgumentException>().WithParameterName("targetModule");
+    }
+
+    [Fact]
+    public void Create_TopicScope_WithoutTopic_Throws()
+    {
+        var act = () => EnvelopeV2.Create(
+            type: "MODULE_REGISTER",
+            moduleId: "trader",
+            payload: new { ok = true },
+            traceId: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+            payloadSchema: "bcg.module.RegisterModule:1",
+            routingScope: RoutingScope.Topic,
+            topic: null);
+        act.Should().Throw<ArgumentException>().WithParameterName("topic");
     }
 
     [Fact]

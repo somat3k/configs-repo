@@ -110,6 +110,14 @@ public sealed record EnvelopeV2(
             throw new ArgumentOutOfRangeException(nameof(priority), priority,
                 "Envelope priority must be between 0 and 9 inclusive.");
 
+        if (routingScope == Transport.RoutingScope.Module && string.IsNullOrWhiteSpace(targetModule))
+            throw new ArgumentException(
+                "'targetModule' is required when routingScope is RoutingScope.Module.", nameof(targetModule));
+
+        if (routingScope == Transport.RoutingScope.Topic && string.IsNullOrWhiteSpace(topic))
+            throw new ArgumentException(
+                "'topic' is required when routingScope is RoutingScope.Topic.", nameof(topic));
+
         var serialisedPayload = System.Text.Json.JsonSerializer.SerializeToElement(payload);
         if (serialisedPayload.ValueKind != System.Text.Json.JsonValueKind.Object)
             throw new ArgumentException(
