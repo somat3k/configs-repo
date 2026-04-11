@@ -1,0 +1,239 @@
+syntax = "proto3";
+
+package bcg.tensor;
+
+option csharp_namespace = "MLS.Core.Proto.Tensor";
+option go_package = "bcg/tensor";
+
+// ── TensorShape ───────────────────────────────────────────────────────────────
+
+// Declared dimensions of a tensor. A dimension value of -1 indicates a dynamic
+// (unknown at declaration time) dimension.
+message TensorShape {
+  repeated int64 dims = 1;
+
+  // Shape class — maps to TensorShapeClass C# enum.
+  TensorShapeClass shape_class = 2;
+}
+
+enum TensorShapeClass {
+  TENSOR_SHAPE_CLASS_UNSPECIFIED = 0;
+  EXACT_STATIC = 1;
+  BOUNDED_DYNAMIC = 2;
+  RAGGED_STRUCTURED = 3;
+  SPARSE_STRUCTURED = 4;
+  GRAPH_DERIVED_VARIABLE = 5;
+}
+
+// ── BcgTensorProto ────────────────────────────────────────────────────────────
+
+// Wire representation of a BCG tensor for protobuf transport lanes.
+// Mirrors the C# BcgTensor record in src/core/MLS.Core/Tensor/BcgTensor.cs.
+message BcgTensorProto {
+  // Globally unique tensor identifier (UUID v4 string).
+  string tensor_id = 1;
+
+  // Data type of the tensor elements.
+  TensorDType dtype = 2;
+
+  // Declared shape.
+  TensorShape shape = 3;
+
+  // Layout class.
+  TensorLayout layout = 4;
+
+  // Encoding of the data field.
+  TensorEncoding encoding = 5;
+
+  // Inline data payload (present when tensor travels inline).
+  bytes data = 6;
+
+  // Origin block identifier.
+  string origin_block_id = 7;
+
+  // Origin module identifier.
+  string origin_module_id = 8;
+
+  // W3C traceparent-compatible trace ID.
+  string trace_id = 9;
+
+  // Session identifier if applicable.
+  string session_id = 10;
+
+  // Parent tensor IDs (lineage).
+  repeated string lineage_parent_ids = 11;
+
+  // BCG tensor contract version (e.g. "1").
+  string contract_version = 12;
+
+  // Tags for routing, filtering, and classification.
+  repeated string tags = 13;
+
+  // Redis key if tensor is cached.
+  string redis_key = 14;
+
+  // PostgreSQL record reference if tensor is persisted.
+  string postgres_id = 15;
+
+  // IPFS CID if tensor body is externalized.
+  string ipfs_cid = 16;
+
+  // Storage mode.
+  TensorStorageMode storage_mode = 17;
+
+  // SHA-256 hex digest of the payload bytes.
+  string payload_hash = 18;
+
+  // Schema or contract fingerprint.
+  string contract_fingerprint = 19;
+
+  // UTC creation timestamp (RFC 3339).
+  string created_at = 20;
+
+  // Schema version of this message.
+  int32 schema_version = 21;
+}
+
+// Data type enum — mirrors TensorDType C# enum.
+enum TensorDType {
+  TENSOR_D_TYPE_UNSPECIFIED = 0;
+  FLOAT32 = 1;
+  FLOAT64 = 2;
+  INT32 = 3;
+  INT64 = 4;
+  UINT8 = 5;
+  BOOL = 6;
+  STRING = 7;
+  BYTES = 8;
+  JSON_SEMANTIC = 9;
+  EMBEDDING_VECTOR = 10;
+  CODE_TOKEN_STREAM = 11;
+  GRAPH_PACKET = 12;
+}
+
+// Layout enum — mirrors TensorLayout C# enum.
+enum TensorLayout {
+  TENSOR_LAYOUT_UNSPECIFIED = 0;
+  DENSE = 1;
+  SPARSE = 2;
+  RAGGED = 3;
+  SEQUENCE = 4;
+  GRAPH_DERIVED = 5;
+  ARTIFACT_BACKED = 6;
+}
+
+// Encoding enum — mirrors TensorEncoding C# enum.
+enum TensorEncoding {
+  TENSOR_ENCODING_UNSPECIFIED = 0;
+  RAW_FLOAT32_LE = 1;
+  RAW_FLOAT64_LE = 2;
+  JSON_UTF8 = 3;
+  MESSAGE_PACK = 4;
+  UTF8_STRING = 5;
+  OPAQUE_BYTES = 6;
+}
+
+// Storage mode enum — mirrors TensorStorageMode C# enum.
+enum TensorStorageMode {
+  TENSOR_STORAGE_MODE_UNSPECIFIED = 0;
+  TRANSIENT = 1;
+  REDIS = 2;
+  POSTGRES = 3;
+  IPFS = 4;
+}
+
+// ── TensorReference ───────────────────────────────────────────────────────────
+
+// Carries a reference to a large tensor whose body is stored externally.
+// Used for Class D artifact transport.
+message TensorReference {
+  // Tensor ID being referenced.
+  string tensor_id = 1;
+
+  // Storage mode of the tensor body.
+  TensorStorageMode storage_mode = 2;
+
+  // Redis key (when storage_mode = REDIS).
+  string redis_key = 3;
+
+  // PostgreSQL record ID (when storage_mode = POSTGRES).
+  string postgres_id = 4;
+
+  // IPFS CID (when storage_mode = IPFS).
+  string ipfs_cid = 5;
+
+  // SHA-256 hex digest for retrieval integrity verification.
+  string content_hash = 6;
+
+  // Lineage trace identifier.
+  string trace_id = 7;
+
+  // Schema version of this message.
+  int32 schema_version = 8;
+}
+
+// ── TensorTransformRequest ────────────────────────────────────────────────────
+
+// Requests the transformation bus to apply a declared transformation to a tensor.
+message TensorTransformRequest {
+  // Source tensor (inline or reference).
+  oneof source {
+    BcgTensorProto inline_tensor = 1;
+    TensorReference tensor_ref = 2;
+  }
+
+  // Transformation operation to apply.
+  string transform_operation = 3;
+
+  // Serialized transformation parameters as JSON.
+  bytes parameters_json = 4;
+
+  // Trace identifier.
+  string trace_id = 5;
+
+  // Correlation identifier.
+  string correlation_id = 6;
+
+  // Schema version of this message.
+  int32 schema_version = 7;
+}
+
+// ── TensorTransformResponse ───────────────────────────────────────────────────
+
+// Result of a tensor transformation operation.
+message TensorTransformResponse {
+  // Whether the transformation succeeded.
+  bool success = 1;
+
+  // Error class if transformation failed.
+  string error_class = 3;
+
+  // Error detail.
+  string error_message = 4;
+
+  // Output tensor (inline or reference).
+  oneof result {
+    BcgTensorProto output_tensor = 5;
+    TensorReference output_ref = 6;
+  }
+
+  // Lineage record identifier created for this transformation.
+  string lineage_record_id = 7;
+
+  // Trace identifier echoed from request.
+  string trace_id = 8;
+
+  // Correlation identifier echoed from request.
+  string correlation_id = 9;
+
+  // Schema version of this message.
+  int32 schema_version = 10;
+}
+
+// ── TensorService ─────────────────────────────────────────────────────────────
+
+// gRPC service for tensor transformation and reference resolution.
+service TensorService {
+  // Apply a declared transformation to a tensor.
+  rpc TransformTensor(TensorTransformRequest) returns (TensorTransformResponse);
+}

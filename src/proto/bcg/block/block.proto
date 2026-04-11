@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package bcg.block;
+
+option csharp_namespace = "MLS.Core.Proto.Block";
+option go_package = "bcg/block";
+
+// ── BlockRequest ─────────────────────────────────────────────────────────────
+
+// Instructs a target module to execute a specific block.
+message BlockRequest {
+  // Globally unique block identifier.
+  string block_id = 1;
+
+  // Target module that owns this block type.
+  string target_module_id = 2;
+
+  // Block type identifier (matches BlockRegistry key).
+  string block_type = 3;
+
+  // Serialized block parameters as JSON.
+  bytes parameters_json = 4;
+
+  // Tenant or task context.
+  string task_id = 5;
+
+  // W3C traceparent-compatible trace identifier.
+  string trace_id = 6;
+
+  // Correlation identifier for the originating operation.
+  string correlation_id = 7;
+
+  // Causation identifier — the message that triggered this request.
+  string causation_id = 8;
+
+  // Priority 0–9.
+  int32 priority = 9;
+
+  // Dedupe token for idempotent retry safety.
+  string dedupe_token = 10;
+
+  // Schema version of this message.
+  int32 schema_version = 11;
+}
+
+// ── BlockResponse ─────────────────────────────────────────────────────────────
+
+// Returned by the target module after executing a block.
+message BlockResponse {
+  // Block identifier echoed from BlockRequest.
+  string block_id = 1;
+
+  // Whether execution succeeded.
+  bool success = 2;
+
+  // Error class if execution failed.
+  string error_class = 3;
+
+  // Human-readable error detail.
+  string error_message = 4;
+
+  // Serialized output as JSON (for small outputs).
+  bytes output_json = 5;
+
+  // Tensor reference IDs produced by this block execution.
+  repeated string output_tensor_ids = 6;
+
+  // Duration of execution in milliseconds.
+  int64 execution_duration_ms = 7;
+
+  // Trace identifier echoed from BlockRequest.
+  string trace_id = 8;
+
+  // Correlation identifier echoed from BlockRequest.
+  string correlation_id = 9;
+
+  // Schema version of this message.
+  int32 schema_version = 10;
+}
+
+// ── StreamExecuteFragment ─────────────────────────────────────────────────────
+
+// Carries one fragment of a streaming block execution result.
+message StreamExecuteFragment {
+  // Block identifier this fragment belongs to.
+  string block_id = 1;
+
+  // Monotonically increasing sequence number within this execution.
+  int64 sequence = 2;
+
+  // Whether this is the final fragment.
+  bool is_final = 3;
+
+  // Fragment data payload (raw bytes or JSON-encoded partial result).
+  bytes data = 4;
+
+  // Fragment content encoding: "json", "raw", "msgpack".
+  string encoding = 5;
+
+  // Tensor ID if this fragment wraps a tensor reference.
+  string tensor_id = 6;
+
+  // Trace identifier.
+  string trace_id = 7;
+
+  // Schema version of this message.
+  int32 schema_version = 8;
+}
+
+// ── BlockService ──────────────────────────────────────────────────────────────
+
+// gRPC service for block execution orchestration.
+service BlockService {
+  // Execute a block and return a single response when complete.
+  rpc ExecuteBlock(BlockRequest) returns (BlockResponse);
+
+  // Execute a block and receive streaming fragments as they are produced.
+  rpc ExecuteBlockStreaming(BlockRequest) returns (stream StreamExecuteFragment);
+}

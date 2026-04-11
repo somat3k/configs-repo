@@ -1,0 +1,154 @@
+syntax = "proto3";
+
+package bcg.module;
+
+option csharp_namespace = "MLS.Core.Proto.Module";
+option go_package = "bcg/module";
+
+// ── RegisterModule ────────────────────────────────────────────────────────────
+
+// Sent by a module to the Block Controller on startup to announce its identity
+// and declare its capabilities.
+message RegisterModule {
+  // Globally unique module identifier (UUID v4 string).
+  string module_id = 1;
+
+  // Human-readable module name (e.g. "trader", "ml-runtime").
+  string module_name = 2;
+
+  // HTTP base URL of the module (e.g. "http://trader:5300").
+  string http_address = 3;
+
+  // WebSocket hub URL of the module (e.g. "ws://trader:6300/hubs/trader").
+  string websocket_address = 4;
+
+  // HTTP port number.
+  int32 http_port = 5;
+
+  // WebSocket port number.
+  int32 websocket_port = 6;
+
+  // Declared capability identifiers (e.g. "trade-execution", "model-inference").
+  repeated string capabilities = 7;
+
+  // Declared supported payload schema versions (e.g. "bcg.module.RegisterModule:1").
+  repeated string supported_schemas = 8;
+
+  // Schema version of this message.
+  int32 schema_version = 9;
+
+  // W3C traceparent-compatible trace identifier.
+  string trace_id = 10;
+}
+
+// ── RegisterAck ──────────────────────────────────────────────────────────────
+
+// Returned by the Block Controller to confirm successful module registration.
+message RegisterAck {
+  // Module ID echoed back from RegisterModule.
+  string module_id = 1;
+
+  // Whether registration was accepted.
+  bool accepted = 2;
+
+  // Reason code when accepted is false.
+  string rejection_reason = 3;
+
+  // UTC timestamp of the registration acknowledgement (RFC 3339).
+  string acknowledged_at = 4;
+
+  // Block Controller assigned session for this module instance.
+  string controller_session_id = 5;
+
+  // Schema version of this message.
+  int32 schema_version = 6;
+}
+
+// ── HealthEvent ───────────────────────────────────────────────────────────────
+
+// Emitted by the Block Controller when a module's health state transitions.
+message HealthEvent {
+  // Module whose health state changed.
+  string module_id = 1;
+
+  // New health state. See ModuleHealthState enum.
+  ModuleHealthState state = 2;
+
+  // Previous health state.
+  ModuleHealthState previous_state = 3;
+
+  // Human-readable reason for the transition.
+  string reason = 4;
+
+  // UTC timestamp of the state transition (RFC 3339).
+  string transitioned_at = 5;
+
+  // Trace identifier for the originating event.
+  string trace_id = 6;
+
+  // Schema version of this message.
+  int32 schema_version = 7;
+}
+
+// Health state enum — mirrors MLS.BlockController.Services.ModuleHealthState.
+enum ModuleHealthState {
+  MODULE_HEALTH_STATE_UNSPECIFIED = 0;
+  HEALTHY = 1;
+  DEGRADED = 2;
+  DRAINING = 3;
+  OFFLINE = 4;
+  RECOVERING = 5;
+  MAINTENANCE = 6;
+  QUARANTINED = 7;
+  UNKNOWN = 8;
+}
+
+// ── CapabilityUpdate ──────────────────────────────────────────────────────────
+
+// Sent by a module when its capability set changes at runtime.
+message CapabilityUpdate {
+  // Module whose capabilities changed.
+  string module_id = 1;
+
+  // Full current capability list after the update.
+  repeated string capabilities = 2;
+
+  // Full current supported schema list after the update.
+  repeated string supported_schemas = 3;
+
+  // UTC timestamp of the update (RFC 3339).
+  string updated_at = 4;
+
+  // Trace identifier.
+  string trace_id = 5;
+
+  // Schema version of this message.
+  int32 schema_version = 6;
+}
+
+// ── ModuleService ─────────────────────────────────────────────────────────────
+
+// gRPC service for module registration and health reporting.
+service ModuleService {
+  // Register a module with the Block Controller.
+  rpc RegisterModule(RegisterModule) returns (RegisterAck);
+
+  // Stream health state events for a module (server-streaming).
+  rpc WatchHealth(HealthWatchRequest) returns (stream HealthEvent);
+
+  // Update module capabilities at runtime.
+  rpc UpdateCapabilities(CapabilityUpdate) returns (CapabilityAck);
+}
+
+// Request to begin watching health events for a specific module.
+message HealthWatchRequest {
+  string module_id = 1;
+  string trace_id = 2;
+}
+
+// Acknowledgement of a capability update.
+message CapabilityAck {
+  string module_id = 1;
+  bool accepted = 2;
+  string trace_id = 3;
+}

@@ -1,0 +1,159 @@
+syntax = "proto3";
+
+package bcg.session;
+
+option csharp_namespace = "MLS.Core.Proto.Session";
+option go_package = "bcg/session";
+
+// ── SessionJoinRequest ────────────────────────────────────────────────────────
+
+// Sent by an operator client to join an existing or new session.
+message SessionJoinRequest {
+  // Requested session ID. Empty string to create a new session.
+  string session_id = 1;
+
+  // Operator identifier.
+  string operator_id = 2;
+
+  // Session type: "shell", "canvas", "monitor".
+  string session_type = 3;
+
+  // W3C traceparent-compatible trace identifier.
+  string trace_id = 4;
+
+  // Schema version of this message.
+  int32 schema_version = 5;
+}
+
+// ── SessionJoinAck ────────────────────────────────────────────────────────────
+
+// Returned to the operator after a session join is processed.
+message SessionJoinAck {
+  // Assigned or existing session ID.
+  string session_id = 1;
+
+  // Whether the join was accepted.
+  bool accepted = 2;
+
+  // Rejection reason when accepted is false.
+  string rejection_reason = 3;
+
+  // UTC timestamp of join acknowledgement (RFC 3339).
+  string joined_at = 4;
+
+  // Schema version of this message.
+  int32 schema_version = 5;
+}
+
+// ── SessionStateEvent ─────────────────────────────────────────────────────────
+
+// Emitted when a session's state changes (e.g. active → idle → terminated).
+message SessionStateEvent {
+  // Session identifier.
+  string session_id = 1;
+
+  // New session state.
+  SessionState state = 2;
+
+  // Previous session state.
+  SessionState previous_state = 3;
+
+  // Human-readable reason for the transition.
+  string reason = 4;
+
+  // UTC timestamp of the transition (RFC 3339).
+  string transitioned_at = 5;
+
+  // Trace identifier.
+  string trace_id = 6;
+
+  // Schema version of this message.
+  int32 schema_version = 7;
+}
+
+// Session lifecycle states.
+enum SessionState {
+  SESSION_STATE_UNSPECIFIED = 0;
+  ACTIVE = 1;
+  IDLE = 2;
+  SUSPENDED = 3;
+  TERMINATED = 4;
+}
+
+// ── OperatorControlAck ────────────────────────────────────────────────────────
+
+// Acknowledgement returned after an operator control command is processed.
+message OperatorControlAck {
+  // Session identifier.
+  string session_id = 1;
+
+  // Command type that was acknowledged (e.g. "INTERRUPT", "RESIZE", "SEND_INPUT").
+  string command_type = 2;
+
+  // Whether the command was accepted.
+  bool accepted = 3;
+
+  // Error detail if not accepted.
+  string error_message = 4;
+
+  // Trace identifier.
+  string trace_id = 5;
+
+  // Schema version of this message.
+  int32 schema_version = 6;
+}
+
+// ── ShellCommandEnvelope ──────────────────────────────────────────────────────
+
+// Wraps a shell command or PTY input sent from an operator to a shell session.
+message ShellCommandEnvelope {
+  // Target shell session identifier.
+  string session_id = 1;
+
+  // Operator identifier.
+  string operator_id = 2;
+
+  // Raw PTY input bytes.
+  bytes input = 3;
+
+  // Command type: "PTY_INPUT", "INTERRUPT", "RESIZE", "CLOSE".
+  string command_type = 4;
+
+  // Terminal columns (for RESIZE commands).
+  int32 columns = 5;
+
+  // Terminal rows (for RESIZE commands).
+  int32 rows = 6;
+
+  // Trace identifier.
+  string trace_id = 7;
+
+  // Schema version of this message.
+  int32 schema_version = 8;
+}
+
+// ── SessionService ────────────────────────────────────────────────────────────
+
+// gRPC service for session management and operator control.
+service SessionService {
+  // Join or create a session.
+  rpc JoinSession(SessionJoinRequest) returns (SessionJoinAck);
+
+  // Watch session state events (server-streaming).
+  rpc WatchSession(SessionWatchRequest) returns (stream SessionStateEvent);
+
+  // Send an operator control command.
+  rpc SendCommand(ShellCommandEnvelope) returns (OperatorControlAck);
+}
+
+// Request to begin watching events for a specific session.
+message SessionWatchRequest {
+  // Session identifier to watch.
+  string session_id = 1;
+
+  // Operator initiating the watch request.
+  string operator_id = 2;
+
+  // W3C traceparent-compatible trace identifier for this watch session.
+  string trace_id = 3;
+}
