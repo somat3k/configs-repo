@@ -1,0 +1,167 @@
+syntax = "proto3";
+
+package bcg.observability;
+
+option csharp_namespace = "MLS.Core.Proto.Observability";
+option go_package = "bcg/observability";
+
+// ── RouteEvent ────────────────────────────────────────────────────────────────
+
+// Emitted by the Block Controller when a route admission decision is made.
+message RouteEvent {
+  // Unique identifier for this route event.
+  string route_event_id = 1;
+
+  // Message type that was routed.
+  string message_type = 2;
+
+  // Sending module identifier.
+  string sender_module_id = 3;
+
+  // Target module identifier (if module-scoped route).
+  string target_module_id = 4;
+
+  // Topic name (if topic-scoped route).
+  string topic = 5;
+
+  // Transport class of the routed message.
+  RouteTransportClass transport_class = 6;
+
+  // Routing scope.
+  RouteRoutingScope routing_scope = 7;
+
+  // Outcome of the route decision.
+  RouteOutcome outcome = 8;
+
+  // Error class if route was rejected.
+  string error_class = 9;
+
+  // W3C traceparent-compatible trace identifier.
+  string trace_id = 10;
+
+  // Correlation identifier.
+  string correlation_id = 11;
+
+  // Payload schema name and version.
+  string payload_schema = 12;
+
+  // Payload size in bytes.
+  int64 payload_size_bytes = 13;
+
+  // Health state of the target module at route time.
+  string target_health_state = 14;
+
+  // UTC timestamp of the route decision (RFC 3339).
+  string decided_at = 15;
+
+  // Duration of the routing decision in milliseconds.
+  int64 decision_duration_ms = 16;
+
+  // Schema version of this message.
+  int32 schema_version = 17;
+}
+
+// Route outcome values.
+enum RouteOutcome {
+  ROUTE_OUTCOME_UNSPECIFIED = 0;
+  ROUTED = 1;
+  REJECTED = 2;
+  QUEUED = 3;
+  TIMEOUT = 4;
+  COMPATIBILITY_ERROR = 5;
+}
+
+// Transport class values for observability (mirrors bcg.module transport class).
+enum RouteTransportClass {
+  ROUTE_TRANSPORT_CLASS_UNSPECIFIED = 0;
+  CLASS_A = 1;
+  CLASS_B = 2;
+  CLASS_C = 3;
+  CLASS_D = 4;
+}
+
+// Routing scope values for observability.
+enum RouteRoutingScope {
+  ROUTE_ROUTING_SCOPE_UNSPECIFIED = 0;
+  BROADCAST = 1;
+  MODULE = 2;
+  TOPIC = 3;
+  SESSION = 4;
+}
+
+// ── TransportMetric ───────────────────────────────────────────────────────────
+
+// Carries aggregated transport performance metrics for a message type
+// over a defined observation window.
+message TransportMetric {
+  // Message type being measured.
+  string message_type = 1;
+
+  // Transport class being measured.
+  RouteTransportClass transport_class = 2;
+
+  // Observation window start (RFC 3339).
+  string window_start = 3;
+
+  // Observation window end (RFC 3339).
+  string window_end = 4;
+
+  // Total message count in the window.
+  int64 message_count = 5;
+
+  // Total error count in the window.
+  int64 error_count = 6;
+
+  // Latency p50 in milliseconds.
+  double latency_p50_ms = 7;
+
+  // Latency p95 in milliseconds.
+  double latency_p95_ms = 8;
+
+  // Latency p99 in milliseconds.
+  double latency_p99_ms = 9;
+
+  // Total payload bytes transferred in the window.
+  int64 total_payload_bytes = 10;
+
+  // Retry count in the window.
+  int64 retry_count = 11;
+
+  // Duplicate request count in the window.
+  int64 duplicate_count = 12;
+
+  // Schema version of this message.
+  int32 schema_version = 13;
+}
+
+// ── ObservabilityService ──────────────────────────────────────────────────────
+
+// gRPC service for transport observability streaming.
+service ObservabilityService {
+  // Stream route events in real time (server-streaming).
+  rpc WatchRouteEvents(RouteEventWatchRequest) returns (stream RouteEvent);
+
+  // Stream aggregated transport metrics over fixed windows (server-streaming).
+  rpc WatchTransportMetrics(TransportMetricWatchRequest) returns (stream TransportMetric);
+}
+
+// Request to begin watching route events.
+message RouteEventWatchRequest {
+  // Filter by message type. Empty to receive all.
+  repeated string message_types = 1;
+
+  // Filter by transport class. Empty to receive all.
+  repeated RouteTransportClass transport_classes = 2;
+
+  // Trace identifier for this watch session.
+  string trace_id = 3;
+}
+
+// Request to begin watching aggregated transport metrics.
+message TransportMetricWatchRequest {
+  // Aggregation window duration in seconds.
+  int32 window_seconds = 1;
+
+  // Trace identifier for this watch session.
+  string trace_id = 2;
+}
