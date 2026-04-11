@@ -11,7 +11,7 @@ public sealed class KernelScheduler(
     IModuleHealthTracker _health,
     ILogger<KernelScheduler> _logger)
 {
-    private readonly Dictionary<Guid, double> _loadFactors = [];
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, double> _loadFactors = new();
 
     private static readonly IReadOnlySet<ModuleHealthState> RouteableStates = new HashSet<ModuleHealthState>
     {
@@ -84,6 +84,12 @@ public sealed class KernelScheduler(
 
     private static KernelExecutionMode ResolveLane(KernelDescriptor descriptor)
     {
+        if (descriptor.ExecutionModes.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Kernel descriptor '{descriptor.OperationId}' does not declare any execution mode.");
+        }
+
         if (descriptor.ExecutionModes.Contains(KernelExecutionMode.Streaming))
         {
             return KernelExecutionMode.Streaming;
